@@ -1,0 +1,15 @@
+test_business_and_decode_fall_through_credentials_stop_and_retry_once_owner (__main__.StandaloneContract.test_business_and_decode_fall_through_credentials_stop_and_retry_once_owner) ... ok
+test_cache_reuse_and_force_forget_keep_native_files_and_exact_revision (__main__.StandaloneContract.test_cache_reuse_and_force_forget_keep_native_files_and_exact_revision) ... ok
+test_community_alias_identity_cache_and_priority (__main__.StandaloneContract.test_community_alias_identity_cache_and_priority) ... ok
+test_empty_invalid_payload_and_local_fingerprint (__main__.StandaloneContract.test_empty_invalid_payload_and_local_fingerprint) ... ok
+test_first_authoritative_candidate_only_one_fetch_and_shared_payload (__main__.StandaloneContract.test_first_authoritative_candidate_only_one_fetch_and_shared_payload) ... ok
+test_live_cancel_and_revision_change_leave_no_continuations_or_late_writes (__main__.StandaloneContract.test_live_cancel_and_revision_change_leave_no_continuations_or_late_writes) ... ok
+test_native_integral_float_decoding_and_consumed_optional_field_validation (__main__.StandaloneContract.test_native_integral_float_decoding_and_consumed_optional_field_validation) ... ok
+test_preflight_and_budget_cut_are_failures_not_false_no_match (__main__.StandaloneContract.test_preflight_and_budget_cut_are_failures_not_false_no_match) ... ok
+test_promoted_then_sibling_then_detected_and_manual_force (__main__.StandaloneContract.test_promoted_then_sibling_then_detected_and_manual_force) ... ok
+test_ranked_match_and_complete_eight_query_waterfall (__main__.StandaloneContract.test_ranked_match_and_complete_eight_query_waterfall) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 6.167s
+
+OK

@@ -1,0 +1,1 @@
+Preliminary gate intentionally stopped (143) after endpoint audit identified missing Emby legacy detail path and explicit detail fields. Complete final gate rerun required.

@@ -1,0 +1,6 @@
+--prepared:/private/tmp/ocp-apple-delivery/NativeRelease/Build/Products/Release/OcPlayer.app/Contents/Frameworks/libocp_ffi.dylib
+--validated:/private/tmp/ocp-apple-delivery/NativeRelease/Build/Products/Release/OcPlayer.app/Contents/Frameworks/libocp_ffi.dylib
+/tmp/ocp-apple-delivery/NativeRelease/Build/Products/Release/OcPlayer.app: valid on disk
+/tmp/ocp-apple-delivery/NativeRelease/Build/Products/Release/OcPlayer.app: satisfies its Designated Requirement
+
+EXIT_STATUS=0

@@ -1,0 +1,10 @@
+--prepared:/private/tmp/ocplayer-flow-macos-final/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/MacOS/__preview.dylib
+--validated:/private/tmp/ocplayer-flow-macos-final/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/MacOS/__preview.dylib
+--prepared:/private/tmp/ocplayer-flow-macos-final/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/PlugIns/OcPlayerTests.xctest
+--prepared:/private/tmp/ocplayer-flow-macos-final/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/Frameworks/libocp_ffi.dylib
+--validated:/private/tmp/ocplayer-flow-macos-final/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/PlugIns/OcPlayerTests.xctest
+--validated:/private/tmp/ocplayer-flow-macos-final/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/Frameworks/libocp_ffi.dylib
+--prepared:/private/tmp/ocplayer-flow-macos-final/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/MacOS/OcPlayer.debug.dylib
+--validated:/private/tmp/ocplayer-flow-macos-final/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/MacOS/OcPlayer.debug.dylib
+/tmp/ocplayer-tmdb-enrichment-macos-final/DerivedData/Build/Products/Debug/OcPlayer.app: valid on disk
+/tmp/ocplayer-tmdb-enrichment-macos-final/DerivedData/Build/Products/Debug/OcPlayer.app: satisfies its Designated Requirement

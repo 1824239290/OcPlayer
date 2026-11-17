@@ -1,0 +1,87 @@
+{
+  "date": "2026-11-13",
+  "goalComplete": false,
+  "scope": "Shared Media.sqlite store migration and existing macOS application regression; the full OcPlayer-Core goal remains active.",
+  "tests": {
+    "OcPlayerCore": {
+      "passed": 5,
+      "skipped": 0,
+      "failed": 0
+    },
+    "JellyfinKit": {
+      "passed": 240,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MetadataKit": {
+      "passed": 306,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MoviePilotKit": {
+      "passed": 108,
+      "skipped": 0,
+      "failed": 0
+    },
+    "BangumiKit": {
+      "passed": 94,
+      "skipped": 0,
+      "failed": 0
+    }
+  },
+  "Rust": {
+    "passed": 47,
+    "failed": 0
+  },
+  "NativeAppTests": {
+    "executed": 1001,
+    "passed": 982,
+    "skipped": 19,
+    "failed": 0
+  },
+  "BangumiCABI": {
+    "passed": 4,
+    "failed": 0
+  },
+  "ExportedAppleBinding": {
+    "passed": 5,
+    "failed": 0,
+    "sameCasesAsNativeAdapter": true,
+    "sourceEquivalent": true
+  },
+  "SharedCache": {
+    "productionFactoryActivated": true,
+    "bidirectionalGRDBCore": true,
+    "migrationCount": 4,
+    "largeBatchSize": 1905,
+    "atomicRollbackVerified": true,
+    "covered": [
+      "items and indexed metadata",
+      "libraries replacement",
+      "home rails",
+      "filtered pages",
+      "technical info",
+      "offline genealogy",
+      "local progress and request boundaries",
+      "eviction and independent progress",
+      "TMDB entities seasons links expiry clearing"
+    ]
+  },
+  "NativePlayback": {
+    "seconds": 10,
+    "coreFromBundle": true,
+    "controls": [
+      "pause",
+      "resume",
+      "seek",
+      "rate",
+      "resize"
+    ],
+    "renderFailures": 0,
+    "audioFailures": 0
+  },
+  "application": "/tmp/ocplayer-cache-final/DerivedData/Build/Products/Debug/OcPlayer.app",
+  "nativeTestResults": "/tmp/ocplayer-cache-final/DerivedData/Logs/Test",
+  "librarySHA256": "d4ad457a87b073d6749ec0295f7e8fe22e1d89dcd8a123ddaa3e91a35fc1fb35",
+  "initialRustFailure": "The added settings test used settings.update instead of the existing settings.set command. Corrected and final full workspace tests passed; original output retained."
+}

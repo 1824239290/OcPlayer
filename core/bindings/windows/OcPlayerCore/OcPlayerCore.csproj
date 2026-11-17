@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+    <AssemblyName>OcPlayerCore</AssemblyName>
+    <PackageId>OcPlayerCore</PackageId>
+    <Version>0.1.0</Version>
+    <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
+    <Description>Typed C ABI adapter for the shared OcPlayer Core.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../OcPlayerCore.cs" Link="OcpCore.cs" />
+  </ItemGroup>
+</Project>

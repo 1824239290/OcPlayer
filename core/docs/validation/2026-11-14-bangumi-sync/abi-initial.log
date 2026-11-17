@@ -1,0 +1,47 @@
+test_account_clear_retires_pending_sql_and_does_not_reuse_tokens (__main__.SyncContract.test_account_clear_retires_pending_sql_and_does_not_reuse_tokens) ... FAIL
+test_batch_slots_slide_and_parent_cancellation_retires_child_writes (__main__.SyncContract.test_batch_slots_slide_and_parent_cancellation_retires_child_writes) ... ok
+test_collection_writes_are_transactional_and_receipts_cannot_replay (__main__.SyncContract.test_collection_writes_are_transactional_and_receipts_cannot_replay) ... FAIL
+test_complete_episode_pages_preserve_large_identifiers_and_empty_tail (__main__.SyncContract.test_complete_episode_pages_preserve_large_identifiers_and_empty_tail) ... ok
+test_full_sync_overlap_start_timestamp_and_partial_batch_count (__main__.SyncContract.test_full_sync_overlap_start_timestamp_and_partial_batch_count) ... ok
+test_invalid_responses_and_failed_sql_leave_the_same_receipt_retryable (__main__.SyncContract.test_invalid_responses_and_failed_sql_leave_the_same_receipt_retryable) ... FAIL
+
+======================================================================
+FAIL: test_account_clear_retires_pending_sql_and_does_not_reuse_tokens (__main__.SyncContract.test_account_clear_retires_pending_sql_and_does_not_reuse_tokens)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/bangumi_sync_contract.py", line 86, in test_account_clear_retires_pending_sql_and_does_not_reuse_tokens
+    self.assertIsNone(self.success('bangumiStore.subject', id=1))
+                      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/bangumi_sync_contract.py", line 45, in success
+    self.assertTrue(reply['ok'], reply)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : {'ok': False, 'code': 1002, 'retryable': False, 'message': 'subjectId must be an integer', 'data': None}
+
+======================================================================
+FAIL: test_collection_writes_are_transactional_and_receipts_cannot_replay (__main__.SyncContract.test_collection_writes_are_transactional_and_receipts_cannot_replay)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/bangumi_sync_contract.py", line 63, in test_collection_writes_are_transactional_and_receipts_cannot_replay
+    self.assertEqual(self.success('bangumiStore.subject', id=1)['interest']['type'], 3)
+                     ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/bangumi_sync_contract.py", line 45, in success
+    self.assertTrue(reply['ok'], reply)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : {'ok': False, 'code': 1002, 'retryable': False, 'message': 'subjectId must be an integer', 'data': None}
+
+======================================================================
+FAIL: test_invalid_responses_and_failed_sql_leave_the_same_receipt_retryable (__main__.SyncContract.test_invalid_responses_and_failed_sql_leave_the_same_receipt_retryable)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/bangumi_sync_contract.py", line 130, in test_invalid_responses_and_failed_sql_leave_the_same_receipt_retryable
+    self.assertIsNone(self.success('bangumiStore.subject', id=1), 'entire page rolled back')
+                      ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/bangumi_sync_contract.py", line 45, in success
+    self.assertTrue(reply['ok'], reply)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : {'ok': False, 'code': 1002, 'retryable': False, 'message': 'subjectId must be an integer', 'data': None}
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.005s
+
+FAILED (failures=3)

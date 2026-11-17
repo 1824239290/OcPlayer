@@ -1,0 +1,694 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Provisioning 45 / 47]
+[1 / 4] CNIOAtomics
+Build complete! (0.99秒)
+Test Suite 'All tests' started at 2026-11-14 15:40:43.372.
+Test Suite 'JellyfinKitTests.xctest' started at 2026-11-14 15:40:43.373.
+Test Suite 'ClientIdentityTests' started at 2026-11-14 15:40:43.373.
+Test Case '-[JellyfinKitTests.ClientIdentityTests testAuthorizationHeaderFieldOrderIsPinned]' started.
+Test Case '-[JellyfinKitTests.ClientIdentityTests testAuthorizationHeaderFieldOrderIsPinned]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ClientIdentityTests testAuthorizationHeaderOmitsEmptyFields]' started.
+Test Case '-[JellyfinKitTests.ClientIdentityTests testAuthorizationHeaderOmitsEmptyFields]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.ClientIdentityTests testCustomUserAgentIsNilWhenBlank]' started.
+Test Case '-[JellyfinKitTests.ClientIdentityTests testCustomUserAgentIsNilWhenBlank]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.ClientIdentityTests testCustomUserAgentStripsControlCharacters]' started.
+Test Case '-[JellyfinKitTests.ClientIdentityTests testCustomUserAgentStripsControlCharacters]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ClientIdentityTests testHeaderCacheDistinguishesScheme]' started.
+Test Case '-[JellyfinKitTests.ClientIdentityTests testHeaderCacheDistinguishesScheme]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.ClientIdentityTests testHeaderCacheDistinguishesTokens]' started.
+Test Case '-[JellyfinKitTests.ClientIdentityTests testHeaderCacheDistinguishesTokens]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.ClientIdentityTests testHeaderCacheDistinguishesUsers]' started.
+Test Case '-[JellyfinKitTests.ClientIdentityTests testHeaderCacheDistinguishesUsers]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.ClientIdentityTests testMediaBrowserAuthorizationHeaderIncludesStableIdentity]' started.
+Test Case '-[JellyfinKitTests.ClientIdentityTests testMediaBrowserAuthorizationHeaderIncludesStableIdentity]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.ClientIdentityTests testMemoizedHeaderMatchesFreshComposition]' started.
+Test Case '-[JellyfinKitTests.ClientIdentityTests testMemoizedHeaderMatchesFreshComposition]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.ClientIdentityTests testVersionDoesNotRepeatIdenticalBuild]' started.
+Test Case '-[JellyfinKitTests.ClientIdentityTests testVersionDoesNotRepeatIdenticalBuild]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.ClientIdentityTests testVersionFallsBackToAvailableBundleValue]' started.
+Test Case '-[JellyfinKitTests.ClientIdentityTests testVersionFallsBackToAvailableBundleValue]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ClientIdentityTests testVersionInInjectedBundleIsNotCachedAcrossBundles]' started.
+Test Case '-[JellyfinKitTests.ClientIdentityTests testVersionInInjectedBundleIsNotCachedAcrossBundles]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ClientIdentityTests testVersionUsesMarketingVersionAndBuildFromBundle]' started.
+Test Case '-[JellyfinKitTests.ClientIdentityTests testVersionUsesMarketingVersionAndBuildFromBundle]' passed (0.001 seconds).
+Test Suite 'ClientIdentityTests' passed at 2026-11-14 15:40:43.383.
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.009 (0.010) seconds
+Test Suite 'EmbyRetryBehaviourTests' started at 2026-11-14 15:40:43.383.
+Test Case '-[JellyfinKitTests.EmbyRetryBehaviourTests testTransientNoNetworkIsRetriedAndThenSucceeds]' started.
+Test Case '-[JellyfinKitTests.EmbyRetryBehaviourTests testTransientNoNetworkIsRetriedAndThenSucceeds]' passed (0.013 seconds).
+Test Case '-[JellyfinKitTests.EmbyRetryBehaviourTests testWriteOperationIsNotRetried]' started.
+Test Case '-[JellyfinKitTests.EmbyRetryBehaviourTests testWriteOperationIsNotRetried]' passed (0.001 seconds).
+Test Suite 'EmbyRetryBehaviourTests' passed at 2026-11-14 15:40:43.397.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.014 (0.014) seconds
+Test Suite 'EmbyServerTests' started at 2026-11-14 15:40:43.397.
+Test Case '-[JellyfinKitTests.EmbyServerTests testAnonymousLoginSessionDoesNotPostNotificationOn401]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testAnonymousLoginSessionDoesNotPostNotificationOn401]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testAttachmentStreamTypeIsIgnoredNotFatal]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testAttachmentStreamTypeIsIgnoredNotFatal]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testAuthenticatedSessionPostsNotificationOn401]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testAuthenticatedSessionPostsNotificationOn401]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testAuthorizationHeaderUsesEmbyScheme]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testAuthorizationHeaderUsesEmbyScheme]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testCurrentUserAvatarTagReadsUsersMe]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testCurrentUserAvatarTagReadsUsersMe]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testCurrentUserAvatarTagToleratesEmbyExtraFields]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testCurrentUserAvatarTagToleratesEmbyExtraFields]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testDetailUsesLegacyRouteAndMapsCast]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testDetailUsesLegacyRouteAndMapsCast]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testDirtyFieldsDoNotBreakDecoding]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testDirtyFieldsDoNotBreakDecoding]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testDolbyVisionSourceKeepsPlaybackInfoAndDolbyDetection]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testDolbyVisionSourceKeepsPlaybackInfoAndDolbyDetection]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testFieldsWhitelistDropsJellyfinOnlyNames]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testFieldsWhitelistDropsJellyfinOnlyNames]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testItemsPagePassesSearchTerm]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testItemsPagePassesSearchTerm]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testItemsPagePassesSortAndWatchState]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testItemsPagePassesSortAndWatchState]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testLatestItemsUsesLegacyRouteAndBareArray]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testLatestItemsUsesLegacyRouteAndBareArray]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testMarkPlayedAndUnplayedUseLegacyRoutes]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testMarkPlayedAndUnplayedUseLegacyRoutes]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testMarkPlayedFallbackDoesNotReportUnplayed]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testMarkPlayedFallbackDoesNotReportUnplayed]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testMediaSegmentsAcceptNumericMarkerIndex]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testMediaSegmentsAcceptNumericMarkerIndex]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testMediaSegmentsEmptyWithoutMarkers]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testMediaSegmentsEmptyWithoutMarkers]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testMediaSegmentsInferMissingIntroEndFromNextChapter]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testMediaSegmentsInferMissingIntroEndFromNextChapter]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testMediaSegmentsTranslateChapterMarkers]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testMediaSegmentsTranslateChapterMarkers]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testNextUpFallsBackToPerSeriesSweepWhenUnscopedIsEmpty]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testNextUpFallsBackToPerSeriesSweepWhenUnscopedIsEmpty]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testNextUpSkipsSweepWhenServerIsAlreadySlow]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testNextUpSkipsSweepWhenServerIsAlreadySlow]' passed (1.607 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testNextUpSkipsSweepWhenUnscopedReturnsItems]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testNextUpSkipsSweepWhenUnscopedReturnsItems]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testRequestsCarryCustomUserAgent]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testRequestsCarryCustomUserAgent]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testResumeItemsCarriesParentImagesForHomeStillChain]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testResumeItemsCarriesParentImagesForHomeStillChain]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testResumeItemsUsesLegacyRoute]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testResumeItemsUsesLegacyRoute]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testStreamAndImageURLsCarryNoToken]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testStreamAndImageURLsCarryNoToken]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testTopLevelKindSurvivesStreamTypeHandling]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testTopLevelKindSurvivesStreamTypeHandling]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testUserImageURLUsesLegacyUserImagesRoute]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testUserImageURLUsesLegacyUserImagesRoute]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testUserViewsUsesLegacyRouteAndFiltersUnknownCollections]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testUserViewsUsesLegacyRouteAndFiltersUnknownCollections]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.EmbyServerTests testViewingHistoryUsesLegacyUserRouteAndToleratesOptionalDates]' started.
+Test Case '-[JellyfinKitTests.EmbyServerTests testViewingHistoryUsesLegacyUserRouteAndToleratesOptionalDates]' passed (0.003 seconds).
+Test Suite 'EmbyServerTests' passed at 2026-11-14 15:40:45.027.
+	 Executed 30 tests, with 0 failures (0 unexpected) in 1.627 (1.629) seconds
+Test Suite 'ExternalSubtitleTests' started at 2026-11-14 15:40:45.027.
+Test Case '-[JellyfinKitTests.ExternalSubtitleTests testCodecMapping]' started.
+Test Case '-[JellyfinKitTests.ExternalSubtitleTests testCodecMapping]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.ExternalSubtitleTests testDownloadSubtitleWritesFileWithAuthHeader]' started.
+Test Case '-[JellyfinKitTests.ExternalSubtitleTests testDownloadSubtitleWritesFileWithAuthHeader]' passed (0.004 seconds).
+Test Case '-[JellyfinKitTests.ExternalSubtitleTests testExternalSubtitlesParsesStreamsAndSkipsEmbedded]' started.
+Test Case '-[JellyfinKitTests.ExternalSubtitleTests testExternalSubtitlesParsesStreamsAndSkipsEmbedded]' passed (0.006 seconds).
+Test Suite 'ExternalSubtitleTests' passed at 2026-11-14 15:40:45.036.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.009 (0.010) seconds
+Test Suite 'JellyfinRetryBehaviourTests' started at 2026-11-14 15:40:45.036.
+Test Case '-[JellyfinKitTests.JellyfinRetryBehaviourTests testNameResolutionFailureIsNotRetried]' started.
+Test Case '-[JellyfinKitTests.JellyfinRetryBehaviourTests testNameResolutionFailureIsNotRetried]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinRetryBehaviourTests testRetryStopsAtTheBudget]' started.
+Test Case '-[JellyfinKitTests.JellyfinRetryBehaviourTests testRetryStopsAtTheBudget]' passed (0.004 seconds).
+Test Case '-[JellyfinKitTests.JellyfinRetryBehaviourTests testServerErrorIsRetriedAndThenSucceeds]' started.
+Test Case '-[JellyfinKitTests.JellyfinRetryBehaviourTests testServerErrorIsRetriedAndThenSucceeds]' passed (0.004 seconds).
+Test Case '-[JellyfinKitTests.JellyfinRetryBehaviourTests testTransientNoNetworkIsRetriedAndThenSucceeds]' started.
+Test Case '-[JellyfinKitTests.JellyfinRetryBehaviourTests testTransientNoNetworkIsRetriedAndThenSucceeds]' passed (0.004 seconds).
+Test Suite 'JellyfinRetryBehaviourTests' passed at 2026-11-14 15:40:45.049.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.012 (0.013) seconds
+Test Suite 'JellyfinRetryPolicyTests' started at 2026-11-14 15:40:45.049.
+Test Case '-[JellyfinKitTests.JellyfinRetryPolicyTests testBoundaryBetweenClientAndServerErrors]' started.
+Test Case '-[JellyfinKitTests.JellyfinRetryPolicyTests testBoundaryBetweenClientAndServerErrors]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.JellyfinRetryPolicyTests testClientErrorsAreNotRetryable]' started.
+Test Case '-[JellyfinKitTests.JellyfinRetryPolicyTests testClientErrorsAreNotRetryable]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.JellyfinRetryPolicyTests testConnectLevelFailuresAreRetryable]' started.
+Test Case '-[JellyfinKitTests.JellyfinRetryPolicyTests testConnectLevelFailuresAreRetryable]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.JellyfinRetryPolicyTests testNameResolutionFailuresAreNotRetryable]' started.
+Test Case '-[JellyfinKitTests.JellyfinRetryPolicyTests testNameResolutionFailuresAreNotRetryable]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.JellyfinRetryPolicyTests testNoNetworkIsRetryable]' started.
+Test Case '-[JellyfinKitTests.JellyfinRetryPolicyTests testNoNetworkIsRetryable]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.JellyfinRetryPolicyTests testNonJellyfinErrorsAreNotRetryable]' started.
+Test Case '-[JellyfinKitTests.JellyfinRetryPolicyTests testNonJellyfinErrorsAreNotRetryable]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.JellyfinRetryPolicyTests testOnlyIdempotentMethodsAreRetried]' started.
+Test Case '-[JellyfinKitTests.JellyfinRetryPolicyTests testOnlyIdempotentMethodsAreRetried]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.JellyfinRetryPolicyTests testPermanentErrorsAreNotRetryable]' started.
+Test Case '-[JellyfinKitTests.JellyfinRetryPolicyTests testPermanentErrorsAreNotRetryable]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.JellyfinRetryPolicyTests testRetryBudgets]' started.
+Test Case '-[JellyfinKitTests.JellyfinRetryPolicyTests testRetryBudgets]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.JellyfinRetryPolicyTests testServerErrorsAndRateLimitAreRetryable]' started.
+Test Case '-[JellyfinKitTests.JellyfinRetryPolicyTests testServerErrorsAndRateLimitAreRetryable]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.JellyfinRetryPolicyTests testTransportFailuresAreRetryable]' started.
+Test Case '-[JellyfinKitTests.JellyfinRetryPolicyTests testTransportFailuresAreRetryable]' passed (0.000 seconds).
+Test Suite 'JellyfinRetryPolicyTests' passed at 2026-11-14 15:40:45.051.
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
+Test Suite 'JellyfinServerTests' started at 2026-11-14 15:40:45.051.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testAllSeriesEpisodesAreSortedBySeasonThenEpisode]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testAllSeriesEpisodesAreSortedBySeasonThenEpisode]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testAuthorizationHeaderFormat]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testAuthorizationHeaderFormat]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testChaptersEmptyWhenNone]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testChaptersEmptyWhenNone]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testChaptersMapsTicksToSecondsAndSequentialNames]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testChaptersMapsTicksToSecondsAndSequentialNames]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testCollectionMembersQueryShape]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testCollectionMembersQueryShape]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testCurrentUserAvatarTagIsNilWhenAccountHasNoAvatar]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testCurrentUserAvatarTagIsNilWhenAccountHasNoAvatar]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testCurrentUserAvatarTagReadsUsersMe]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testCurrentUserAvatarTagReadsUsersMe]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testEpisodesRequestsOwnImagesAndIndexOrder]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testEpisodesRequestsOwnImagesAndIndexOrder]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testImageURLCarriesMaxWidthAndTagButNoToken]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testImageURLCarriesMaxWidthAndTagButNoToken]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testImageURLWithLogoType]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testImageURLWithLogoType]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testItemMappingCarriesParentImagesForHomeStillChain]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testItemMappingCarriesParentImagesForHomeStillChain]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testItemMappingExtractsLogoAndParentLogo]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testItemMappingExtractsLogoAndParentLogo]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testItemRequestsPeopleGenresOverviewAndMapsCast]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testItemRequestsPeopleGenresOverviewAndMapsCast]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testItemsPagePassesSearchTerm]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testItemsPagePassesSearchTerm]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testItemsPageReturnsSinglePageWithoutAutoFetch]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testItemsPageReturnsSinglePageWithoutAutoFetch]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testItemsPageSortDefaultsToNameAscending]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testItemsPageSortDefaultsToNameAscending]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testItemsPageSortPassesKeysAndPairedOrders]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testItemsPageSortPassesKeysAndPairedOrders]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testItemsPageSortRandomSendsRandomKey]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testItemsPageSortRandomSendsRandomKey]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testItemsPageWatchStatePassesServerFilters]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testItemsPageWatchStatePassesServerFilters]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testLatestMediaUsesItemsSortedByDateCreatedInsteadOfLatestEndpoint]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testLatestMediaUsesItemsSortedByDateCreatedInsteadOfLatestEndpoint]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testLibraryBrowseLoadsEveryPage]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testLibraryBrowseLoadsEveryPage]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testLibraryBrowseSendsRecursiveSortAndTypes]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testLibraryBrowseSendsRecursiveSortAndTypes]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testMarkPlayedPostsUserPlayedItemsAndMapsState]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testMarkPlayedPostsUserPlayedItemsAndMapsState]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testMarkUnplayedDeletesUserPlayedItemsAndMapsState]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testMarkUnplayedDeletesUserPlayedItemsAndMapsState]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testMediaSegmentsFiltersIntroAndOutro]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testMediaSegmentsFiltersIntroAndOutro]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testOptionalGenreLookupFailureDoesNotDropCompletedRecords]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testOptionalGenreLookupFailureDoesNotDropCompletedRecords]' passed (0.004 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testRequestsCarryCustomUserAgent]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testRequestsCarryCustomUserAgent]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testRestoreFallsBackToProfileWithTokenWhenCurrentHasNone]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testRestoreFallsBackToProfileWithTokenWhenCurrentHasNone]' passed (0.003 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testRestorePrefersCurrentProfileWhenItHasToken]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testRestorePrefersCurrentProfileWhenItHasToken]' passed (0.003 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testResumeItemsMapsEpisodeWithPlayState]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testResumeItemsMapsEpisodeWithPlayState]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testResumeProfileUsesStoredToken]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testResumeProfileUsesStoredToken]' passed (0.003 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testStreamURLHasNoToken]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testStreamURLHasNoToken]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testUserImageURLUsesUserImageEndpoint]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testUserImageURLUsesUserImageEndpoint]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testUserImageURLWithoutTagOmitsTagQuery]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testUserImageURLWithoutTagOmitsTagQuery]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testUserViewsMapsKnownCollectionsAndFiltersFolders]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testUserViewsMapsKnownCollectionsAndFiltersFolders]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testViewingHistoryInheritsMissingEpisodeGenresFromSameServerParentOnce]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testViewingHistoryInheritsMissingEpisodeGenresFromSameServerParentOnce]' passed (0.003 seconds).
+Test Case '-[JellyfinKitTests.JellyfinServerTests testViewingHistoryRequestsDatedCompletedMoviesAndEpisodes]' started.
+Test Case '-[JellyfinKitTests.JellyfinServerTests testViewingHistoryRequestsDatedCompletedMoviesAndEpisodes]' passed (0.001 seconds).
+Test Suite 'JellyfinServerTests' passed at 2026-11-14 15:40:45.101.
+	 Executed 37 tests, with 0 failures (0 unexpected) in 0.048 (0.050) seconds
+Test Suite 'MappingTests' started at 2026-11-14 15:40:45.101.
+Test Case '-[JellyfinKitTests.MappingTests testDerivedIDDistinguishesNameAndKind]' started.
+Test Case '-[JellyfinKitTests.MappingTests testDerivedIDDistinguishesNameAndKind]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.MappingTests testMissingIDFallsBackToStableDerivedID]' started.
+Test Case '-[JellyfinKitTests.MappingTests testMissingIDFallsBackToStableDerivedID]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.MappingTests testServerIDWinsOverDerived]' started.
+Test Case '-[JellyfinKitTests.MappingTests testServerIDWinsOverDerived]' passed (0.000 seconds).
+Test Suite 'MappingTests' passed at 2026-11-14 15:40:45.102.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'MediaFileInfoTests' started at 2026-11-14 15:40:45.102.
+Test Case '-[JellyfinKitTests.MediaFileInfoTests testFallsBackToDirectStreamWhenNoDirectPlay]' started.
+Test Case '-[JellyfinKitTests.MediaFileInfoTests testFallsBackToDirectStreamWhenNoDirectPlay]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.MediaFileInfoTests testFrameRateFallsBackToRealFrameRate]' started.
+Test Case '-[JellyfinKitTests.MediaFileInfoTests testFrameRateFallsBackToRealFrameRate]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.MediaFileInfoTests testParsesVideoAudioSubtitleAndFileFields]' started.
+Test Case '-[JellyfinKitTests.MediaFileInfoTests testParsesVideoAudioSubtitleAndFileFields]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.MediaFileInfoTests testPicksDirectPlaySourceLikePlaybackPath]' started.
+Test Case '-[JellyfinKitTests.MediaFileInfoTests testPicksDirectPlaySourceLikePlaybackPath]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.MediaFileInfoTests testReturnsNilWithoutMediaSources]' started.
+Test Case '-[JellyfinKitTests.MediaFileInfoTests testReturnsNilWithoutMediaSources]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.MediaFileInfoTests testToleratesMissingFields]' started.
+Test Case '-[JellyfinKitTests.MediaFileInfoTests testToleratesMissingFields]' passed (0.001 seconds).
+Test Suite 'MediaFileInfoTests' passed at 2026-11-14 15:40:45.108.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.005 (0.006) seconds
+Test Suite 'MediaNullableHTTPTests' started at 2026-11-14 15:40:45.108.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testEmbyChapterMarkersAndFallbackRetainNativeSegments]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testEmbyChapterMarkersAndFallbackRetainNativeSegments]' passed (0.408 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testFullAndNullableItemsRetainNativeMappingAcrossBothServers]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testFullAndNullableItemsRetainNativeMappingAcrossBothServers]' passed (2.194 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testLibraryFilteringCaseAndMissingIdentityMatchNative]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testLibraryFilteringCaseAndMissingIdentityMatchNative]' passed (0.566 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testMissingNullAndEmptyListContainersAcrossBothServers]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testMissingNullAndEmptyListContainersAcrossBothServers]' passed (0.958 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testNullablePlaybackSourcesAndStreamsPreserveSessionContext]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testNullablePlaybackSourcesAndStreamsPreserveSessionContext]' passed (1.400 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testNullableRawMediaContainersAndMalformedArraysMatchNative]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testNullableRawMediaContainersAndMalformedArraysMatchNative]' passed (3.125 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testPreparationWithNullStreamsRetainsNegotiatedSourceAndSession]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testPreparationWithNullStreamsRetainsNegotiatedSourceAndSession]' passed (0.281 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testWrongNonNullTypesFailInsteadOfBecomingEmptyLists]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testWrongNonNullTypesFailInsteadOfBecomingEmptyLists]' passed (2.258 seconds).
+Test Suite 'MediaNullableHTTPTests' passed at 2026-11-14 15:40:56.299.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 11.190 (11.191) seconds
+Test Suite 'MediaProjectionHTTPTests' started at 2026-11-14 15:40:56.299.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testCompleteMediaFileInfoRetainsAllTracksAndExactInt64Size]' started.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testCompleteMediaFileInfoRetainsAllTracksAndExactInt64Size]' passed (0.286 seconds).
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testExplicitSelectedSubtitleSourceNeverFallsBack]' started.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testExplicitSelectedSubtitleSourceNeverFallsBack]' passed (0.300 seconds).
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testFrameRateUsesNativeValidRangeAndRealRateFallback]' started.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testFrameRateUsesNativeValidRangeAndRealRateFallback]' passed (1.691 seconds).
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testMalformedNonNullSourceAndTrackScalarsFailAcrossBothServers]' started.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testMalformedNonNullSourceAndTrackScalarsFailAcrossBothServers]' passed (1.983 seconds).
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testMetadataRequestsDoNotFilterSelectedSourceOrCreatePlaybackSession]' started.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testMetadataRequestsDoNotFilterSelectedSourceOrCreatePlaybackSession]' passed (0.290 seconds).
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testMissingSourceIDsAndNullMetadataPreserveNativeDefaults]' started.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testMissingSourceIDsAndNullMetadataPreserveNativeDefaults]' passed (1.743 seconds).
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testPreferredSourceOrdersDirectPlayBeforeDirectStreamAndFirstFallback]' started.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testPreferredSourceOrdersDirectPlayBeforeDirectStreamAndFirstFallback]' passed (1.156 seconds).
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testUnknownStreamAndRangeValuesRetainFlavorSpecificNativeBehavior]' started.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testUnknownStreamAndRangeValuesRetainFlavorSpecificNativeBehavior]' passed (1.429 seconds).
+Test Suite 'MediaProjectionHTTPTests' passed at 2026-11-14 15:41:05.179.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 8.878 (8.880) seconds
+Test Suite 'MediaServerLoginTests' started at 2026-11-14 15:41:05.179.
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testDetectKindByProductNameAndVersion]' started.
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testDetectKindByProductNameAndVersion]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testEmbyAPIBaseURLAppendsPrefixOnce]' started.
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testEmbyAPIBaseURLAppendsPrefixOnce]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testEmbyLoginSessionHasNoQuickConnect]' started.
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testEmbyLoginSessionHasNoQuickConnect]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testEmbyPasswordSignInMaps400ToUnauthorized]' started.
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testEmbyPasswordSignInMaps400ToUnauthorized]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testNormalizeServerURL]' started.
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testNormalizeServerURL]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testNormalizeServerURLRejectsGarbage]' started.
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testNormalizeServerURLRejectsGarbage]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testNormalizeServerURLRespectsPreferredScheme]' started.
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testNormalizeServerURLRespectsPreferredScheme]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testNotConnectedToInternetIsItsOwnKindWithActionableMessage]' started.
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testNotConnectedToInternetIsItsOwnKindWithActionableMessage]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testParseLoginResponseCarriesUserAvatarTag]' started.
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testParseLoginResponseCarriesUserAvatarTag]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testParseLoginResponseRejectsIncompletePayload]' started.
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testParseLoginResponseRejectsIncompletePayload]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testParseLoginResponseToleratesEmbyExtraFields]' started.
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testParseLoginResponseToleratesEmbyExtraFields]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testPasswordSignInFinishPersistsProfileAndToken]' started.
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testPasswordSignInFinishPersistsProfileAndToken]' passed (0.004 seconds).
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testSignInWithWrongPasswordMapsToUnauthorized]' started.
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testSignInWithWrongPasswordMapsToUnauthorized]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testSignInWorksWithEmbyShapedSuccessResponse]' started.
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testSignInWorksWithEmbyShapedSuccessResponse]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testStartLoginDetectsEmbyAndAppendsAPIPrefix]' started.
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testStartLoginDetectsEmbyAndAppendsAPIPrefix]' passed (0.003 seconds).
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testStartLoginKeepsJellyfinKindAndRawBaseURL]' started.
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testStartLoginKeepsJellyfinKindAndRawBaseURL]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testStartLoginProbesPublicSystemInfo]' started.
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testStartLoginProbesPublicSystemInfo]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testStartLoginSurfacesUnreachableServer]' started.
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testStartLoginSurfacesUnreachableServer]' passed (2.594 seconds).
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testTransportErrorClassification]' started.
+Test Case '-[JellyfinKitTests.MediaServerLoginTests testTransportErrorClassification]' passed (0.006 seconds).
+Test Suite 'MediaServerLoginTests' passed at 2026-11-14 15:41:07.801.
+	 Executed 19 tests, with 0 failures (0 unexpected) in 2.620 (2.622) seconds
+Test Suite 'PlaybackInfoTests' started at 2026-11-14 15:41:07.801.
+Test Case '-[JellyfinKitTests.PlaybackInfoTests testPlaybackInfoFallbackIDWhenSourceMissingID]' started.
+Test Case '-[JellyfinKitTests.PlaybackInfoTests testPlaybackInfoFallbackIDWhenSourceMissingID]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.PlaybackInfoTests testPlaybackInfoPostsDeviceProfileAndMapsMediaSources]' started.
+Test Case '-[JellyfinKitTests.PlaybackInfoTests testPlaybackInfoPostsDeviceProfileAndMapsMediaSources]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.PlaybackInfoTests testSessionContextDolbyVisionPrefixMatching]' started.
+Test Case '-[JellyfinKitTests.PlaybackInfoTests testSessionContextDolbyVisionPrefixMatching]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.PlaybackInfoTests testSessionContextUsesSelectedSourceDeliveryMethod]' started.
+Test Case '-[JellyfinKitTests.PlaybackInfoTests testSessionContextUsesSelectedSourceDeliveryMethod]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.PlaybackInfoTests testStreamURLIncludesPlaybackSessionAndMediaSourceWithoutToken]' started.
+Test Case '-[JellyfinKitTests.PlaybackInfoTests testStreamURLIncludesPlaybackSessionAndMediaSourceWithoutToken]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.PlaybackInfoTests testVideoRangeTypeExtractionAndDolbyVisionFlag]' started.
+Test Case '-[JellyfinKitTests.PlaybackInfoTests testVideoRangeTypeExtractionAndDolbyVisionFlag]' passed (0.002 seconds).
+Test Suite 'PlaybackInfoTests' passed at 2026-11-14 15:41:07.812.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.010 (0.011) seconds
+Test Suite 'PlaybackPreparationHTTPTests' started at 2026-11-14 15:41:07.812.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP]' passed (0.156 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyContinuationOverRealHTTP]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyContinuationOverRealHTTP]' passed (0.141 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyEpisodeEndpointSortingAndContinuationWindow]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyEpisodeEndpointSortingAndContinuationWindow]' passed (0.140 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP]' passed (0.135 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinContinuationOverRealHTTP]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinContinuationOverRealHTTP]' passed (0.139 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinEpisodeEndpointSortingAndContinuationWindow]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinEpisodeEndpointSortingAndContinuationWindow]' passed (0.136 seconds).
+Test Suite 'PlaybackPreparationHTTPTests' passed at 2026-11-14 15:41:08.660.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.847 (0.848) seconds
+Test Suite 'PlaybackPreparationWorkflowTests' started at 2026-11-14 15:41:08.660.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testCancellationErrorWithoutTaskCancellationKeepsInfoFallbackSemantics]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testCancellationErrorWithoutTaskCancellationKeepsInfoFallbackSemantics]' passed (0.004 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testCancelledContinuationCannotReturnLateNextItem]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testCancelledContinuationCannotReturnLateNextItem]' passed (0.016 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testCollectionReadsCurrentHomeAfterMembersAndUsesResolvedItemResume]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testCollectionReadsCurrentHomeAfterMembersAndUsesResolvedItemResume]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testCompleteSourceSequencePreservesNativeObjectsAndSkipsOnlyFailedAlternate]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testCompleteSourceSequencePreservesNativeObjectsAndSkipsOnlyFailedAlternate]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testContinuationGuardsMissingAnchorNoSuccessorAndTypedErrors]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testContinuationGuardsMissingAnchorNoSuccessorAndTypedErrors]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testContinuationKeepsServerOrderAndCompleteOpaqueNextItem]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testContinuationKeepsServerOrderAndCompleteOpaqueNextItem]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testPlaybackInfoFallbackKeepsOriginalFailureAndNativeRuntime]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testPlaybackInfoFallbackKeepsOriginalFailureAndNativeRuntime]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testPrimaryURLFailureFallsBackWithoutReusingPlaybackSession]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testPrimaryURLFailureFallsBackWithoutReusingPlaybackSession]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testResolutionPreservesOriginalErrorTypeEmptyResultAndEpisodeOrder]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testResolutionPreservesOriginalErrorTypeEmptyResultAndEpisodeOrder]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testRetiredContinuationCannotConsumeNewPreparation]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationWorkflowTests.swift:172: -[JellyfinKitTests.PlaybackPreparationWorkflowTests testRetiredContinuationCannotConsumeNewPreparation] : Test skipped - Core continuation retirement requires enabled Core
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testRetiredContinuationCannotConsumeNewPreparation]' skipped (0.001 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testRetiredMetadataCannotPresentOrCancelNewPreparationLease]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationWorkflowTests.swift:112: -[JellyfinKitTests.PlaybackPreparationWorkflowTests testRetiredMetadataCannotPresentOrCancelNewPreparationLease] : Test skipped - Core preparation lease retirement requires enabled Core
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testRetiredMetadataCannotPresentOrCancelNewPreparationLease]' skipped (0.000 seconds).
+Test Suite 'PlaybackPreparationWorkflowTests' passed at 2026-11-14 15:41:08.687.
+	 Executed 11 tests, with 2 tests skipped and 0 failures (0 unexpected) in 0.026 (0.027) seconds
+Test Suite 'PlaybackReportingTests' started at 2026-11-14 15:41:08.687.
+Test Case '-[JellyfinKitTests.PlaybackReportingTests testEmbyFallbackReportsSynthesizePlaySessionID]' started.
+Test Case '-[JellyfinKitTests.PlaybackReportingTests testEmbyFallbackReportsSynthesizePlaySessionID]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.PlaybackReportingTests testEmbyNegotiatedSessionPassesThroughUnchanged]' started.
+Test Case '-[JellyfinKitTests.PlaybackReportingTests testEmbyNegotiatedSessionPassesThroughUnchanged]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.PlaybackReportingTests testJellyfinFallbackReportsOmitPlaySessionID]' started.
+Test Case '-[JellyfinKitTests.PlaybackReportingTests testJellyfinFallbackReportsOmitPlaySessionID]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.PlaybackReportingTests testReportFailureIsSilentlyIgnored]' started.
+Test Case '-[JellyfinKitTests.PlaybackReportingTests testReportFailureIsSilentlyIgnored]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.PlaybackReportingTests testReportsCarryPlaybackSessionContext]' started.
+Test Case '-[JellyfinKitTests.PlaybackReportingTests testReportsCarryPlaybackSessionContext]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.PlaybackReportingTests testReportStartProgressStopHitRightEndpoints]' started.
+Test Case '-[JellyfinKitTests.PlaybackReportingTests testReportStartProgressStopHitRightEndpoints]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.PlaybackReportingTests testSynthesizedSessionIDIsDeterministic]' started.
+Test Case '-[JellyfinKitTests.PlaybackReportingTests testSynthesizedSessionIDIsDeterministic]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.PlaybackReportingTests testTicksConversion]' started.
+Test Case '-[JellyfinKitTests.PlaybackReportingTests testTicksConversion]' passed (0.000 seconds).
+Test Suite 'PlaybackReportingTests' passed at 2026-11-14 15:41:08.697.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.009 (0.010) seconds
+Test Suite 'RustBrowseIntegrationTests' started at 2026-11-14 15:41:08.697.
+Test Case '-[JellyfinKitTests.RustBrowseIntegrationTests testNativeBrowsePreservesFiltersAuthPaginationAndDoesNotReplayFailures]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/RustBrowseIntegrationTests.swift:11: -[JellyfinKitTests.RustBrowseIntegrationTests testNativeBrowsePreservesFiltersAuthPaginationAndDoesNotReplayFailures] : Test skipped - Set OCP_CORE_LIBRARY_PATH for native browsing integration tests
+Test Case '-[JellyfinKitTests.RustBrowseIntegrationTests testNativeBrowsePreservesFiltersAuthPaginationAndDoesNotReplayFailures]' skipped (0.000 seconds).
+Test Suite 'RustBrowseIntegrationTests' passed at 2026-11-14 15:41:08.698.
+	 Executed 1 test, with 1 test skipped and 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'RustEndpointIntegrationTests' started at 2026-11-14 15:41:08.698.
+Test Case '-[JellyfinKitTests.RustEndpointIntegrationTests testCoreProbeRetainsConnectionPoolIdentityValidationTimeoutAndCancellation]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/RustEndpointIntegrationTests.swift:32: -[JellyfinKitTests.RustEndpointIntegrationTests testCoreProbeRetainsConnectionPoolIdentityValidationTimeoutAndCancellation] : Test skipped - Enable Core with OCP_CORE_LIBRARY_PATH for probe transport integration
+Test Case '-[JellyfinKitTests.RustEndpointIntegrationTests testCoreProbeRetainsConnectionPoolIdentityValidationTimeoutAndCancellation]' skipped (0.000 seconds).
+Test Case '-[JellyfinKitTests.RustEndpointIntegrationTests testEmbyCoreRequestsFollowDynamicEndpoints]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/RustEndpointIntegrationTests.swift:78: -[JellyfinKitTests.RustEndpointIntegrationTests testEmbyCoreRequestsFollowDynamicEndpoints] : Test skipped - Set OCP_CORE_LIBRARY_PATH for native endpoint integration
+Test Case '-[JellyfinKitTests.RustEndpointIntegrationTests testEmbyCoreRequestsFollowDynamicEndpoints]' skipped (0.000 seconds).
+Test Case '-[JellyfinKitTests.RustEndpointIntegrationTests testJellyfinCoreRequestsFollowDynamicEndpoints]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/RustEndpointIntegrationTests.swift:78: -[JellyfinKitTests.RustEndpointIntegrationTests testJellyfinCoreRequestsFollowDynamicEndpoints] : Test skipped - Set OCP_CORE_LIBRARY_PATH for native endpoint integration
+Test Case '-[JellyfinKitTests.RustEndpointIntegrationTests testJellyfinCoreRequestsFollowDynamicEndpoints]' skipped (0.000 seconds).
+Test Suite 'RustEndpointIntegrationTests' passed at 2026-11-14 15:41:08.699.
+	 Executed 3 tests, with 3 tests skipped and 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'RustLoginIntegrationTests' started at 2026-11-14 15:41:08.699.
+Test Case '-[JellyfinKitTests.RustLoginIntegrationTests testAuthenticationFailuresRemainTypedAndNeverReplay]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/RustLoginIntegrationTests.swift:13: -[JellyfinKitTests.RustLoginIntegrationTests testAuthenticationFailuresRemainTypedAndNeverReplay] : Test skipped - Enable Core with OCP_CORE_LIBRARY_PATH for native login fixtures
+Test Case '-[JellyfinKitTests.RustLoginIntegrationTests testAuthenticationFailuresRemainTypedAndNeverReplay]' skipped (0.000 seconds).
+Test Case '-[JellyfinKitTests.RustLoginIntegrationTests testCancellationStopsInflightLoginAndProbe]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/RustLoginIntegrationTests.swift:13: -[JellyfinKitTests.RustLoginIntegrationTests testCancellationStopsInflightLoginAndProbe] : Test skipped - Enable Core with OCP_CORE_LIBRARY_PATH for native login fixtures
+Test Case '-[JellyfinKitTests.RustLoginIntegrationTests testCancellationStopsInflightLoginAndProbe]' skipped (0.000 seconds).
+Test Case '-[JellyfinKitTests.RustLoginIntegrationTests testCancellingPairingDoesNotCancelConcurrentLogin]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/RustLoginIntegrationTests.swift:13: -[JellyfinKitTests.RustLoginIntegrationTests testCancellingPairingDoesNotCancelConcurrentLogin] : Test skipped - Enable Core with OCP_CORE_LIBRARY_PATH for native login fixtures
+Test Case '-[JellyfinKitTests.RustLoginIntegrationTests testCancellingPairingDoesNotCancelConcurrentLogin]' skipped (0.000 seconds).
+Test Case '-[JellyfinKitTests.RustLoginIntegrationTests testDefaultProductionJellyfinLoginUsesCoreStableIdentityAndStoresAvatar]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/RustLoginIntegrationTests.swift:13: -[JellyfinKitTests.RustLoginIntegrationTests testDefaultProductionJellyfinLoginUsesCoreStableIdentityAndStoresAvatar] : Test skipped - Enable Core with OCP_CORE_LIBRARY_PATH for native login fixtures
+Test Case '-[JellyfinKitTests.RustLoginIntegrationTests testDefaultProductionJellyfinLoginUsesCoreStableIdentityAndStoresAvatar]' skipped (0.000 seconds).
+Test Case '-[JellyfinKitTests.RustLoginIntegrationTests testEmbyLoginKeepsPrefixAndProductIdentity]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/RustLoginIntegrationTests.swift:13: -[JellyfinKitTests.RustLoginIntegrationTests testEmbyLoginKeepsPrefixAndProductIdentity] : Test skipped - Enable Core with OCP_CORE_LIBRARY_PATH for native login fixtures
+Test Case '-[JellyfinKitTests.RustLoginIntegrationTests testEmbyLoginKeepsPrefixAndProductIdentity]' skipped (0.000 seconds).
+Test Case '-[JellyfinKitTests.RustLoginIntegrationTests testInjectedURLProtocolKeepsNativeLoginTransport]' started.
+Test Case '-[JellyfinKitTests.RustLoginIntegrationTests testInjectedURLProtocolKeepsNativeLoginTransport]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.RustLoginIntegrationTests testProductionProbeRetainsTransientRetry]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/RustLoginIntegrationTests.swift:13: -[JellyfinKitTests.RustLoginIntegrationTests testProductionProbeRetainsTransientRetry] : Test skipped - Enable Core with OCP_CORE_LIBRARY_PATH for native login fixtures
+Test Case '-[JellyfinKitTests.RustLoginIntegrationTests testProductionProbeRetainsTransientRetry]' skipped (0.000 seconds).
+Test Case '-[JellyfinKitTests.RustLoginIntegrationTests testPublicQuickConnectPairsAndAuthenticates]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/RustLoginIntegrationTests.swift:13: -[JellyfinKitTests.RustLoginIntegrationTests testPublicQuickConnectPairsAndAuthenticates] : Test skipped - Enable Core with OCP_CORE_LIBRARY_PATH for native login fixtures
+Test Case '-[JellyfinKitTests.RustLoginIntegrationTests testPublicQuickConnectPairsAndAuthenticates]' skipped (0.000 seconds).
+Test Case '-[JellyfinKitTests.RustLoginIntegrationTests testQuickConnectDisabledAndMalformedIssuanceSurfaceError]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/RustLoginIntegrationTests.swift:13: -[JellyfinKitTests.RustLoginIntegrationTests testQuickConnectDisabledAndMalformedIssuanceSurfaceError] : Test skipped - Enable Core with OCP_CORE_LIBRARY_PATH for native login fixtures
+Test Case '-[JellyfinKitTests.RustLoginIntegrationTests testQuickConnectDisabledAndMalformedIssuanceSurfaceError]' skipped (0.000 seconds).
+Test Case '-[JellyfinKitTests.RustLoginIntegrationTests testSharedPollingFailureBudgetAndTimeout]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/RustLoginIntegrationTests.swift:13: -[JellyfinKitTests.RustLoginIntegrationTests testSharedPollingFailureBudgetAndTimeout] : Test skipped - Enable Core with OCP_CORE_LIBRARY_PATH for native login fixtures
+Test Case '-[JellyfinKitTests.RustLoginIntegrationTests testSharedPollingFailureBudgetAndTimeout]' skipped (0.000 seconds).
+Test Suite 'RustLoginIntegrationTests' passed at 2026-11-14 15:41:08.704.
+	 Executed 10 tests, with 9 tests skipped and 0 failures (0 unexpected) in 0.004 (0.005) seconds
+Test Suite 'ServerAddressFailoverTests' started at 2026-11-14 15:41:08.704.
+Test Case '-[JellyfinKitTests.ServerAddressFailoverTests testEmbyRequestFailsOverToReachableAlternate]' started.
+Test Case '-[JellyfinKitTests.ServerAddressFailoverTests testEmbyRequestFailsOverToReachableAlternate]' passed (0.004 seconds).
+Test Case '-[JellyfinKitTests.ServerAddressFailoverTests testFallsBackToPlainRetryWhenNoAlternateIsReachable]' started.
+Test Case '-[JellyfinKitTests.ServerAddressFailoverTests testFallsBackToPlainRetryWhenNoAlternateIsReachable]' passed (0.006 seconds).
+Test Case '-[JellyfinKitTests.ServerAddressFailoverTests testJellyfinDoesNotSwitchAddressOnServerError]' started.
+Test Case '-[JellyfinKitTests.ServerAddressFailoverTests testJellyfinDoesNotSwitchAddressOnServerError]' passed (0.005 seconds).
+Test Case '-[JellyfinKitTests.ServerAddressFailoverTests testJellyfinFailsOverWhenCandidateHostnameDoesNotResolve]' started.
+Test Case '-[JellyfinKitTests.ServerAddressFailoverTests testJellyfinFailsOverWhenCandidateHostnameDoesNotResolve]' passed (0.003 seconds).
+Test Case '-[JellyfinKitTests.ServerAddressFailoverTests testJellyfinRequestFailsOverToReachableAlternate]' started.
+Test Case '-[JellyfinKitTests.ServerAddressFailoverTests testJellyfinRequestFailsOverToReachableAlternate]' passed (0.003 seconds).
+Test Suite 'ServerAddressFailoverTests' passed at 2026-11-14 15:41:08.725.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.021 (0.022) seconds
+Test Suite 'ServerAddressTests' started at 2026-11-14 15:41:08.725.
+Test Case '-[JellyfinKitTests.ServerAddressTests testCGNATBoundariesAreNotTailscale]' started.
+Test Case '-[JellyfinKitTests.ServerAddressTests testCGNATBoundariesAreNotTailscale]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.ServerAddressTests testClassificationIsComputedNotStored]' started.
+Test Case '-[JellyfinKitTests.ServerAddressTests testClassificationIsComputedNotStored]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.ServerAddressTests testClassifiesHostnames]' started.
+Test Case '-[JellyfinKitTests.ServerAddressTests testClassifiesHostnames]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.ServerAddressTests testClassifiesPrivateIPv4AsLAN]' started.
+Test Case '-[JellyfinKitTests.ServerAddressTests testClassifiesPrivateIPv4AsLAN]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.ServerAddressTests testClassifiesTailscaleCGNATRangeAndMagicDNS]' started.
+Test Case '-[JellyfinKitTests.ServerAddressTests testClassifiesTailscaleCGNATRangeAndMagicDNS]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.ServerAddressTests testCodableRoundTripUsesPlainString]' started.
+Test Case '-[JellyfinKitTests.ServerAddressTests testCodableRoundTripUsesPlainString]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.ServerAddressTests testEmbyPathPrefixIsPartOfIdentity]' started.
+Test Case '-[JellyfinKitTests.ServerAddressTests testEmbyPathPrefixIsPartOfIdentity]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.ServerAddressTests testListDeduplicatesAndExcludesPrimary]' started.
+Test Case '-[JellyfinKitTests.ServerAddressTests testListDeduplicatesAndExcludesPrimary]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.ServerAddressTests testNormalizationIgnoresCaseTrailingSlashAndDefaultPort]' started.
+Test Case '-[JellyfinKitTests.ServerAddressTests testNormalizationIgnoresCaseTrailingSlashAndDefaultPort]' passed (0.000 seconds).
+Test Suite 'ServerAddressTests' passed at 2026-11-14 15:41:08.727.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
+Test Suite 'ServerEndpointDirectoryTests' started at 2026-11-14 15:41:08.727.
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testConcurrentFailuresRespectCooldown]' started.
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testConcurrentFailuresRespectCooldown]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testConcurrentRequestsShareOneProbeRound]' started.
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testConcurrentRequestsShareOneProbeRound]' passed (0.061 seconds).
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testDeletingAddressDuringProbeRejectsOldResult]' started.
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testDeletingAddressDuringProbeRejectsOldResult]' passed (0.136 seconds).
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testFreshResolutionIsCachedUntilInvalidated]' started.
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testFreshResolutionIsCachedUntilInvalidated]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testInvalidateDiscardsInFlightResolution]' started.
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testInvalidateDiscardsInFlightResolution]' passed (0.194 seconds).
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testKeepsAddressWhenNothingIsReachable]' started.
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testKeepsAddressWhenNothingIsReachable]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testKeepsCurrentAddressWhenNotClearlyFaster]' started.
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testKeepsCurrentAddressWhenNotClearlyFaster]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testPicksClearlyFasterAddressOverPersistedOne]' started.
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testPicksClearlyFasterAddressOverPersistedOne]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testPinnedAddressIgnoresFasterAlternateAndOtherCandidates]' started.
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testPinnedAddressIgnoresFasterAlternateAndOtherCandidates]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testPinnedAddressNeverFailsOver]' started.
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testPinnedAddressNeverFailsOver]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testProbeAllCandidatesDoesNotChangeActiveAddress]' started.
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testProbeAllCandidatesDoesNotChangeActiveAddress]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testRefreshForcesProbe]' started.
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testRefreshForcesProbe]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testRepeatedRequestsDoNotReProbeWhileNothingIsReachable]' started.
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testRepeatedRequestsDoNotReProbeWhileNothingIsReachable]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testReportFailureReturnsFalseWhenNothingChanges]' started.
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testReportFailureReturnsFalseWhenNothingChanges]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testReportFailureSwitchesToReachableAlternate]' started.
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testReportFailureSwitchesToReachableAlternate]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testSwitchesWhenCurrentAddressBecomesUnreachable]' started.
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testSwitchesWhenCurrentAddressBecomesUnreachable]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testSyncingProfileFollowsPinnedAndDroppedAddresses]' started.
+Test Case '-[JellyfinKitTests.ServerEndpointDirectoryTests testSyncingProfileFollowsPinnedAndDroppedAddresses]' passed (0.001 seconds).
+Test Suite 'ServerEndpointDirectoryTests' passed at 2026-11-14 15:41:09.135.
+	 Executed 17 tests, with 0 failures (0 unexpected) in 0.404 (0.408) seconds
+Test Suite 'ServerProbeSessionReuseTests' started at 2026-11-14 15:41:09.135.
+Test Case '-[JellyfinKitTests.ServerProbeSessionReuseTests testDifferentConfigurationsDoNotShareSession]' started.
+Test Case '-[JellyfinKitTests.ServerProbeSessionReuseTests testDifferentConfigurationsDoNotShareSession]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.ServerProbeSessionReuseTests testDifferentTimeoutsGetTheirOwnSession]' started.
+Test Case '-[JellyfinKitTests.ServerProbeSessionReuseTests testDifferentTimeoutsGetTheirOwnSession]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.ServerProbeSessionReuseTests testNonPositiveOrNonFiniteTimeoutIsClamped]' started.
+Test Case '-[JellyfinKitTests.ServerProbeSessionReuseTests testNonPositiveOrNonFiniteTimeoutIsClamped]' passed (0.004 seconds).
+Test Case '-[JellyfinKitTests.ServerProbeSessionReuseTests testRepeatedProbesWithSameTimeoutShareOneSession]' started.
+Test Case '-[JellyfinKitTests.ServerProbeSessionReuseTests testRepeatedProbesWithSameTimeoutShareOneSession]' passed (0.003 seconds).
+Test Case '-[JellyfinKitTests.ServerProbeSessionReuseTests testReusedSessionStillProducesCorrectResult]' started.
+Test Case '-[JellyfinKitTests.ServerProbeSessionReuseTests testReusedSessionStillProducesCorrectResult]' passed (0.002 seconds).
+Test Suite 'ServerProbeSessionReuseTests' passed at 2026-11-14 15:41:09.149.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.013 (0.014) seconds
+Test Suite 'ServerProbeTests' started at 2026-11-14 15:41:09.149.
+Test Case '-[JellyfinKitTests.ServerProbeTests testCheckReportsDifferentServerInsteadOfUnreachable]' started.
+Test Case '-[JellyfinKitTests.ServerProbeTests testCheckReportsDifferentServerInsteadOfUnreachable]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerProbeTests testCheckReportsReachableForSameServer]' started.
+Test Case '-[JellyfinKitTests.ServerProbeTests testCheckReportsReachableForSameServer]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerProbeTests testFirstReachableReturnsNilWhenNothingAnswers]' started.
+Test Case '-[JellyfinKitTests.ServerProbeTests testFirstReachableReturnsNilWhenNothingAnswers]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerProbeTests testFirstReachableSkipsUnreachableAddresses]' started.
+Test Case '-[JellyfinKitTests.ServerProbeTests testFirstReachableSkipsUnreachableAddresses]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerProbeTests testProbeKeepsEmbyPathPrefix]' started.
+Test Case '-[JellyfinKitTests.ServerProbeTests testProbeKeepsEmbyPathPrefix]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerProbeTests testProbePassesWhenServerDoesNotReportID]' started.
+Test Case '-[JellyfinKitTests.ServerProbeTests testProbePassesWhenServerDoesNotReportID]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerProbeTests testProbeReadsPublicInfo]' started.
+Test Case '-[JellyfinKitTests.ServerProbeTests testProbeReadsPublicInfo]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerProbeTests testProbeRejectsAnotherServersID]' started.
+Test Case '-[JellyfinKitTests.ServerProbeTests testProbeRejectsAnotherServersID]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerProbeTests testProbeRejectsOKResponseThatIsNotAMediaServer]' started.
+Test Case '-[JellyfinKitTests.ServerProbeTests testProbeRejectsOKResponseThatIsNotAMediaServer]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerProbeTests testProbeSendsAuthorizationHeaderWhenProvided]' started.
+Test Case '-[JellyfinKitTests.ServerProbeTests testProbeSendsAuthorizationHeaderWhenProvided]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerProbeTests testProbeTreatsHTTPErrorAsUnreachable]' started.
+Test Case '-[JellyfinKitTests.ServerProbeTests testProbeTreatsHTTPErrorAsUnreachable]' passed (0.001 seconds).
+Test Suite 'ServerProbeTests' passed at 2026-11-14 15:41:09.159.
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.009 (0.010) seconds
+Test Suite 'ServerProfileImageURLTests' started at 2026-11-14 15:41:09.159.
+Test Case '-[JellyfinKitTests.ServerProfileImageURLTests testAllImageTypesMapToServerLiterals]' started.
+Test Case '-[JellyfinKitTests.ServerProfileImageURLTests testAllImageTypesMapToServerLiterals]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.ServerProfileImageURLTests testEmbySubpathIsPreserved]' started.
+Test Case '-[JellyfinKitTests.ServerProfileImageURLTests testEmbySubpathIsPreserved]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.ServerProfileImageURLTests testJellyfinImageURLShape]' started.
+Test Case '-[JellyfinKitTests.ServerProfileImageURLTests testJellyfinImageURLShape]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.ServerProfileImageURLTests testOmittingQueryItems]' started.
+Test Case '-[JellyfinKitTests.ServerProfileImageURLTests testOmittingQueryItems]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.ServerProfileImageURLTests testQueryItemOrderIsStable]' started.
+Test Case '-[JellyfinKitTests.ServerProfileImageURLTests testQueryItemOrderIsStable]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.ServerProfileImageURLTests testTrailingSlashDoesNotDouble]' started.
+Test Case '-[JellyfinKitTests.ServerProfileImageURLTests testTrailingSlashDoesNotDouble]' passed (0.000 seconds).
+Test Suite 'ServerProfileImageURLTests' passed at 2026-11-14 15:41:09.161.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'ServerStoreTests' started at 2026-11-14 15:41:09.161.
+Test Case '-[JellyfinKitTests.ServerStoreTests testActivatePersistsProfileTokenAndCurrent]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testActivatePersistsProfileTokenAndCurrent]' passed (0.006 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testAddAddressNormalizesAndRejectsDuplicates]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testAddAddressNormalizesAndRejectsDuplicates]' passed (0.003 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testAddressesPersistAcrossStoreInstances]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testAddressesPersistAcrossStoreInstances]' passed (0.003 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testConcurrentSavesDoNotLoseProfiles]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testConcurrentSavesDoNotLoseProfiles]' passed (0.105 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testDefaultServerIDRoundTripsAndClearsWithEmptyString]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testDefaultServerIDRoundTripsAndClearsWithEmptyString]' passed (0.003 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testDefaultTokenStorePersistsLocallyAcrossInstances]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testDefaultTokenStorePersistsLocallyAcrossInstances]' passed (0.003 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testEmptyStoreHasNoCurrentProfile]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testEmptyStoreHasNoCurrentProfile]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testEndpointDirectoryIsSharedPerProfileAndDroppedWithServer]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testEndpointDirectoryIsSharedPerProfileAndDroppedWithServer]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testLaunchProfileFallsBackToCurrentWhenDefaultMissing]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testLaunchProfileFallsBackToCurrentWhenDefaultMissing]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testLaunchProfilePrefersDefaultOverCurrent]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testLaunchProfilePrefersDefaultOverCurrent]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testLegacyProfileJSONWithoutAddressFieldsDecodes]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testLegacyProfileJSONWithoutAddressFieldsDecodes]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testLegacyProfileJSONWithoutKindDecodesAsJellyfin]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testLegacyProfileJSONWithoutKindDecodesAsJellyfin]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testLegacyUserDefaultsTokenIsMigratedAndRemoved]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testLegacyUserDefaultsTokenIsMigratedAndRemoved]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testMarkActiveURLKeepsPreviousBaseAsAlternate]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testMarkActiveURLKeepsPreviousBaseAsAlternate]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testMergeFromAlternateAddressDoesNotDuplicateIt]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testMergeFromAlternateAddressDoesNotDuplicateIt]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testMergeKeepsExistingAlternatesAndPinnedChoice]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testMergeKeepsExistingAlternatesAndPinnedChoice]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testMergePrefersIncomingAvatarTagButKeepsExistingWhenMissing]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testMergePrefersIncomingAvatarTagButKeepsExistingWhenMissing]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testPrimaryImageTagRoundTripsThroughStorage]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testPrimaryImageTagRoundTripsThroughStorage]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testProfileKindRoundTripsThroughCodable]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testProfileKindRoundTripsThroughCodable]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testRemoveActiveAddressFallsBackToRemainingAlternate]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testRemoveActiveAddressFallsBackToRemainingAlternate]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testRemoveClearsDefaultWhenDeletingThatProfile]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testRemoveClearsDefaultWhenDeletingThatProfile]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testRemoveDeletesTokenAndFallsBackToOtherProfile]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testRemoveDeletesTokenAndFallsBackToOtherProfile]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testRemoveKeepsDefaultWhenDeletingAnotherProfile]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testRemoveKeepsDefaultWhenDeletingAnotherProfile]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testRemovingLastAddressIsRefused]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testRemovingLastAddressIsRefused]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testRemovingPinnedAddressClearsPin]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testRemovingPinnedAddressClearsPin]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testResolvedServerIDRejectsHostFallbackPrefixes]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testResolvedServerIDRejectsHostFallbackPrefixes]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testRestoreSkipsDefaultWithoutTokenAndUsesFirstWithToken]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testRestoreSkipsDefaultWithoutTokenAndUsesFirstWithToken]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testSecondLoginFromAnotherAddressMergesIntoOneServer]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testSecondLoginFromAnotherAddressMergesIntoOneServer]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testSetPinnedAddressOnlyAcceptsKnownCandidates]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testSetPinnedAddressOnlyAcceptsKnownCandidates]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testSetPrimaryImageTagCanClearToNil]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testSetPrimaryImageTagCanClearToNil]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.ServerStoreTests testSignOutKeepsProfileButDropsToken]' started.
+Test Case '-[JellyfinKitTests.ServerStoreTests testSignOutKeepsProfileButDropsToken]' passed (0.002 seconds).
+Test Suite 'ServerStoreTests' passed at 2026-11-14 15:41:09.327.
+	 Executed 31 tests, with 0 failures (0 unexpected) in 0.163 (0.166) seconds
+Test Suite 'ServerURLTests' started at 2026-11-14 15:41:09.327.
+Test Case '-[JellyfinKitTests.ServerURLTests testAppendsPathAfterBasePrefix]' started.
+Test Case '-[JellyfinKitTests.ServerURLTests testAppendsPathAfterBasePrefix]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.ServerURLTests testKeepsQueryOrder]' started.
+Test Case '-[JellyfinKitTests.ServerURLTests testKeepsQueryOrder]' passed (0.000 seconds).
+Test Suite 'ServerURLTests' passed at 2026-11-14 15:41:09.328.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'ServerViewingHistoryTests' started at 2026-11-14 15:41:09.328.
+Test Case '-[JellyfinKitTests.ServerViewingHistoryTests testAccountsAndServersUseSeparateFilesAndAddressChangesKeepIdentity]' started.
+Test Case '-[JellyfinKitTests.ServerViewingHistoryTests testAccountsAndServersUseSeparateFilesAndAddressChangesKeepIdentity]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerViewingHistoryTests testCancellationDoesNotCreateArchive]' started.
+Test Case '-[JellyfinKitTests.ServerViewingHistoryTests testCancellationDoesNotCreateArchive]' passed (0.015 seconds).
+Test Case '-[JellyfinKitTests.ServerViewingHistoryTests testCompleteBoundaryPageIsProcessedBeforeStoppingAndOlderItemsExcluded]' started.
+Test Case '-[JellyfinKitTests.ServerViewingHistoryTests testCompleteBoundaryPageIsProcessedBeforeStoppingAndOlderItemsExcluded]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerViewingHistoryTests testFirstImportCoversThirtyLocalCalendarDays]' started.
+Test Case '-[JellyfinKitTests.ServerViewingHistoryTests testFirstImportCoversThirtyLocalCalendarDays]' passed (0.000 seconds).
+Test Case '-[JellyfinKitTests.ServerViewingHistoryTests testLateSyncCannotOverwriteNewerArchive]' started.
+Test Case '-[JellyfinKitTests.ServerViewingHistoryTests testLateSyncCannotOverwriteNewerArchive]' passed (0.014 seconds).
+Test Case '-[JellyfinKitTests.ServerViewingHistoryTests testMissingDateUnplayedParentAndFutureItemsDoNotBecomeTodayHistory]' started.
+Test Case '-[JellyfinKitTests.ServerViewingHistoryTests testMissingDateUnplayedParentAndFutureItemsDoNotBecomeTodayHistory]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerViewingHistoryTests testPageFailureAndScanLimitPreservePriorArchive]' started.
+Test Case '-[JellyfinKitTests.ServerViewingHistoryTests testPageFailureAndScanLimitPreservePriorArchive]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerViewingHistoryTests testPaginationKeepsNewestPerItemAndContinuesShortPageWhenTotalIsKnown]' started.
+Test Case '-[JellyfinKitTests.ServerViewingHistoryTests testPaginationKeepsNewestPerItemAndContinuesShortPageWhenTotalIsKnown]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerViewingHistoryTests testRepeatedSyncDoesNotDoubleCountAndRemoteUnmarkIsReconciled]' started.
+Test Case '-[JellyfinKitTests.ServerViewingHistoryTests testRepeatedSyncDoesNotDoubleCountAndRemoteUnmarkIsReconciled]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.ServerViewingHistoryTests testRewatchUpdatesDateInsteadOfInventingAnotherSession]' started.
+Test Case '-[JellyfinKitTests.ServerViewingHistoryTests testRewatchUpdatesDateInsteadOfInventingAnotherSession]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.ServerViewingHistoryTests testUnknownRuntimeRemainsUnknown]' started.
+Test Case '-[JellyfinKitTests.ServerViewingHistoryTests testUnknownRuntimeRemainsUnknown]' passed (0.000 seconds).
+Test Suite 'ServerViewingHistoryTests' passed at 2026-11-14 15:41:09.367.
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.039 (0.040) seconds
+Test Suite 'SubtitleSourceIsolationTests' started at 2026-11-14 15:41:09.367.
+Test Case '-[JellyfinKitTests.SubtitleSourceIsolationTests testBothServersUseSelectedSourceAndNeverFallbackForMissingID]' started.
+Test Case '-[JellyfinKitTests.SubtitleSourceIsolationTests testBothServersUseSelectedSourceAndNeverFallbackForMissingID]' passed (0.005 seconds).
+Test Case '-[JellyfinKitTests.SubtitleSourceIsolationTests testCacheSeparatesServersSourcesAndFormatsWithoutLossySanitizing]' started.
+Test Case '-[JellyfinKitTests.SubtitleSourceIsolationTests testCacheSeparatesServersSourcesAndFormatsWithoutLossySanitizing]' passed (0.007 seconds).
+Test Suite 'SubtitleSourceIsolationTests' passed at 2026-11-14 15:41:09.380.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.012 (0.012) seconds
+Test Suite 'JellyfinKitTests.xctest' passed at 2026-11-14 15:41:09.380.
+	 Executed 288 tests, with 15 tests skipped and 0 failures (0 unexpected) in 25.978 (26.007) seconds
+Test Suite 'All tests' passed at 2026-11-14 15:41:09.380.
+	 Executed 288 tests, with 15 tests skipped and 0 failures (0 unexpected) in 25.978 (26.008) seconds
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.

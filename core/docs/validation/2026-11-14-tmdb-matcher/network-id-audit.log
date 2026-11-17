@@ -1,0 +1,6 @@
+input=9007199254740993 genericJSONValueID=9007199254740992 equal=false
+input=9007199254740993 directTypedID=9007199254740993 equal=true
+input=9223372036854775806 genericJSONValueDecodingFailed=DecodingError.dataCorrupted: Data was corrupted. Debug description: The given data was not valid JSON.. Underlying error: Error Domain=NSCocoaErrorDomain Code=3840 "Number 9.223372036854776e+18 is not representable in Swift." UserInfo={NSDebugDescription=Number 9.223372036854776e+18 is not representable in Swift.}
+input=9223372036854775806 directTypedID=9223372036854775806 equal=true
+input=9223372036854775807 genericJSONValueDecodingFailed=DecodingError.dataCorrupted: Data was corrupted. Debug description: The given data was not valid JSON.. Underlying error: Error Domain=NSCocoaErrorDomain Code=3840 "Number 9.223372036854776e+18 is not representable in Swift." UserInfo={NSDebugDescription=Number 9.223372036854776e+18 is not representable in Swift.}
+input=9223372036854775807 directTypedID=9223372036854775807 equal=true

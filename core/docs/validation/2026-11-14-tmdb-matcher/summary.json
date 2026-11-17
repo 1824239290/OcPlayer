@@ -1,0 +1,91 @@
+{
+  "goalComplete": false,
+  "cohort": "complete shared native TMDB matching policy and search-effect planning",
+  "rustTests": 98,
+  "directABI": {
+    "bangumi": 4,
+    "danmaku-cache": 6,
+    "danmaku": 4,
+    "danmaku-flow": 6,
+    "danmaku-policy": 4,
+    "intro": 9,
+    "intro-identity": 6,
+    "intro-provider": 6,
+    "media-login": 10,
+    "moviepilot": 10,
+    "network": 7,
+    "standalone": 10,
+    "tmdb-matcher": 4
+  },
+  "directABITotal": 86,
+  "exportedAppleBindingTests": 17,
+  "newRustTests": 3,
+  "newMatcherABITests": 4,
+  "newNativeDifferentialTests": 4,
+  "nativeCorpus": {
+    "candidateSets": 900,
+    "candidatesPerSet": 9,
+    "completeSearchFlows": 90,
+    "unicodeScalarAndCombiningCorpus": true
+  },
+  "nativePackages": {
+    "OcPlayerCore": 17,
+    "JellyfinKit": 255,
+    "MetadataKit": 310,
+    "MoviePilotKit": 124,
+    "BangumiKit": 99,
+    "PlaybackKit": 96,
+    "DanmakuKit": 272
+  },
+  "nativePackageFailures": 0,
+  "coreDisabledMetadataKit": {
+    "total": 310,
+    "passed": 301,
+    "skipped": 9,
+    "failed": 0
+  },
+  "macOSAppTests": {
+    "total": 1008,
+    "passed": 989,
+    "skipped": 19,
+    "failed": 0
+  },
+  "independentRustSourceCopy": {
+    "files": 54,
+    "hashesMatchCurrentSource": true,
+    "locked": true,
+    "offline": true,
+    "tests": 98
+  },
+  "macOSDebugApplicationBuilt": true,
+  "xcodeDerivedDataReused": true,
+  "deepSignatureVerificationPassed": true,
+  "app": "/tmp/ocplayer-tmdb-matcher-macos-rerun/DerivedData/Build/Products/Debug/OcPlayer.app",
+  "builtCoreSha256": "d40952135509d0ad3ced938d927f01b8e2208faac6d0eb943e095dab1dbfd9dd",
+  "signedBundledCoreSha256": "82af930818a3fa3d1ff084a41a5d268fcd781615a4638a57caa9315fa6a1e694",
+  "bindingClientSha256": "12f3dfb84bef7739b05646a080103b81afa296f33931fac48e54340516d4e68d",
+  "bundledSelftest": {
+    "completed": true,
+    "durationSeconds": 10,
+    "clipSeconds": 20,
+    "pausePlay": true,
+    "seek70Percent": 14.0,
+    "seek20Percent": 4.0,
+    "resize": true,
+    "initialSavedRate": 2.0,
+    "finalRate": 1.0,
+    "renderFailures": 0,
+    "audioFailures": 0
+  },
+  "windowsRuntimeTested": false,
+  "remaining": [
+    "TMDB network DTO exact-ID decoding: actual generic JSONValue decoder rounds 9007199254740993 and cannot decode Int.max; proof retained in network-id-audit.log",
+    "TMDB enricher/batch scheduling and repository memory/freshness/open recovery",
+    "account lifecycle and shared sync orchestration",
+    "playback source/track preferences and recovery orchestration",
+    "native deadline/TLS/redirect/streaming fidelity",
+    "configuration/diagnostics mapping",
+    "Apple release delivery and Windows adapter implementation"
+  ],
+  "preliminaryEvidence": "Initial Rust fixture expectation, Swift raw-call compilation and ID-field errors, the failed first full matrix with two numeric-grapheme cases, initial independent offline run and disabled-Core skip-helper errors are retained separately. Final matrix, final offline source run and final disabled-Core package run are distinct passing records."
+}

@@ -1,0 +1,8 @@
+language = "C"
+include_guard = "OCPLAYER_CORE_H"
+pragma_once = true
+sys_includes = ["stdint.h"]
+usize_is_size_t = true
+documentation = true
+documentation_style = "c"
+sort_by = "Name"

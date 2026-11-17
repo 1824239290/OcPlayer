@@ -1,0 +1,9 @@
+   Compiling ocp-jellyfin v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-jellyfin)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.00s
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_jellyfin-06602c57d851aa62)
+
+running 1 test
+test tests::playback_source_preserves_stream_metadata_and_first_video_range ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.00s
+

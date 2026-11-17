@@ -1,0 +1,170 @@
+{
+  "rust": 138,
+  "independentRust": 138,
+  "abi": {
+    "moviepilot-contract-tests.log": 10,
+    "danmaku-contract-tests.log": 4,
+    "intro-contract-tests.log": 9,
+    "intro-provider-contract-tests.log": 6,
+    "danmaku-cache-contract-tests.log": 6,
+    "network-contract-tests.log": 7,
+    "tmdb-matcher-contract-tests.log": 4,
+    "tmdb-enrichment-contract-tests.log": 8,
+    "intro-identity-contract-tests.log": 6,
+    "bangumi-contract-tests.log": 4,
+    "repository-progress-contract-tests.log": 4,
+    "bangumi-account-contract-tests.log": 5,
+    "media-repository-contract-tests.log": 6,
+    "danmaku-policy-contract-tests.log": 4,
+    "repository-composition-contract-tests.log": 3,
+    "media-login-contract-tests.log": 10,
+    "tmdb-wire-contract-tests.log": 5,
+    "standalone-contract-tests.log": 10,
+    "repository-flow-contract-tests.log": 5,
+    "danmaku-flow-contract-tests.log": 6
+  },
+  "abiTotal": 122,
+  "appleBinding": {
+    "executed": 19,
+    "skipped": 0,
+    "failed": 0,
+    "passed": 19
+  },
+  "packages": {
+    "OcPlayerCore": {
+      "executed": 19,
+      "skipped": 0,
+      "failed": 0,
+      "passed": 19
+    },
+    "JellyfinKit": {
+      "executed": 255,
+      "skipped": 0,
+      "failed": 0,
+      "passed": 255
+    },
+    "MetadataKit": {
+      "executed": 337,
+      "skipped": 0,
+      "failed": 0,
+      "passed": 337
+    },
+    "MoviePilotKit": {
+      "executed": 124,
+      "skipped": 0,
+      "failed": 0,
+      "passed": 124
+    },
+    "BangumiKit": {
+      "executed": 103,
+      "skipped": 0,
+      "failed": 0,
+      "passed": 103
+    },
+    "PlaybackKit": {
+      "executed": 96,
+      "skipped": 0,
+      "failed": 0,
+      "passed": 96
+    },
+    "DanmakuKit": {
+      "executed": 272,
+      "skipped": 0,
+      "failed": 0,
+      "passed": 272
+    }
+  },
+  "packageTotal": 1206,
+  "appTests": {
+    "executed": 1008,
+    "skipped": 19,
+    "failed": 0,
+    "passed": 989
+  },
+  "coreDisabledBangumi": {
+    "executed": 103,
+    "skipped": 14,
+    "failed": 0,
+    "passed": 89
+  },
+  "runtimeSections": {
+    "__TEXT,__text": {
+      "bytes": 7399676,
+      "sha256": "be4bed279dca89b278a3a3482485f31d4914a3f63f1995975c4a166c789f7727"
+    },
+    "__TEXT,__stubs": {
+      "bytes": 1860,
+      "sha256": "89c9640c3a2542781725e889c52cfa531f87a5b2d6f2d3ead8860de94fe0cab2"
+    },
+    "__TEXT,__stub_helper": {
+      "bytes": 1884,
+      "sha256": "9e51ac58cf5cc202c02ec5fa47ad4150bc3bcf988616047f3cba17bbf9f479ea"
+    },
+    "__TEXT,__gcc_except_tab": {
+      "bytes": 366692,
+      "sha256": "9feb1417e3dde28147698e692f5794bac674d297f7844f13851fa0656a4d08e0"
+    },
+    "__TEXT,__cstring": {
+      "bytes": 116474,
+      "sha256": "5f203d4383e2d01d9caa8f64c37c943e6c5a643913f81ccbc8b1a0661b379fec"
+    },
+    "__TEXT,__const": {
+      "bytes": 1038072,
+      "sha256": "356f18517548370763589e0729f38e5b027ba422d7cbcbba6ac63d1349158d84"
+    },
+    "__TEXT,__unwind_info": {
+      "bytes": 151616,
+      "sha256": "2388bf1d30059d2b65322e98a44ae2b7166be92e24f1f9cd7be866fee0fadf4e"
+    },
+    "__TEXT,__eh_frame": {
+      "bytes": 822240,
+      "sha256": "7011ed485036edd3f67fcae53e498525db6a78b76428ee9d4cc3df4f4011979c"
+    },
+    "__DATA_CONST,__const": {
+      "bytes": 443152,
+      "sha256": "7ab54fe210a93465e44ca8953c5cd5f60f2d54fea762ba482168ba90acbbe561"
+    },
+    "__DATA_CONST,__got": {
+      "bytes": 32,
+      "sha256": "820ed579373c3e6b1e0f092c6cdb71eff4ffb529b22f073011edd861c1f3b25b"
+    },
+    "__DATA,__la_symbol_ptr": {
+      "bytes": 1240,
+      "sha256": "518919b54156ad68ec01b8058fd5409639f8d3d9d0c3848d17813c410dcc1e70"
+    },
+    "__DATA,__data": {
+      "bytes": 25240,
+      "sha256": "0d686f4dfb28ce9dbf974c31084a0d00bdf50d9bdb901ddccf9f640b129290af"
+    },
+    "__DATA,__thread_vars": {
+      "bytes": 408,
+      "sha256": "3f5660fae9508d5fa4289b7c14b950e641c9a5646f06b3f0251060e7f03adebc"
+    },
+    "__DATA,__thread_data": {
+      "bytes": 232,
+      "sha256": "9ae65cf32e8d10cfc6d077df31c5a82287d7ea9108a1e39d4f10a82ea393d883"
+    }
+  },
+  "librarySha256": "2f242ca45c1052a25ad8ddcc0c2e620f5f19978fbae50a505e947fba0fe45435",
+  "embeddedLibrarySha256": "8346cfbf42cdf3dc45672f87f6b07244479d104b331e769aac6c7e9d4adfa4f0",
+  "outputDirectory": "/tmp/ocp-bangumi-account-macos",
+  "app": "/tmp/ocp-bangumi-account-macos/DerivedData/Build/Products/Debug/OcPlayer.app",
+  "sourceBase": {
+    "core": "dcbab34a40b51d48ed0e811187e6f5eac4413986",
+    "apple": "86744893c45cc748f5b5f403621be528c4a8409a"
+  },
+  "playback": {
+    "completed": true,
+    "coreAvailable": true,
+    "renderFailures": 0,
+    "audioFailures": 0,
+    "bundledLibrary": true
+  },
+  "eof": {
+    "completed": true,
+    "coreAvailable": true,
+    "renderFailures": 0,
+    "audioFailures": 0,
+    "bundledLibrary": true
+  }
+}

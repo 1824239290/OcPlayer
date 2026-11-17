@@ -1,0 +1,333 @@
+import Foundation
+import PlaybackKit
+
+/// 播放偏好跨启动记忆。弹幕渲染偏好由 HUD 修改后也在此统一保存。
+@MainActor
+enum PlaybackPreferences {
+
+    static var rate: Double {
+        get { storedDouble(forKey: SettingsKeys.playbackRate, range: 0.5...2.0, default: 1.0) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.playbackRate) }
+    }
+    static var volume: Double {
+        get { storedDouble(forKey: SettingsKeys.playbackVolume, range: 0...1, default: 1.0) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.playbackVolume) }
+    }
+    static var muted: Bool {
+        get { UserDefaults.standard.bool(forKey: SettingsKeys.playbackMuted) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.playbackMuted) }
+    }
+    static var subtitleScale: Double {
+        get { storedDouble(forKey: SettingsKeys.playbackSubtitleScale, range: 0.5...3.0, default: 1.0) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.playbackSubtitleScale) }
+    }
+    /// 默认字幕语言偏好。
+    ///
+    /// 默认 `chineseSimplified`——内核开片时按容器的默认轨选字幕，而中文用户要的
+    /// 是「有中文就上中文」；这条偏好决定轨道就绪后要不要替用户切一次
+    /// （判定见 `SubtitleTrackSelector`）。取值直接存 `rawValue`，读不出来
+    /// （旧版本从没写过 / 被人手改坏）都按默认档处理。
+    static var subtitleLanguagePreference: SubtitleLanguagePreference {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: SettingsKeys.subtitleLanguagePreference),
+                  let value = SubtitleLanguagePreference(rawValue: raw)
+            else { return .chineseSimplified }
+            return value
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: SettingsKeys.subtitleLanguagePreference) }
+    }
+
+    /// 画质增强（亮度上采样）档位。
+    ///
+    /// 取值直接存 `PlaybackUpscalerMode.rawValue`；读不出来（旧版本从没写过 / 被人手
+    /// 改坏 / 未来版本删过档位）一律回落**关闭**——这个能力有 GPU 与显存开销，
+    /// 坏数据不该把一个用户没要过的负担打开。
+    static var lumaUpscaler: PlaybackUpscalerMode {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: SettingsKeys.lumaUpscaler),
+                  let value = PlaybackUpscalerMode(rawValue: raw)
+            else { return .off }
+            return value
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: SettingsKeys.lumaUpscaler) }
+    }
+
+    // MARK: - 字幕外观
+
+    /// 字幕位置：九宫格 1…9（小键盘布局，2 = 底部居中）。0 = 不干预。
+    ///
+    /// **每一项都有「不设置」这个状态**，因为字幕默认交给片源自带的 ASS 排版：
+    /// 用户没动过的项绝不能被一个「看起来合理」的默认值顶替掉。
+    static var subtitleAlignment: Int {
+        get { storedInt(forKey: SettingsKeys.subtitleAlignment, range: 0...9, default: 0) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.subtitleAlignment) }
+    }
+
+    /// 垂直边距（0 = 不干预）。
+    static var subtitleMarginVertical: Int {
+        get { storedInt(forKey: SettingsKeys.subtitleMarginVertical, range: 0...200, default: 0) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.subtitleMarginVertical) }
+    }
+
+    /// 主色 / 描边色，`0xRRGGBBAA`。nil = 不干预。
+    static var subtitlePrimaryColorRGBA: UInt32? {
+        get { storedColor(forKey: SettingsKeys.subtitlePrimaryColor) }
+        set { storeColor(newValue, forKey: SettingsKeys.subtitlePrimaryColor) }
+    }
+    static var subtitleOutlineColorRGBA: UInt32? {
+        get { storedColor(forKey: SettingsKeys.subtitleOutlineColor) }
+        set { storeColor(newValue, forKey: SettingsKeys.subtitleOutlineColor) }
+    }
+
+    /// 描边粗细（0 = 不干预；内核钳到 0…32）。
+    ///
+    /// 这里**不用 `storedDouble` 的钳制语义**：那套是给「对任何值都能取个最近的合理数」
+    /// 的量准备的（不透明度、缩放）。描边宽度是「0 = 用户根本没设」的三态字段，
+    /// 把人手改坏的 999 钳成 32 会变成一个用户没要过的**有效设置**，等于替他改了字幕。
+    /// 所以非法值一律当作「不设置」。
+    static var subtitleOutlineWidth: Double {
+        get {
+            guard UserDefaults.standard.object(forKey: SettingsKeys.subtitleOutlineWidth) != nil else {
+                return 0
+            }
+            let value = UserDefaults.standard.double(forKey: SettingsKeys.subtitleOutlineWidth)
+            guard value.isFinite, value >= 0, value <= 32 else { return 0 }
+            return value
+        }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.subtitleOutlineWidth) }
+    }
+
+    /// 加粗：三态（nil = 不干预 / false = 明确不加粗 / true = 加粗）。
+    /// 存的是「有没有设过」而不是裸布尔——「没设过」与「明确关掉」在样式下发里
+    /// 必须区分得开，否则用户一进设置页就会把片源的字重覆盖成常规。
+    static var subtitleBold: Bool? {
+        get {
+            guard UserDefaults.standard.object(forKey: SettingsKeys.subtitleBold) != nil else {
+                return nil
+            }
+            return UserDefaults.standard.bool(forKey: SettingsKeys.subtitleBold)
+        }
+        set {
+            guard let newValue else {
+                UserDefaults.standard.removeObject(forKey: SettingsKeys.subtitleBold)
+                return
+            }
+            UserDefaults.standard.set(newValue, forKey: SettingsKeys.subtitleBold)
+        }
+    }
+
+    /// 是否用上面的值**替换**字幕自带样式。默认关（只填空缺，ASS 特效字体保留）。
+    static var subtitleStyleOverrides: Bool {
+        get { storedBool(forKey: SettingsKeys.subtitleStyleOverrides, default: false) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.subtitleStyleOverrides) }
+    }
+
+    /// 当前偏好 → 中立样式：**只把用户真正设过的项带出去**（其余留 nil）。
+    ///
+    /// 这一步是「不干预」语义的落点：没设过的项若带个 0/默认值出去，内核在只填空缺
+    /// 的模式下会拿它去填脚本空缺，等于替用户改了字幕。
+    static func subtitleStyle() -> SubtitleStyle {
+        SubtitleStyle(
+            alignment: subtitleAlignment > 0 ? subtitleAlignment : nil,
+            marginVertical: subtitleMarginVertical > 0 ? subtitleMarginVertical : nil,
+            primaryColorRGBA: subtitlePrimaryColorRGBA,
+            outlineColorRGBA: subtitleOutlineColorRGBA,
+            outlineWidth: subtitleOutlineWidth > 0 ? subtitleOutlineWidth : nil,
+            bold: subtitleBold
+        )
+    }
+
+    /// 下发时的覆盖位：没打开「覆盖自带样式」就是空（一切照旧）。
+    static func subtitleStyleOverridesMask() -> SubtitleStyleOverrides {
+        subtitleStyleOverrides ? .all : []
+    }
+
+    private static func storedColor(forKey key: String) -> UInt32? {
+        guard UserDefaults.standard.object(forKey: key) != nil else { return nil }
+        let value = UserDefaults.standard.integer(forKey: key)
+        guard value > 0, value <= Int(UInt32.max) else { return nil }
+        return UInt32(value)
+    }
+
+    private static func storeColor(_ value: UInt32?, forKey key: String) {
+        guard let value else {
+            UserDefaults.standard.removeObject(forKey: key)
+            return
+        }
+        UserDefaults.standard.set(Int(value), forKey: key)
+    }
+
+    /// 弹幕渲染路线：true = App 层 DanmakuRenderKit overlay，false = 内核内置
+    /// 渲染器（**默认**）。改动在下一次播放生效（与内核选择一起在
+    /// `PlaybackController.prepareEngine()` 锁定，中途翻转会出双份弹幕）。
+    /// 历史：43832df（2026-08-25）起路线强制作废、本属性停止读取，79a0de5 连同死代码
+    /// 删除；随内核弹幕恢复一并回来，key 不变，用户旧选择仍在。
+    static var danmakuUseOverlayRenderer: Bool {
+        get { storedBool(forKey: SettingsKeys.danmakuUseOverlayRenderer, default: false) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.danmakuUseOverlayRenderer) }
+    }
+
+    static var danmakuEnabled: Bool {
+        get { storedBool(forKey: SettingsKeys.danmakuEnabled, default: true) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.danmakuEnabled) }
+    }
+    static var danmakuOpacity: Double {
+        get { storedDouble(forKey: SettingsKeys.danmakuOpacity, range: 0.25...1, default: 0.85) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.danmakuOpacity) }
+    }
+    static var danmakuDisplayArea: Double {
+        get { storedDouble(forKey: SettingsKeys.danmakuDisplayArea, range: 0.25...1, default: 0.75) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.danmakuDisplayArea) }
+    }
+    static var danmakuBlockTop: Bool {
+        get { storedBool(forKey: SettingsKeys.danmakuBlockTop, default: false) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.danmakuBlockTop) }
+    }
+    static var danmakuBlockBottom: Bool {
+        get { storedBool(forKey: SettingsKeys.danmakuBlockBottom, default: false) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.danmakuBlockBottom) }
+    }
+    static var danmakuBlockScroll: Bool {
+        get { storedBool(forKey: SettingsKeys.danmakuBlockScroll, default: false) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.danmakuBlockScroll) }
+    }
+    /// 重复弹幕合并显示。Erika 内核的合并代表项会随计划窗口滑动翻转
+    /// （×N 后缀改变文本宽度→碰撞几何变化），是稳态播放中弹幕跳轨的诱因之一，
+    /// 默认关闭；后续弹幕渲染方案替换后可改为装载期一次性去重。
+    static var danmakuMergeDuplicates: Bool {
+        get { storedBool(forKey: SettingsKeys.danmakuMergeDuplicates, default: false) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.danmakuMergeDuplicates) }
+    }
+    /// 允许同轨道堆叠。实测在 Erika 的 DFM 布局里 stacking 打开会把弹幕
+    /// 大量塞进同一轨道导致重叠、轨道数骤减；默认关闭。需要时 HUD 可开。
+    static var danmakuAllowStacking: Bool {
+        get { storedBool(forKey: SettingsKeys.danmakuAllowStacking, default: false) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.danmakuAllowStacking) }
+    }
+    /// 弹幕字号百分比调整的基准（100% = 22pt，即原 HUD「标准」档）。
+    static let danmakuBaseFontSize = 22.0
+    /// 弹幕字号可调范围：基准的 50%…200%，边界正好落在 ±10% 步进的整档位上。
+    static let danmakuFontSizeRange =
+        (danmakuBaseFontSize * 0.5)...(danmakuBaseFontSize * 2.0)
+    static var danmakuFontSize: Double {
+        get { storedDouble(forKey: SettingsKeys.danmakuFontSize, range: danmakuFontSizeRange, default: danmakuBaseFontSize) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.danmakuFontSize) }
+    }
+    /// 弹幕诊断日志开关（默认关闭）。开启后弹幕 overlay 记录时间轴对齐点、
+    /// 爆发发射与续播定位日志（写入 diagnostics.jsonl），供排查「续播起播
+    /// 爆一大片弹幕」等时间轴问题用；平时关闭以减少日志噪声。
+    static var danmakuDiagnosticsEnabled: Bool {
+        get { storedBool(forKey: SettingsKeys.danmakuDiagnostics, default: false) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.danmakuDiagnostics) }
+    }
+
+    /// HTTP 源前向预取窗口（MiB）。仅 Erika 内核生效；0 = 内核默认 2 MiB。
+    ///
+    /// 内核（v0.2.0）用**持久流预取**：两个 worker 持有
+    /// 开放式 GET（`bytes=锚点-`），源站每个 worker 只 seek 一次，背压就是 TCP
+    /// 本身——替代了旧版每 4 MiB 付一次请求延迟的分块链。档位决定预读深度：
+    /// 越大越能扛带宽抖动，弱网下也无需刻意调小。
+    static let readAheadOptionsMiB: [Int] = [0, 8, 16, 32]
+    static var httpReadAheadMiB: Int {
+        get {
+            let stored = UserDefaults.standard.integer(forKey: SettingsKeys.httpReadAheadMiB)
+            return readAheadOptionsMiB.contains(stored) ? stored : 0
+        }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.httpReadAheadMiB) }
+    }
+
+    /// 当前预读偏好换算成字节（0 = 内核默认），供 PlaybackSource 直接使用。
+    static var httpReadAheadBytes: UInt64? {
+        let mib = httpReadAheadMiB
+        guard mib > 0 else { return nil }
+        return UInt64(mib) * 1024 * 1024
+    }
+
+    /// HTTP 源回退预算（MiB）——已播数据保留多少在内核缓存里，回退落在其中
+    /// 就不发网络请求。仅 Erika 内核生效；0 = 内核默认 16 MiB。
+    ///
+    /// 内核给的参考：16 MiB 在 71 Mbps 下只够 -1.8 秒（-10 秒 ≈ 89 MB），所以
+    /// 高码率片源（原盘 remux / 4K 高码流）建议按「码率 × 期望回退时长」放大；
+    /// 低码率番剧用默认档已覆盖数分钟。
+    static let backBufferOptionsMiB: [Int] = [0, 32, 64, 128]
+    static var httpBackBufferMiB: Int {
+        get {
+            let stored = UserDefaults.standard.integer(forKey: SettingsKeys.httpBackBufferMiB)
+            return backBufferOptionsMiB.contains(stored) ? stored : 0
+        }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.httpBackBufferMiB) }
+    }
+
+    /// 当前回退预算换算成字节（0 = 内核默认 16 MiB），供 PlaybackSource 直接使用。
+    static var httpBackBufferBytes: UInt64? {
+        let mib = httpBackBufferMiB
+        guard mib > 0 else { return nil }
+        return UInt64(mib) * 1024 * 1024
+    }
+
+    /// 跳过片头开关。关闭后播放中不弹「跳过片头」——章节标记与弹幕/AniSkip 提示
+    /// 一并静默（门控在 `PlaybackController.currentSkipPrompt`，改动即播即生效）。
+    static var skipIntroEnabled: Bool {
+        get { storedBool(forKey: SettingsKeys.skipIntro, default: true) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.skipIntro) }
+    }
+    /// 跳过片尾开关。关闭后不弹「跳过片尾」——片尾标记与末 90 秒保底一并静默。
+    static var skipOutroEnabled: Bool {
+        get { storedBool(forKey: SettingsKeys.skipOutro, default: true) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.skipOutro) }
+    }
+
+    /// 保底跳过片尾的保留档位（秒）。0 = 不保留（实际落点仍受 0.5 s 尾部防线
+    /// 约束，见 `PlaybackController.tailGuardSeconds`）。
+    static let outroRetentionOptionsSeconds: [Int] = [0, 5, 10, 15, 20, 30]
+    /// 保底跳过片尾的保留秒数：落点 = 片长 − max(该值, 尾部防线)，默认 10（原
+    /// 20 过长，会错过下一集自动接续的黄金窗口且拖到黑屏；存量用户没有旧值需要
+    /// 兼容——20 从未落盘）。低于防线的档位（0/5 以下）按 0.5 s 兜底：防线只为
+    /// 防 seek 越过 EOF 的「audio output stalled at EOF」错误风暴；曾经更厚的
+    /// 3 s 边际是给「尾读 fatal」的，已随内核 v0.3.0（上游 #169）修复而退场。
+    /// 只作用于「末 90 秒保底」；服务端 MediaSegments / 章节启发式给出的片尾标记
+    /// 有精确区间终点，按标记终点跳，不吃这个设置。
+    static var outroRetentionSeconds: Int {
+        get {
+            // 不能学 httpReadAheadMiB 用 integer() 兜 0 再校验档位——0 在这里是
+            // 合法档位（不保留），键缺失会被读成 0 而非默认 10，必须先探存在性。
+            guard UserDefaults.standard.object(forKey: SettingsKeys.outroRetentionSeconds) != nil
+            else { return 10 }
+            let stored = UserDefaults.standard.integer(forKey: SettingsKeys.outroRetentionSeconds)
+            return outroRetentionOptionsSeconds.contains(stored) ? stored : 10
+        }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.outroRetentionSeconds) }
+    }
+
+    private static func storedDouble(
+        forKey key: String,
+        range: ClosedRange<Double>,
+        default fallback: Double
+    ) -> Double {
+        guard UserDefaults.standard.object(forKey: key) != nil else { return fallback }
+        return UserDefaults.standard.double(forKey: key).clamped(range)
+    }
+
+    /// 整数档位的读取校验：非法存量值（人手改坏 / 旧版本写过别的语义）回 fallback。
+    private static func storedInt(
+        forKey key: String,
+        range: ClosedRange<Int>,
+        default fallback: Int
+    ) -> Int {
+        guard UserDefaults.standard.object(forKey: key) != nil else { return fallback }
+        let value = UserDefaults.standard.integer(forKey: key)
+        return range.contains(value) ? value : fallback
+    }
+
+    /// 默认值感知的读取统一走 `UserDefaults.bool(forKey:default:)`（见 SettingsKeys）：
+    /// 键不存在时回 fallback，而不是 `bool(forKey:)` 的 false。
+    private static func storedBool(forKey key: String, default fallback: Bool) -> Bool {
+        UserDefaults.standard.bool(forKey: key, default: fallback)
+    }
+}
+
+extension Double {
+    func clamped(_ range: ClosedRange<Double>) -> Double {
+        min(max(self, range.lowerBound), range.upperBound)
+    }
+}

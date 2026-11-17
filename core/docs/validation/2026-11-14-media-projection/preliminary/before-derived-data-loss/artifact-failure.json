@@ -1,0 +1,7 @@
+{
+  "gateExitStatus": 1,
+  "appTestsSucceeded": true,
+  "missingDerivedDataTarget": "/private/tmp/ocplayer-flow-macos-final/DerivedData",
+  "embeddingError": "Built macOS app and core library are required",
+  "recovery": "rebuild into dedicated non-symlink DerivedData and rerun complete gate"
+}

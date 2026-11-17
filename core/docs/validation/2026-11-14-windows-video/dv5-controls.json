@@ -1,0 +1,74 @@
+[
+  {
+    "action": "playing",
+    "window": {
+      "app": "process:D:\\DevCache\\cargo-target\\erika-dolby\\x86_64-pc-windows-msvc\\debug\\windows_native_demo.exe",
+      "id": 1181922,
+      "title": "Erika Windows Native Demo  t=64.12s  sw=93 hw=0 zero=0 direct=0 shared=0 cpu=0 hdr10=1 hdr_src=93 sdr_tm=0 audio_q=24576 underflow=749199"
+    }
+  },
+  {
+    "action": "pause",
+    "window": {
+      "app": "process:D:\\DevCache\\cargo-target\\erika-dolby\\x86_64-pc-windows-msvc\\debug\\windows_native_demo.exe",
+      "id": 1181922,
+      "title": "Erika Windows Native Demo  t=127.49s  sw=185 hw=0 zero=0 direct=0 shared=0 cpu=0 hdr10=1 hdr_src=185 sdr_tm=0 audio_q=24576 underflow=1529975"
+    }
+  },
+  {
+    "action": "pause_stable",
+    "window": {
+      "app": "process:D:\\DevCache\\cargo-target\\erika-dolby\\x86_64-pc-windows-msvc\\debug\\windows_native_demo.exe",
+      "id": 1181922,
+      "title": "Erika Windows Native Demo  t=128.25s  sw=190 hw=0 zero=0 direct=0 shared=0 cpu=0 hdr10=1 hdr_src=190 sdr_tm=0 audio_q=192000 underflow=1539045"
+    }
+  },
+  {
+    "action": "seek_forward",
+    "window": {
+      "app": "process:D:\\DevCache\\cargo-target\\erika-dolby\\x86_64-pc-windows-msvc\\debug\\windows_native_demo.exe",
+      "id": 1181922,
+      "title": "Erika Windows Native Demo  t=128.25s  sw=190 hw=0 zero=0 direct=0 shared=0 cpu=0 hdr10=1 hdr_src=190 sdr_tm=0 audio_q=192000 underflow=1539045"
+    }
+  },
+  {
+    "action": "seek_forward_settled",
+    "window": {
+      "app": "process:D:\\DevCache\\cargo-target\\erika-dolby\\x86_64-pc-windows-msvc\\debug\\windows_native_demo.exe",
+      "id": 1181922,
+      "title": "Erika Windows Native Demo  t=133.25s  sw=191 hw=0 zero=0 direct=0 shared=0 cpu=0 hdr10=1 hdr_src=191 sdr_tm=0 audio_q=0 underflow=1539045"
+    }
+  },
+  {
+    "action": "seek_backward",
+    "window": {
+      "app": "process:D:\\DevCache\\cargo-target\\erika-dolby\\x86_64-pc-windows-msvc\\debug\\windows_native_demo.exe",
+      "id": 1181922,
+      "title": "Erika Windows Native Demo  t=133.25s  sw=191 hw=0 zero=0 direct=0 shared=0 cpu=0 hdr10=1 hdr_src=191 sdr_tm=0 audio_q=0 underflow=1539045"
+    }
+  },
+  {
+    "action": "seek_backward_settled",
+    "window": {
+      "app": "process:D:\\DevCache\\cargo-target\\erika-dolby\\x86_64-pc-windows-msvc\\debug\\windows_native_demo.exe",
+      "id": 1181922,
+      "title": "Erika Windows Native Demo  t=128.25s  sw=192 hw=0 zero=0 direct=0 shared=0 cpu=0 hdr10=1 hdr_src=192 sdr_tm=0 audio_q=0 underflow=1539045"
+    }
+  },
+  {
+    "action": "resume",
+    "window": {
+      "app": "process:D:\\DevCache\\cargo-target\\erika-dolby\\x86_64-pc-windows-msvc\\debug\\windows_native_demo.exe",
+      "id": 1181922,
+      "title": "Erika Windows Native Demo  t=128.25s  sw=192 hw=0 zero=0 direct=0 shared=0 cpu=0 hdr10=1 hdr_src=192 sdr_tm=0 audio_q=0 underflow=1539045"
+    }
+  },
+  {
+    "action": "resume_advanced",
+    "window": {
+      "app": "process:D:\\DevCache\\cargo-target\\erika-dolby\\x86_64-pc-windows-msvc\\debug\\windows_native_demo.exe",
+      "id": 1181922,
+      "title": "Erika Windows Native Demo  t=181.00s  sw=267 hw=0 zero=0 direct=0 shared=0 cpu=0 hdr10=1 hdr_src=267 sdr_tm=0 audio_q=24089 underflow=2219993"
+    }
+  }
+]

@@ -1,0 +1,16 @@
+.....F...
+======================================================================
+FAIL: test_snapshot_getter_facts_defaults_enum_and_color_policy (__main__.SettingsBackupContract.test_snapshot_getter_facts_defaults_enum_and_color_policy)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/settings_backup_contract.py", line 60, in test_snapshot_getter_facts_defaults_enum_and_color_policy
+    result=self.success('settings.backup.snapshot',preferences={'playback.outroRetentionSeconds':fact(0),'playback.subtitleLanguage':fact('bad'),'playback.subtitlePrimaryColor':fact(0),'playback.subtitleBold':fact(False),'mirror.bangumiRootDomain':fact('\u200b example.test \u200b')},tmdb=TMDB,exportedAt='2026-11-14T00:00:00Z',appVersion='fixture',deviceName=None,dandanplayGatewayURL='')
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/network_contract.py", line 130, in success
+    self.assertTrue(result['ok'], result)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : {'ok': False, 'code': 2702, 'retryable': False, 'message': 'unknown field `dandanplayGatewayURL`, expected one of `preferences`, `tmdb`, `exportedAt`, `appVersion`, `deviceName`, `dandanplayGatewayUrl`', 'data': {'kind': 'invalidFormat'}}
+
+----------------------------------------------------------------------
+Ran 9 tests in 0.748s
+
+FAILED (failures=1)

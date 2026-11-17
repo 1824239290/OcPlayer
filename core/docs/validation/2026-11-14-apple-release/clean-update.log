@@ -1,0 +1,7 @@
+From /Volumes/Backup/软件/OcPlayer-Core
+   78d355d..bc879a5  main       -> origin/main
+Updating 78d355d..bc879a5
+Fast-forward
+ Scripts/build-apple-dylib.sh | 47 ++++++++++++++++++++++++++++++++++----------
+ docs/platform-packaging.md   |  3 ++-
+ 2 files changed, 39 insertions(+), 11 deletions(-)

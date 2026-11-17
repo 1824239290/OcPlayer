@@ -1,0 +1,29 @@
+{
+  "source": "/Users/jumusu/Documents/project/OcPlayer",
+  "files": [
+    {
+      "path": "Packages/DanmakuKit/Sources/DanmakuKit/AniSkipClient.swift",
+      "sha256": "3cf5e492e77cd5dfca2a28cdd1308c6085d489ca2223adda95a4be7183f3792a"
+    },
+    {
+      "path": "Packages/DanmakuKit/Sources/DanmakuKit/AniSkipIDResolver.swift",
+      "sha256": "f38f9a8cac1874493cd3b6382ce141d0d6a088aea5348ec920753a1c3fc4215e"
+    },
+    {
+      "path": "Packages/DanmakuKit/Sources/DanmakuKit/AnimeSkipClient.swift",
+      "sha256": "1d5cb37e5a375d665dc73a6551d644392019233dbb350bc3dafa8184bc85243c"
+    },
+    {
+      "path": "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroProvider.swift",
+      "sha256": "8b5753e6f689e3de55ef5ce60221adfc3078c928a27e9cc15504063454e80a5a"
+    },
+    {
+      "path": "Packages/DanmakuKit/Tests/DanmakuKitTests/RustIntroProviderTests.swift",
+      "sha256": "d9fd926302c1e711ab7ac54a0aba821f8fdc943217e0f9e0ece5f05c1b7882e7"
+    },
+    {
+      "path": "Packages/DanmakuKit/Tests/DanmakuKitTests/Fixtures/intro_provider_server.py",
+      "sha256": "eaadf01f1c36d7981b77fed76b8a6c87dbb6fa2f3c4269e2a73b28c7240a249d"
+    }
+  ]
+}

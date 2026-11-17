@@ -1,0 +1,6 @@
+{
+  "path": "crates/ocp-http/Cargo.toml",
+  "testedSha256": "bbf3f7685202983d7f25d07e502e091a48c3ea12694f4ad0aae649d74931fe52",
+  "finalSha256": "a6092610b07f1c1e18497fa28de1657ef10bcdfd16e451d48357dab879bbdd06",
+  "onlyChange": "removed one trailing blank line; no TOML values changed"
+}

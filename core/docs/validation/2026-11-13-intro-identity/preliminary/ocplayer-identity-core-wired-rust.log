@@ -1,0 +1,27 @@
+   Compiling ocp-danmaku v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-danmaku)
+error[E0382]: borrow of moved value: `title`
+    --> crates/ocp-danmaku/src/identity.rs:296:42
+     |
+ 260 |     for title in titles {
+     |         ----- move occurs because `title` has type `std::string::String`, which does not implement the `Copy` trait
+...
+ 295 |                 title: Some(title),
+     |                             ----- value moved here
+ 296 |                 rule: best_match(&media, &title).map(|v| v.rule),
+     |                                          ^^^^^^ value borrowed here after move
+     |
+     = note: borrow occurs due to deref coercion to `str`
+note: deref defined here
+    --> /opt/homebrew/Cellar/rust/1.99.1/lib/rustlib/src/rust/library/alloc/src/string.rs:2856:5
+     |
+2856 |     type Target = str;
+     |     ^^^^^^^^^^^
+help: consider cloning the value if the performance cost is acceptable
+     |
+ 295 |                 title: Some(title.clone()),
+     |                                  ++++++++
+
+For more information about this error, try `rustc --explain E0382`.
+error: could not compile `ocp-danmaku` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `ocp-danmaku` (lib test) due to 1 previous error

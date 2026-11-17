@@ -1,0 +1,124 @@
+{
+  "date": "2026-11-13",
+  "goalComplete": false,
+  "scope": "Shared endpoint policy and probe transport; dynamic Jellyfin/Emby profile dispatch, read failover, native identity/preferences and authentication notification fidelity.",
+  "Rust": {
+    "passed": 63,
+    "failed": 0
+  },
+  "packages": {
+    "OcPlayerCore": {
+      "passed": 7,
+      "skipped": 0,
+      "failed": 0
+    },
+    "JellyfinKit": {
+      "passed": 245,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MetadataKit": {
+      "passed": 306,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MoviePilotKit": {
+      "passed": 108,
+      "skipped": 0,
+      "failed": 0
+    },
+    "BangumiKit": {
+      "passed": 99,
+      "skipped": 0,
+      "failed": 0
+    }
+  },
+  "exportedAppleBinding": {
+    "passed": 7,
+    "failed": 0,
+    "sameCasesAsNativeAdapter": true,
+    "sourceEquivalent": true
+  },
+  "BangumiCABI": {
+    "passed": 4,
+    "failed": 0
+  },
+  "macOSApp": {
+    "executed": 1001,
+    "passed": 982,
+    "skipped": 19,
+    "failed": 0
+  },
+  "endpointPolicy": {
+    "sharedSelectionCachePinningGenerationAndCooldown": true,
+    "existingDirectoryFixturesAssertCoreActivation": true,
+    "concurrentRequests": 40,
+    "sharedProbeRoundVerified": true,
+    "removedCandidateCannotReturnFromOldProbe": true,
+    "invalidRPCArgumentsPreserveState": true
+  },
+  "probeTransport": {
+    "CoreProductionActivationVerified": true,
+    "consecutiveProbes": 5,
+    "TCPConnections": 1,
+    "nativeURLSessionFallbacks": 0,
+    "identityValidation": true,
+    "missingIDCompatible": true,
+    "malformedPayloadRejection": true,
+    "timeoutAndCancellation": true,
+    "ownedExecutorShutdownFromAsyncHost": true
+  },
+  "mediaFacade": {
+    "serverFlavors": [
+      "jellyfin",
+      "emby"
+    ],
+    "realFixtureTests": 3,
+    "failedAddressRustReadAttempts": 3,
+    "alternateRustReadAttempts": 1,
+    "liveProfileImageAndAddressSelection": true,
+    "nativeAuthorizationIdentity": true,
+    "userAgentChangeWithoutRecreatingFacade": true,
+    "failedMutationPOSTCount": 1,
+    "HTTP401NativeNotification": true,
+    "HTTP503DoesNotReprobe": true
+  },
+  "nativeFallback": {
+    "executed": 245,
+    "passed": 241,
+    "skipped": 4,
+    "failed": 0
+  },
+  "independentSourceCopy": {
+    "path": "/var/folders/07/f4r9g1zd0jbg1c2sh6b4vsg80000gn/T/ocplayer-core-source-check-af8swx_1",
+    "manifest": "clean-source-manifest.json",
+    "lockedOfflineTestsPassed": 63,
+    "filesMatchWorkspace": true,
+    "CargoLockIncludedInDelivery": true
+  },
+  "playbackSelftest": {
+    "seconds": 10,
+    "coreFromBundle": true,
+    "renderFailures": 0,
+    "audioFailures": 0,
+    "controls": [
+      "pause",
+      "resume",
+      "seek",
+      "rate",
+      "resize"
+    ]
+  },
+  "librarySHA256": "e10dc4f19cabc63a75123eefb640a48c58db162858f0de2af0a254321be0c87c",
+  "application": "/tmp/ocplayer-bangumi-store-final/DerivedData/Build/Products/Debug/OcPlayer.app",
+  "nativeTestResult": "/tmp/ocplayer-bangumi-store-final/DerivedData/Logs/Test/Test-OcPlayer-macOS-2026.11.13_16-11-34-+0800.xcresult",
+  "remaining": [
+    "shared authoritative playback recovery/end/background policy",
+    "initial login/Quick Connect and broad media endpoint/payload fidelity",
+    "other network clients connection ownership and transport configuration fidelity",
+    "remaining metadata/danmaku/matcher orchestration",
+    "shared account/sync lifecycle",
+    "settings/aggregate diagnostics",
+    "release packaging and Windows adapter"
+  ]
+}

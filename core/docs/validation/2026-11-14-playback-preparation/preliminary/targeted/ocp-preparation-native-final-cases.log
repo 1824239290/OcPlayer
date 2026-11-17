@@ -1,0 +1,44 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Provisioning 1 / 47]
+[3 / 5] JellyfinKit_JellyfinKitTests
+[5 / 13] JellyfinKitTests-product
+[7 / 15] JellyfinKitTests-product
+[13 / 15] JellyfinKitTests-product
+[15 / 15] JellyfinKitTests-product
+Build complete! (2.78秒)
+Test Suite 'Selected tests' started at 2026-11-14 13:23:12.765.
+Test Suite 'JellyfinKitTests.xctest' started at 2026-11-14 13:23:12.766.
+Test Suite 'PlaybackPreparationHTTPTests' started at 2026-11-14 13:23:12.766.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP]' passed (0.304 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyEpisodeEndpointSortingAndContinuationWindow]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyEpisodeEndpointSortingAndContinuationWindow]' passed (0.140 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP]' passed (0.141 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinEpisodeEndpointSortingAndContinuationWindow]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinEpisodeEndpointSortingAndContinuationWindow]' passed (0.150 seconds).
+Test Suite 'PlaybackPreparationHTTPTests' passed at 2026-11-14 13:23:13.501.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.735 (0.735) seconds
+Test Suite 'PlaybackPreparationWorkflowTests' started at 2026-11-14 13:23:13.501.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testCancellationErrorWithoutTaskCancellationKeepsInfoFallbackSemantics]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testCancellationErrorWithoutTaskCancellationKeepsInfoFallbackSemantics]' passed (0.004 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testCollectionReadsCurrentHomeAfterMembersAndUsesResolvedItemResume]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testCollectionReadsCurrentHomeAfterMembersAndUsesResolvedItemResume]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testCompleteSourceSequencePreservesNativeObjectsAndSkipsOnlyFailedAlternate]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testCompleteSourceSequencePreservesNativeObjectsAndSkipsOnlyFailedAlternate]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testPlaybackInfoFallbackKeepsOriginalFailureAndNativeRuntime]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testPlaybackInfoFallbackKeepsOriginalFailureAndNativeRuntime]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testPrimaryURLFailureFallsBackWithoutReusingPlaybackSession]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testPrimaryURLFailureFallsBackWithoutReusingPlaybackSession]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testResolutionPreservesOriginalErrorTypeEmptyResultAndEpisodeOrder]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testResolutionPreservesOriginalErrorTypeEmptyResultAndEpisodeOrder]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testRetiredMetadataCannotPresentOrCancelNewPreparationLease]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testRetiredMetadataCannotPresentOrCancelNewPreparationLease]' passed (0.016 seconds).
+Test Suite 'PlaybackPreparationWorkflowTests' passed at 2026-11-14 13:23:13.531.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.029 (0.030) seconds
+Test Suite 'JellyfinKitTests.xctest' passed at 2026-11-14 13:23:13.531.
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.764 (0.765) seconds
+Test Suite 'Selected tests' passed at 2026-11-14 13:23:13.531.
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.764 (0.766) seconds

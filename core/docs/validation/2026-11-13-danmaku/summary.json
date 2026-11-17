@@ -1,0 +1,122 @@
+{
+  "date": "2026-11-13",
+  "goalComplete": false,
+  "scope": "Complete Danmaku gateway HTTP integration and restored macOS automatic/manual/cache/intro flow; complete native regression and packaging.",
+  "Rust": {
+    "passed": 79,
+    "failed": 0
+  },
+  "packages": {
+    "OcPlayerCore": {
+      "executed": 14,
+      "passed": 14,
+      "skipped": 0,
+      "failed": 0
+    },
+    "JellyfinKit": {
+      "executed": 255,
+      "passed": 255,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MetadataKit": {
+      "executed": 306,
+      "passed": 306,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MoviePilotKit": {
+      "executed": 124,
+      "passed": 124,
+      "skipped": 0,
+      "failed": 0
+    },
+    "BangumiKit": {
+      "executed": 99,
+      "passed": 99,
+      "skipped": 0,
+      "failed": 0
+    },
+    "PlaybackKit": {
+      "executed": 96,
+      "passed": 96,
+      "skipped": 0,
+      "failed": 0
+    },
+    "DanmakuKit": {
+      "executed": 232,
+      "passed": 232,
+      "skipped": 0,
+      "failed": 0
+    }
+  },
+  "exportedAppleBinding": {
+    "executed": 14,
+    "passed": 14,
+    "skipped": 0,
+    "failed": 0
+  },
+  "macOSApp": {
+    "executed": 1008,
+    "passed": 989,
+    "skipped": 19,
+    "failed": 0
+  },
+  "CABI": {
+    "bangumi": {
+      "passed": 4,
+      "failed": 0
+    },
+    "network": {
+      "passed": 7,
+      "failed": 0
+    },
+    "moviepilot": {
+      "passed": 10,
+      "failed": 0
+    },
+    "media-login": {
+      "passed": 10,
+      "failed": 0
+    },
+    "danmaku": {
+      "passed": 4,
+      "failed": 0
+    }
+  },
+  "nativeFallback": {
+    "executed": 232,
+    "passed": 228,
+    "skipped": 4,
+    "failed": 0
+  },
+  "buildPassed": true,
+  "embeddingAndSigningPassed": true,
+  "sourceCommits": {
+    "Core": "2e053ad",
+    "OcPlayer": "ace33a5"
+  },
+  "librarySHA256": "32627df011d688ec2a1e110635b4b3bbf8a73d6516a7d1d8406396406a3946fd",
+  "application": "/tmp/ocplayer-danmaku-verification/DerivedData/Build/Products/Debug/OcPlayer.app",
+  "remaining": [
+    "shared danmaku resolver/cache/intro policy",
+    "metadata scheduling/matching orchestration",
+    "complete playback preferences/recovery acceptance",
+    "shared account/sync lifecycle",
+    "full native transport fidelity",
+    "settings and diagnostics mapping",
+    "release packaging and Windows native adapter"
+  ],
+  "playback": {
+    "controlsPassed": true,
+    "naturalEndObserved": true,
+    "coreAndNativeTimelineAgree": true,
+    "coreFromBundle": true,
+    "renderFailures": 0,
+    "audioFailures": 0,
+    "naturalEndPositionSeconds": 4.966666,
+    "durationSeconds": 5.066667,
+    "savedPlaybackRate": 2.0,
+    "limitation": "At the persisted 2x speed, native and Core both end 100ms before metadata duration. Full EOF/duration acceptance at all playback rates remains open."
+  }
+}

@@ -1,0 +1,11 @@
+test_account_clear_retires_pending_sql_and_does_not_reuse_tokens (__main__.SyncContract.test_account_clear_retires_pending_sql_and_does_not_reuse_tokens) ... ok
+test_batch_slots_slide_and_parent_cancellation_retires_child_writes (__main__.SyncContract.test_batch_slots_slide_and_parent_cancellation_retires_child_writes) ... ok
+test_collection_writes_are_transactional_and_receipts_cannot_replay (__main__.SyncContract.test_collection_writes_are_transactional_and_receipts_cannot_replay) ... ok
+test_complete_episode_pages_preserve_large_identifiers_and_empty_tail (__main__.SyncContract.test_complete_episode_pages_preserve_large_identifiers_and_empty_tail) ... ok
+test_full_sync_overlap_start_timestamp_and_partial_batch_count (__main__.SyncContract.test_full_sync_overlap_start_timestamp_and_partial_batch_count) ... ok
+test_invalid_responses_and_failed_sql_leave_the_same_receipt_retryable (__main__.SyncContract.test_invalid_responses_and_failed_sql_leave_the_same_receipt_retryable) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.005s
+
+OK

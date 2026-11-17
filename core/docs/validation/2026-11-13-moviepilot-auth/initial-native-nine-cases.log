@@ -1,0 +1,52 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Using on-disk description]
+[4 / 15] MoviePilotKit_MoviePilotKitTests
+[4 / 15] MoviePilotKit
+[6 / 17] MoviePilotKit
+[10 / 20] MoviePilotKit
+[11 / 21] MoviePilotKit
+[16 / 27] MoviePilotKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotSessionRaceTests.swift:202:67: warning: 'AsyncRaceURLProtocol' inherits an unavailable 'Sendable' conformance; conforming here risks data races [#UnavailableSendableConformance]
+200 | }
+201 | 
+202 | private final class AsyncRaceURLProtocol: URLProtocol, @unchecked Sendable {
+    |                     |                                             `- warning: 'AsyncRaceURLProtocol' inherits an unavailable 'Sendable' conformance; conforming here risks data races [#UnavailableSendableConformance]
+    |                     `- note: 'AsyncRaceURLProtocol' inherits unavailable conformance to protocol 'Sendable' from superclass here
+203 |     nonisolated(unsafe) static var handler: (@Sendable (URLRequest) async -> (HTTPURLResponse, Data))?
+204 |     private var pending: Task<Void, Never>?
+
+[#UnavailableSendableConformance]: <https://docs.swift.org/compiler/documentation/diagnostics/unavailable-sendable-conformance>
+[21 / 32] MoviePilotKitTests-product
+[25 / 31] MoviePilotKitTests-product
+[27 / 31] MoviePilotKitTests-product
+Build complete! (3.33秒)
+Test Suite 'Selected tests' started at 2026-11-13 18:50:42.862.
+Test Suite 'MoviePilotKitTests.xctest' started at 2026-11-13 18:50:42.863.
+Test Suite 'RustMoviePilotIntegrationTests' started at 2026-11-13 18:50:42.863.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testCancellationAbortsNativeRequestBeforeServerFinishes]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testCancellationAbortsNativeRequestBeforeServerFinishes]' passed (0.664 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testCancellingOneConcurrentStreamKeepsTheOtherAlive]' started.
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 49966)
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testCancellingOneConcurrentStreamKeepsTheOtherAlive]' passed (0.596 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testConcurrentStreamsRouteEachPartialToItsOwnRequest]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testConcurrentStreamsRouteEachPartialToItsOwnRequest]' passed (0.608 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testExpiredTokenReloginsAndEncodedDeleteRemainsOneSegment]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testExpiredTokenReloginsAndEncodedDeleteRemainsOneSegment]' passed (0.099 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testFailedCreationIsSentExactlyOnceWithoutSwiftReplay]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testFailedCreationIsSentExactlyOnceWithoutSwiftReplay]' passed (0.058 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testRawPayloadUserFieldsAndMalformedList]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testRawPayloadUserFieldsAndMalformedList]' passed (0.056 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testRetainedCoreReusesConnectionAndAccountCookieAcrossCommands]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testRetainedCoreReusesConnectionAndAccountCookieAcrossCommands]' passed (0.058 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testSignOutRejectsInFlightNativeResult]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testSignOutRejectsInFlightNativeResult]' passed (0.069 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testSSEPublishesBeforeCompletionAndHonorsReplace]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testSSEPublishesBeforeCompletionAndHonorsReplace]' passed (0.569 seconds).
+Test Suite 'RustMoviePilotIntegrationTests' passed at 2026-11-13 18:50:45.641.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 2.776 (2.778) seconds
+Test Suite 'MoviePilotKitTests.xctest' passed at 2026-11-13 18:50:45.641.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 2.776 (2.778) seconds
+Test Suite 'Selected tests' passed at 2026-11-13 18:50:45.641.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 2.776 (2.779) seconds

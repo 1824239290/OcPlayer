@@ -1,0 +1,6 @@
+    Checking ocp-danmaku v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-danmaku)
+    Checking ocp-tmdb v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-tmdb)
+    Checking ocp-core v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-core)
+    Checking ocp-cli v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-cli)
+    Checking ocp-ffi v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-ffi)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.72s

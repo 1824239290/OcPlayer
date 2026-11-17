@@ -1,0 +1,29 @@
+   Compiling ocp-http v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-http)
+   Compiling ocp-tmdb v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-tmdb)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.85s
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_tmdb-cb8d99a5a9f4f409)
+
+running 5 tests
+test tests::builds_image_url ... ok
+test matcher::tests::identity_and_score_do_not_infer_authority_or_scoring_year ... ok
+test matcher::tests::native_title_rules_preserve_non_width_compatibility_and_marks ... FAILED
+test tests::normalizes_and_matches ... ok
+test tests::requires_year_and_exactness_for_automatic_confidence ... ok
+
+failures:
+
+---- matcher::tests::native_title_rules_preserve_non_width_compatibility_and_marks stdout ----
+
+thread 'matcher::tests::native_title_rules_preserve_non_width_compatibility_and_marks' (26466097) panicked at crates/ocp-tmdb/src/matcher.rs:283:9:
+assertion `left == right` failed
+  left: "ｶﾞ"
+ right: "ｶ"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    matcher::tests::native_title_rules_preserve_non_width_compatibility_and_marks
+
+test result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p ocp-tmdb --lib`

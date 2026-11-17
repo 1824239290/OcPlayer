@@ -1,0 +1,12 @@
+/target/
+*.log
+.DS_Store
+
+!docs/validation/**/*.log
+
+**/.build/
+docs/validation/**/AppleBindingBuild/
+docs/validation/**/DerivedData/
+**/__pycache__/
+/artifacts/
+*.dylib

@@ -1,0 +1,25 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Provisioning 1 / 47]
+[1 / 9] JellyfinAPI
+[2 / 5] JellyfinKitTests-product
+[4 / 7] JellyfinKitTests-product
+[10 / 12] JellyfinKitTests-product
+[12 / 12] JellyfinKitTests-product
+Build complete! (2.25秒)
+Test Suite 'Selected tests' started at 2026-11-14 13:03:46.168.
+Test Suite 'JellyfinKitTests.xctest' started at 2026-11-14 13:03:46.169.
+Test Suite 'PlaybackPreparationHTTPTests' started at 2026-11-14 13:03:46.169.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:32: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP] : failed - Preparation did not present: failed(title: "剧集入口", error: "剧集加载失败：RustCoreMediaServerError(message: \"HTTP: NotFound: HTTP 404 Not Found\", code: 2004, retryable: false)", phase: "resolve", original: Optional(JellyfinKit.RustCoreMediaServerError(message: "HTTP: NotFound: HTTP 404 Not Found", code: 2004, retryable: false)))
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:33: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP] : XCTUnwrap failed: expected non-nil value of type "PreparedPlayback"
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP]' failed (0.939 seconds).
+Test Suite 'PlaybackPreparationHTTPTests' failed at 2026-11-14 13:03:47.108.
+	 Executed 1 test, with 2 failures (0 unexpected) in 0.939 (0.939) seconds
+Test Suite 'JellyfinKitTests.xctest' failed at 2026-11-14 13:03:47.108.
+	 Executed 1 test, with 2 failures (0 unexpected) in 0.939 (0.940) seconds
+Test Suite 'Selected tests' failed at 2026-11-14 13:03:47.108.
+	 Executed 1 test, with 2 failures (0 unexpected) in 0.939 (0.940) seconds
+Note: Some test targets reported failures:
+  - JellyfinKitTests (XCTest)

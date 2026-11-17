@@ -1,0 +1,101 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Constructing description]
+[Pre-planning 1 / 1106]
+[Planning deferred tasks]
+[Starting]
+[1 / 2] JellyfinKit
+[7 / 19] JellyfinKit
+[8 / 21] MetadataKit
+[12 / 25] MetadataKit
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbEnricher.swift:283:40: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+281 |         "batch.begin",
+282 |         [
+283 |           "batchID": id, "configured": await client.isConfigured,
+    |                                        `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+284 |           "items": rust.object(items.map(RustTMDbMatcher.Item.init)),
+285 |         ])
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[22 / 27] MetadataKit-product
+[22 / 27] MetadataKitTests-product
+[31 / 36] MetadataKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbBatchConcurrencyTests.swift:216:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+214 |     nonisolated(unsafe) private static var peakValue = 0
+215 |     nonisolated(unsafe) private static var startedValue = 0
+216 |     nonisolated(unsafe) private static let counterLock = NSLock()
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+217 | 
+218 |     /// 桩被请求的总次数（判断「取消后还有没有继续派发」）。
+[33 / 36] MetadataKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbEnricherTests.swift:418:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+416 |         }
+417 |         let key = TMDbEntityKey.season(tvID: 100, number: 1)
+418 |         try await enricher.fetchAndStore(key: key)
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+419 |         let stored = try await store.tmdbPayload(key: key, language: "zh-CN")
+420 |         let cached = try XCTUnwrap(stored)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbMatcherTests.swift:65:25: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 63 |         let m = TMDbMatcher(language: "zh-CN") { _, _, _, _ in [] }
+ 64 |         for dirty in ["", " ", "0", "-5", "abc", "12.5", "\n"] {
+ 65 |             let value = await m.providerTmdbID(of: item(name: "x", tmdbID: dirty))
+    |                         `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 66 |             XCTAssertNil(value, "「\(dirty)」应被当作没有 id")
+ 67 |         }
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbMatcherTests.swift:68:21: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 66 |             XCTAssertNil(value, "「\(dirty)」应被当作没有 id")
+ 67 |         }
+ 68 |         let clean = await m.providerTmdbID(of: item(name: "x", tmdbID: " 603 "))
+    |                     `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 69 |         XCTAssertEqual(clean, 603, "前后空白应被容忍")
+ 70 |     }
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbBatchConcurrencyTests.swift:216:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+214 |     nonisolated(unsafe) private static var peakValue = 0
+215 |     nonisolated(unsafe) private static var startedValue = 0
+216 |     nonisolated(unsafe) private static let counterLock = NSLock()
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+217 | 
+218 |     /// 桩被请求的总次数（判断「取消后还有没有继续派发」）。
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbBatchConcurrencyTests.swift:252:23: warning: capture of 'self' with non-Sendable type 'ConcurrencyProbeProtocol?' in a '@Sendable' closure [#SendableClosureCaptures]
+250 |         let delay = Self.latency
+251 |         DispatchQueue.global().asyncAfter(deadline: .now() + delay) { [weak self] in
+252 |             guard let self else { return }
+    |                       `- warning: capture of 'self' with non-Sendable type 'ConcurrencyProbeProtocol?' in a '@Sendable' closure [#SendableClosureCaptures]
+253 |             Self.counterLock.lock(); Self.inFlight -= 1; Self.counterLock.unlock()
+254 |             // 404 → 快速走完一条（`noMatch`），不触发季请求，用例更快。
+
+Swift.Optional:1:21: note: generic enum 'Optional' does not conform to the 'Sendable' protocol
+1 | @frozen public enum Optional<Wrapped> : ~Copyable, ~Escapable where Wrapped : ~Copyable, Wrapped : ~Escapable {
+  |                     `- note: generic enum 'Optional' does not conform to the 'Sendable' protocol
+2 |     case none
+3 |     case some(Wrapped)
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+[35 / 39] MetadataKitTests-product
+[37 / 39] MetadataKitTests-product
+Build complete! (7.34秒)
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite MetadataDatabaseTests started.
+◇ Test reopensExistingDatabase() started.
+◇ Test corruptDatabaseIsRebuilt() started.
+◇ Test createsDatabaseAndSchema() started.
+✘ Test corruptDatabaseIsRebuilt() recorded an issue at MetadataDatabaseTests.swift:43:6: Caught error: Error Domain=OcPlayerCore.Database Code=1001 "unknown method: metadataDatabase.open" UserInfo={NSLocalizedDescription=unknown method: metadataDatabase.open}
+✘ Test reopensExistingDatabase() recorded an issue at MetadataDatabaseTests.swift:28:6: Caught error: Error Domain=OcPlayerCore.Database Code=1001 "unknown method: metadataDatabase.open" UserInfo={NSLocalizedDescription=unknown method: metadataDatabase.open}
+✘ Test createsDatabaseAndSchema() recorded an issue at MetadataDatabaseTests.swift:11:6: Caught error: Error Domain=OcPlayerCore.Database Code=1001 "unknown method: metadataDatabase.open" UserInfo={NSLocalizedDescription=unknown method: metadataDatabase.open}
+✘ Test createsDatabaseAndSchema() failed after 0.028 seconds with 1 issue.
+✘ Test reopensExistingDatabase() failed after 0.028 seconds with 1 issue.
+↳ /// 同一个目录重复打开必须复用（不能每次建新库、把缓存丢掉）。
+✘ Test corruptDatabaseIsRebuilt() failed after 0.028 seconds with 1 issue.
+↳ /// 库文件被写成垃圾时必须**删库重建**而不是抛错（缓存可重建，崩掉不可接受）。
+✘ Suite MetadataDatabaseTests failed after 0.028 seconds with 3 issues.
+✘ Test run with 3 tests in 1 suite failed after 0.028 seconds with 3 issues.
+Note: Some test targets reported failures:
+  - MetadataKitTests (Swift Testing)

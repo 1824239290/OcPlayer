@@ -1,0 +1,25 @@
+{
+  "originalXctestrun": "/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/OcPlayer-macOS_macosx27.0-arm64.xctestrun",
+  "disabledXctestrun": "/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/OcPlayer-diagnostic-export-disabled.xctestrun",
+  "targets": [
+    {
+      "target": "OcPlayerTests",
+      "OCP_CORE_ENABLED": "0"
+    }
+  ],
+  "command": [
+    "xcodebuild",
+    "test-without-building",
+    "-xctestrun",
+    "/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/OcPlayer-diagnostic-export-disabled.xctestrun",
+    "-destination",
+    "platform=macOS,arch=arm64",
+    "-parallel-testing-enabled",
+    "NO",
+    "-only-testing:OcPlayerTests/CollectionPlaybackTests",
+    "-only-testing:OcPlayerTests/PlaybackSourceFailoverTests",
+    "-only-testing:OcPlayerTests/AppPlaybackContinuationTests",
+    "-only-testing:OcPlayerTests/CoreDiagnosticsExportParityTests",
+    "-only-testing:OcPlayerTests/DiagnosticsExportTests"
+  ]
+}

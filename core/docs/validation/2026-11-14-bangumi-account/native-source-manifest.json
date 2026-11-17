@@ -1,0 +1,29 @@
+{
+  "sourceRoot": "/Users/jumusu/Documents/project/OcPlayer",
+  "files": [
+    {
+      "path": "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiAPIClient.swift",
+      "sha256": "9c5f0d05c3e03b738bb7bc69db5439e285a99cc917b2ac4814e8caf984bc302e"
+    },
+    {
+      "path": "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiAuthService.swift",
+      "sha256": "d656b9dd376f6b7ae7426c19aff5fc4168e9ec701ac444937d8d01ce2b42f582"
+    },
+    {
+      "path": "Packages/BangumiKit/Sources/BangumiKit/Client/RustBangumiAccount.swift",
+      "sha256": "e41d71e7668c85307059c75123832549b6107e51750b7e853a39cbc343d633bf"
+    },
+    {
+      "path": "Packages/BangumiKit/Tests/BangumiKitTests/Fixtures/native_bangumi.py",
+      "sha256": "e9ee35118b363eba3254b6b33e72ec36c2dcef84d7ffe8d1d1a601207a9c4cf0"
+    },
+    {
+      "path": "Packages/BangumiKit/Tests/BangumiKitTests/RustBangumiIntegrationTests.swift",
+      "sha256": "8ead5df366386863eefd441556e4de1a943e959d7a4509d02006e071eda82ee9"
+    },
+    {
+      "path": "Docs/SHARED-BANGUMI.md",
+      "sha256": "8f4019c206dbd2e41c608f43cc68218252c72f6a38d82ad90e45b5dc455b861d"
+    }
+  ]
+}

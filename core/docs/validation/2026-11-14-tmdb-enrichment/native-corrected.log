@@ -1,0 +1,285 @@
+Building for debugging...
+[Computing dependencies]
+[Using on-disk description]
+[1 / 1]
+[1 / 35] JellyfinAPI
+[2 / 11] MetadataKit
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbBatch.swift:134:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+132 |                                      enriched: 0, unmatched: 0, failed: 0, seasons: 0,
+133 |                                      wasCancelled: false)
+134 |         guard await client.isConfigured, !items.isEmpty else { return result }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+135 | 
+136 |         await onProgress(result.progress)
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[7 / 16] MetadataKit
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:55:21: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 53 |     /// 是否已配置 key（未配置时全部方法都是无操作，调用方不必自己判断）。
+ 54 |     public var isEnabled: Bool {
+ 55 |         get async { await client.isConfigured }
+    |                     `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 56 |     }
+ 57 | 
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:65:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 63 |     /// 没建立对应关系、对应上了但数据没拉过、拉过但语言对不上。
+ 64 |     public func overlay(for item: MediaItem, tenant: TenantID) async -> TMDbOverlay? {
+ 65 |         guard await client.isConfigured else { return nil }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 66 |         let language = preferences.language
+ 67 |         guard let link = try? await store.tmdbLink(itemID: item.id, tenant: tenant) else { return nil }
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:89:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 87 |     /// 剧集页拿它做两件事：切换季时更新简介、给分集卡片提供每集的标题与简介。
+ 88 |     public func seasonOverlay(seriesLink: TMDbLink, seasonNumber: Int) async -> TMDbOverlay? {
+ 89 |         guard await client.isConfigured else { return nil }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 90 |         guard case .tv(let tvID) = seriesLink.entityKey else { return nil }
+ 91 |         let key = TMDbEntityKey.season(tvID: tvID, number: seasonNumber)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:108:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+106 |             return await sharedFlow("season",seriesLink:seriesLink,seasonNumber:seasonNumber)?.didFetch ?? false
+107 |         }
+108 |         guard await client.isConfigured else { return false }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+109 |         guard case .tv(let tvID) = seriesLink.entityKey else { return false }
+110 |         let key = TMDbEntityKey.season(tvID: tvID, number: seasonNumber)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:206:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+204 |             return await sharedFlow("collection",item:item,tenant:tenant,members:members)?.refresh ?? .failed
+205 |         }
+206 |         guard await client.isConfigured else { return .noMatch }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+207 |         let language = preferences.language
+208 | 
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:365:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+363 |             return await sharedFlow("refresh",item:item,tenant:tenant,seriesLink:seriesLink)?.refresh ?? .failed
+364 |         }
+365 |         guard await client.isConfigured else { return .noMatch }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+366 |         let language = preferences.language
+367 | 
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:422:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+420 |     @discardableResult
+421 |     public func fetchAndStore(key: TMDbEntityKey, language: String? = nil) async -> Bool {
+422 |         guard await client.isConfigured else { return false }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+423 |         let language = language ?? preferences.language
+424 |         if let rust {
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[8 / 17] MetadataKit
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbEnricher.swift:212:110: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+210 |         defer { _ = try? rust.core.call("tmdbEnrichment.batch.close",arguments:["batchID":id]) }
+211 |         do {
+212 |             var state: RustTMDbEnricher.BatchState = try rust.call("batch.begin", ["batchID":id,"configured":await client.isConfigured,"items":rust.object(items.map(RustTMDbMatcher.Item.init))])
+    |                                                                                                              `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+213 |             guard state.started else { return state.result }
+214 |             await onProgress(state.progress.native)
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbEnricher.swift:128:66: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+126 |         defer { _ = try? rust.core.call("tmdbEnrichment.close", arguments: ["flowID":id]) }
+127 |         do {
+128 |             var config: [String:Any] = ["mode":mode,"configured":await client.isConfigured,
+    |                                                                  `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+129 |                                         "members":try rust.object(members.map(RustTMDbMatcher.Item.init)),
+130 |                                         "cancelled":Task.isCancelled]
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbEnricher.swift:212:110: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+210 |         defer { _ = try? rust.core.call("tmdbEnrichment.batch.close",arguments:["batchID":id]) }
+211 |         do {
+212 |             var state: RustTMDbEnricher.BatchState = try rust.call("batch.begin", ["batchID":id,"configured":await client.isConfigured,"items":rust.object(items.map(RustTMDbMatcher.Item.init))])
+    |                                                                                                              `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+213 |             guard state.started else { return state.result }
+214 |             await onProgress(state.progress.native)
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[12 / 21] MetadataKit
+[16 / 21] MetadataKit-product
+[16 / 21] MetadataKitTests-product
+[25 / 30] MetadataKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbBatchConcurrencyTests.swift:216:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+214 |     nonisolated(unsafe) private static var peakValue = 0
+215 |     nonisolated(unsafe) private static var startedValue = 0
+216 |     nonisolated(unsafe) private static let counterLock = NSLock()
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+217 | 
+218 |     /// 桩被请求的总次数（判断「取消后还有没有继续派发」）。
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbBatchConcurrencyTests.swift:252:23: warning: capture of 'self' with non-Sendable type 'ConcurrencyProbeProtocol?' in a '@Sendable' closure [#SendableClosureCaptures]
+250 |         let delay = Self.latency
+251 |         DispatchQueue.global().asyncAfter(deadline: .now() + delay) { [weak self] in
+252 |             guard let self else { return }
+    |                       `- warning: capture of 'self' with non-Sendable type 'ConcurrencyProbeProtocol?' in a '@Sendable' closure [#SendableClosureCaptures]
+253 |             Self.counterLock.lock(); Self.inFlight -= 1; Self.counterLock.unlock()
+254 |             // 404 → 快速走完一条（`noMatch`），不触发季请求，用例更快。
+
+Swift.Optional:1:21: note: generic enum 'Optional' does not conform to the 'Sendable' protocol
+1 | @frozen public enum Optional<Wrapped> : ~Copyable, ~Escapable where Wrapped : ~Copyable, Wrapped : ~Escapable {
+  |                     `- note: generic enum 'Optional' does not conform to the 'Sendable' protocol
+2 |     case none
+3 |     case some(Wrapped)
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbBatchConcurrencyTests.swift:216:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+214 |     nonisolated(unsafe) private static var peakValue = 0
+215 |     nonisolated(unsafe) private static var startedValue = 0
+216 |     nonisolated(unsafe) private static let counterLock = NSLock()
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+217 | 
+218 |     /// 桩被请求的总次数（判断「取消后还有没有继续派发」）。
+[27 / 30] MetadataKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbEnricherTests.swift:418:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+416 |         }
+417 |         let key = TMDbEntityKey.season(tvID: 100, number: 1)
+418 |         try await enricher.fetchAndStore(key: key)
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+419 |         let stored = try await store.tmdbPayload(key: key, language: "zh-CN")
+420 |         let cached = try XCTUnwrap(stored)
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[29 / 33] MetadataKitTests-product
+[31 / 33] MetadataKitTests-product
+Build complete! (4.43秒)
+Test Suite 'Selected tests' started at 2026-11-14 02:17:53.109.
+Test Suite 'MetadataKitTests.xctest' started at 2026-11-14 02:17:53.109.
+Test Suite 'TMDbBatchConcurrencyTests' started at 2026-11-14 02:17:53.109.
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testCancellationStillWorks]' started.
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testCancellationStillWorks]' passed (1.140 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testCancelStopsFurtherDispatch]' started.
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testCancelStopsFurtherDispatch]' passed (0.093 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testConcurrentRunKeepsResultCounts]' started.
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testConcurrentRunKeepsResultCounts]' passed (0.144 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testEnrichAllIssuesConcurrentRequests]' started.
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testEnrichAllIssuesConcurrentRequests]' passed (0.708 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testNonVideoKindsStillCounted]' started.
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testNonVideoKindsStillCounted]' passed (0.024 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testProcessedAggregatesContributionNotHardcoded]' started.
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testProcessedAggregatesContributionNotHardcoded]' passed (0.012 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testWorkerWindowNeverExceedsConcurrencyLimit]' started.
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testWorkerWindowNeverExceedsConcurrencyLimit]' passed (0.050 seconds).
+Test Suite 'TMDbBatchConcurrencyTests' passed at 2026-11-14 02:17:55.283.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 2.172 (2.174) seconds
+Test Suite 'TMDbBatchTests' started at 2026-11-14 02:17:55.283.
+Test Case '-[MetadataKitTests.TMDbBatchTests testBatchRefetchesStaleAiringSeasonButSkipsFinishedOne]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testBatchRefetchesStaleAiringSeasonButSkipsFinishedOne]' passed (0.025 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testBatchWithoutKeyIsNoOp]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testBatchWithoutKeyIsNoOp]' passed (0.010 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testCancellationKeepsWhatWasDone]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testCancellationKeepsWhatWasDone]' passed (0.076 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testEmptyListIsNoOp]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testEmptyListIsNoOp]' passed (0.009 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testEnrichesAllAndReportsProgress]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testEnrichesAllAndReportsProgress]' passed (0.012 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testManualBindFetchesImmediately]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testManualBindFetchesImmediately]' passed (0.011 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testManualBindSurvivesAutoMatch]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testManualBindSurvivesAutoMatch]' passed (0.010 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testManualSearch]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testManualSearch]' passed (0.010 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testMovieDoesNotFetchSeasons]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testMovieDoesNotFetchSeasons]' passed (0.011 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testNonVideoKindsAreSkippedButCounted]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testNonVideoKindsAreSkippedButCounted]' passed (0.010 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testOneFailureDoesNotStopTheRest]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testOneFailureDoesNotStopTheRest]' passed (0.014 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testSecondRunSkipsFreshItemsWithoutNetwork]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testSecondRunSkipsFreshItemsWithoutNetwork]' passed (0.014 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testSeriesAlsoFetchesItsSeasons]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testSeriesAlsoFetchesItsSeasons]' passed (0.017 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testUnbindClearsLink]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testUnbindClearsLink]' passed (0.011 seconds).
+Test Suite 'TMDbBatchTests' passed at 2026-11-14 02:17:55.525.
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.241 (0.242) seconds
+Test Suite 'TMDbCollectionTests' started at 2026-11-14 02:17:55.525.
+Test Case '-[MetadataKitTests.TMDbCollectionTests testCollectionFallsThroughToLaterMember]' started.
+Test Case '-[MetadataKitTests.TMDbCollectionTests testCollectionFallsThroughToLaterMember]' passed (0.013 seconds).
+Test Case '-[MetadataKitTests.TMDbCollectionTests testCollectionResolvesThroughMemberBelongsToCollection]' started.
+Test Case '-[MetadataKitTests.TMDbCollectionTests testCollectionResolvesThroughMemberBelongsToCollection]' passed (0.013 seconds).
+Test Case '-[MetadataKitTests.TMDbCollectionTests testCollectionSkipsWhenFreshWithoutAnyRequest]' started.
+Test Case '-[MetadataKitTests.TMDbCollectionTests testCollectionSkipsWhenFreshWithoutAnyRequest]' passed (0.015 seconds).
+Test Case '-[MetadataKitTests.TMDbCollectionTests testCollectionWithoutMemberIDsDoesNothing]' started.
+Test Case '-[MetadataKitTests.TMDbCollectionTests testCollectionWithoutMemberIDsDoesNothing]' passed (0.012 seconds).
+Test Case '-[MetadataKitTests.TMDbCollectionTests testCollectionWithoutTMDbCounterpartIsNotLinked]' started.
+Test Case '-[MetadataKitTests.TMDbCollectionTests testCollectionWithoutTMDbCounterpartIsNotLinked]' passed (0.012 seconds).
+Test Case '-[MetadataKitTests.TMDbCollectionTests testDirtyProviderIDsAreIgnored]' started.
+Test Case '-[MetadataKitTests.TMDbCollectionTests testDirtyProviderIDsAreIgnored]' passed (0.010 seconds).
+Test Case '-[MetadataKitTests.TMDbCollectionTests testFreshCacheReportsSkipped]' started.
+Test Case '-[MetadataKitTests.TMDbCollectionTests testFreshCacheReportsSkipped]' passed (0.012 seconds).
+Test Case '-[MetadataKitTests.TMDbCollectionTests testLookupFailureIsFailedNotNoMatch]' started.
+Test Case '-[MetadataKitTests.TMDbCollectionTests testLookupFailureIsFailedNotNoMatch]' passed (0.015 seconds).
+Test Case '-[MetadataKitTests.TMDbCollectionTests testPartialFailureStillResolves]' started.
+Test Case '-[MetadataKitTests.TMDbCollectionTests testPartialFailureStillResolves]' passed (0.015 seconds).
+Test Case '-[MetadataKitTests.TMDbCollectionTests testSeriesMembersAreNotUsedForLookup]' started.
+Test Case '-[MetadataKitTests.TMDbCollectionTests testSeriesMembersAreNotUsedForLookup]' passed (0.012 seconds).
+Test Case '-[MetadataKitTests.TMDbCollectionTests testSuccessfulLookupWithoutMembershipIsNoMatch]' started.
+Test Case '-[MetadataKitTests.TMDbCollectionTests testSuccessfulLookupWithoutMembershipIsNoMatch]' passed (0.012 seconds).
+Test Suite 'TMDbCollectionTests' passed at 2026-11-14 02:17:55.666.
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.140 (0.141) seconds
+Test Suite 'TMDbEnricherTests' started at 2026-11-14 02:17:55.666.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testAiringSeasonStoresRegularExpiry]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testAiringSeasonStoresRegularExpiry]' passed (0.012 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testAuthoritativeLinkIsNeverOverwritten]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testAuthoritativeLinkIsNeverOverwritten]' passed (0.014 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testAuthoritativeProviderIDReplacesSearchGuess]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testAuthoritativeProviderIDReplacesSearchGuess]' passed (0.015 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testConcurrentFetchesAreCoalesced]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testConcurrentFetchesAreCoalesced]' passed (0.014 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testDisabledWhenNoKey]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testDisabledWhenNoKey]' passed (0.011 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testEpisodeTmdbIDIsNotTreatedAsAuthoritative]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testEpisodeTmdbIDIsNotTreatedAsAuthoritative]' passed (0.013 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testEpisodeUsesSeriesLinkAndFetchesSeasonOnce]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testEpisodeUsesSeriesLinkAndFetchesSeasonOnce]' passed (0.013 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testEpisodeWithoutSeriesLinkDoesNothing]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testEpisodeWithoutSeriesLinkDoesNothing]' passed (0.013 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testFinishedSeasonWithLongCacheSkipsRefetch]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testFinishedSeasonWithLongCacheSkipsRefetch]' passed (0.012 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testFreshnessJudgement]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testFreshnessJudgement]' passed (0.010 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testLanguageAffectsStoredData]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testLanguageAffectsStoredData]' passed (0.018 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testLinkedCountAndClear]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testLinkedCountAndClear]' passed (0.015 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testNotFoundDoesNotStoreLink]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testNotFoundDoesNotStoreLink]' passed (0.012 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testOverlayRefreshesExpiredData]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testOverlayRefreshesExpiredData]' passed (0.017 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testOverlaySkipsAlreadyFreshData]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testOverlaySkipsAlreadyFreshData]' passed (0.015 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testProviderIDPathSkipsSearchAndStores]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testProviderIDPathSkipsSearchAndStores]' passed (0.015 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSearchPathSkipsWhenNotConfident]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSearchPathSkipsWhenNotConfident]' passed (0.013 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSearchPathStoresWhenConfident]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSearchPathStoresWhenConfident]' passed (0.014 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSeasonAiringDetection]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSeasonAiringDetection]' passed (0.012 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSeasonFinaleWithinGraceStillRefetches]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSeasonFinaleWithinGraceStillRefetches]' passed (0.013 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSeasonOverlayProvidesEpisodeData]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSeasonOverlayProvidesEpisodeData]' passed (0.013 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSeasonOverlayRejectsNonTVLink]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSeasonOverlayRejectsNonTVLink]' passed (0.011 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSeasonRefreshSkipsFreshData]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSeasonRefreshSkipsFreshData]' passed (0.015 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSeasonsAreStoredSeparately]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSeasonsAreStoredSeparately]' passed (0.015 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testStaleAiringSeasonWithLongCacheStillRefetches]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testStaleAiringSeasonWithLongCacheStillRefetches]' passed (0.014 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSuccessClearsPreviousFailure]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSuccessClearsPreviousFailure]' passed (0.015 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testTransportFailureKeepsExistingData]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testTransportFailureKeepsExistingData]' passed (0.017 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testUnauthorizedIsRecordedAsFailure]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testUnauthorizedIsRecordedAsFailure]' passed (0.014 seconds).
+Test Suite 'TMDbEnricherTests' passed at 2026-11-14 02:17:56.055.
+	 Executed 28 tests, with 0 failures (0 unexpected) in 0.387 (0.389) seconds
+Test Suite 'MetadataKitTests.xctest' passed at 2026-11-14 02:17:56.055.
+	 Executed 60 tests, with 0 failures (0 unexpected) in 2.940 (2.946) seconds
+Test Suite 'Selected tests' passed at 2026-11-14 02:17:56.055.
+	 Executed 60 tests, with 0 failures (0 unexpected) in 2.940 (2.947) seconds

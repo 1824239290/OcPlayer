@@ -1,0 +1,1 @@
+The initial verifier adaptation inserted an SDK block twice, including inside a count assertion, causing SyntaxError. Limited insertion and restored the input-count assertion. Production sources and final gate results were unchanged.

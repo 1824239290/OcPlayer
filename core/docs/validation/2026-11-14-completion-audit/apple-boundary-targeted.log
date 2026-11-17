@@ -1,0 +1,23 @@
+Building for debugging...
+[Constructing description]
+[Planning deferred tasks]
+[Finalizing plan]
+[Starting]
+[7 / 67]
+[11 / 67]
+[12 / 67]
+[14 / 67] OcPlayerCoreTests-product
+[19 / 67] OcPlayerCoreTests-product
+[24 / 67] OcPlayerCore
+[27 / 67] OcPlayerCore
+[34 / 67] OcPlayerCoreTests-product
+[37 / 67] OcPlayerCore
+[39 / 67] OcPlayerCore_OcPlayerCoreTests
+/Volumes/Backup/软件/OcPlayer-Core/artifacts/completion-audit/AppleBindingBuild/out/Products/Debug/OcPlayerCore_OcPlayerCoreTests.bundle: resource fork, Finder information, or similar detritus not allowed
+error: CodeSign /Volumes/Backup/软件/OcPlayer-Core/artifacts/completion-audit/AppleBindingBuild/out/Products/Debug/OcPlayerCore_OcPlayerCoreTests.bundle failed with a nonzero exit code. Command line:     cd /Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore
+    
+    Signing Identity:     "-"
+    
+    /usr/bin/codesign --force --sign - --entitlements /Volumes/Backup/软件/OcPlayer-Core/artifacts/completion-audit/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore_OcPlayerCoreTests-b.build/OcPlayerCore_OcPlayerCoreTests.bundle.xcent --timestamp\=none --generate-entitlement-der /Volumes/Backup/软件/OcPlayer-Core/artifacts/completion-audit/AppleBindingBuild/out/Products/Debug/OcPlayerCore_OcPlayerCoreTests.bundle
+error: Build failed
+error: fatalError

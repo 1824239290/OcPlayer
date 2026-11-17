@@ -1,0 +1,82 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Using on-disk description]
+[1 / 1]
+[1 / 32] NIOFoundationEssentialsCompat
+[2 / 7] MetadataKitTests-product
+[11 / 16] MetadataKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbBatchConcurrencyTests.swift:216:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+214 |     nonisolated(unsafe) private static var peakValue = 0
+215 |     nonisolated(unsafe) private static var startedValue = 0
+216 |     nonisolated(unsafe) private static let counterLock = NSLock()
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+217 | 
+218 |     /// 桩被请求的总次数（判断「取消后还有没有继续派发」）。
+[15 / 18] MetadataKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbEnricherTests.swift:418:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+416 |         }
+417 |         let key = TMDbEntityKey.season(tvID: 100, number: 1)
+418 |         try await enricher.fetchAndStore(key: key)
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+419 |         let stored = try await store.tmdbPayload(key: key, language: "zh-CN")
+420 |         let cached = try XCTUnwrap(stored)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbMatcherTests.swift:65:25: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 63 |         let m = TMDbMatcher(language: "zh-CN") { _, _, _, _ in [] }
+ 64 |         for dirty in ["", " ", "0", "-5", "abc", "12.5", "\n"] {
+ 65 |             let value = await m.providerTmdbID(of: item(name: "x", tmdbID: dirty))
+    |                         `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 66 |             XCTAssertNil(value, "「\(dirty)」应被当作没有 id")
+ 67 |         }
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbMatcherTests.swift:68:21: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 66 |             XCTAssertNil(value, "「\(dirty)」应被当作没有 id")
+ 67 |         }
+ 68 |         let clean = await m.providerTmdbID(of: item(name: "x", tmdbID: " 603 "))
+    |                     `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 69 |         XCTAssertEqual(clean, 603, "前后空白应被容忍")
+ 70 |     }
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbBatchConcurrencyTests.swift:216:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+214 |     nonisolated(unsafe) private static var peakValue = 0
+215 |     nonisolated(unsafe) private static var startedValue = 0
+216 |     nonisolated(unsafe) private static let counterLock = NSLock()
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+217 | 
+218 |     /// 桩被请求的总次数（判断「取消后还有没有继续派发」）。
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbBatchConcurrencyTests.swift:252:23: warning: capture of 'self' with non-Sendable type 'ConcurrencyProbeProtocol?' in a '@Sendable' closure [#SendableClosureCaptures]
+250 |         let delay = Self.latency
+251 |         DispatchQueue.global().asyncAfter(deadline: .now() + delay) { [weak self] in
+252 |             guard let self else { return }
+    |                       `- warning: capture of 'self' with non-Sendable type 'ConcurrencyProbeProtocol?' in a '@Sendable' closure [#SendableClosureCaptures]
+253 |             Self.counterLock.lock(); Self.inFlight -= 1; Self.counterLock.unlock()
+254 |             // 404 → 快速走完一条（`noMatch`），不触发季请求，用例更快。
+
+Swift.Optional:1:21: note: generic enum 'Optional' does not conform to the 'Sendable' protocol
+1 | @frozen public enum Optional<Wrapped> : ~Copyable, ~Escapable where Wrapped : ~Copyable, Wrapped : ~Escapable {
+  |                     `- note: generic enum 'Optional' does not conform to the 'Sendable' protocol
+2 |     case none
+3 |     case some(Wrapped)
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+[17 / 21] MetadataKitTests-product
+[19 / 21] MetadataKitTests-product
+Build complete! (9.06秒)
+Test Suite 'Selected tests' started at 2026-11-14 02:33:19.540.
+Test Suite 'MetadataKitTests.xctest' started at 2026-11-14 02:33:19.542.
+Test Suite 'RustCacheIntegrationTests' started at 2026-11-14 02:33:19.542.
+Test Case '-[MetadataKitTests.RustCacheIntegrationTests testAllTypedCacheReadsRetainWideIntegersAndSkipMalformedPayloads]' started.
+Test Case '-[MetadataKitTests.RustCacheIntegrationTests testAllTypedCacheReadsRetainWideIntegersAndSkipMalformedPayloads]' passed (0.087 seconds).
+Test Case '-[MetadataKitTests.RustCacheIntegrationTests testProductionCacheActivatesAndBothClientsReadTheSameDatabase]' started.
+Test Case '-[MetadataKitTests.RustCacheIntegrationTests testProductionCacheActivatesAndBothClientsReadTheSameDatabase]' passed (0.021 seconds).
+Test Case '-[MetadataKitTests.RustCacheIntegrationTests testReplacementSnapshotsTMDbExpiryAndAtomicRollbackAcrossClients]' started.
+Test Case '-[MetadataKitTests.RustCacheIntegrationTests testReplacementSnapshotsTMDbExpiryAndAtomicRollbackAcrossClients]' passed (0.017 seconds).
+Test Suite 'RustCacheIntegrationTests' passed at 2026-11-14 02:33:19.667.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.125 (0.125) seconds
+Test Suite 'MetadataKitTests.xctest' passed at 2026-11-14 02:33:19.668.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.125 (0.126) seconds
+Test Suite 'Selected tests' passed at 2026-11-14 02:33:19.668.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.125 (0.128) seconds

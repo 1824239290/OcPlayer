@@ -1,0 +1,49 @@
+int 1 1
+int 1.0 1
+int 1e0 1
+int 1.5 reject
+int 9223372036854775807 9223372036854775807
+int 9223372036854775807.0 reject
+int 9.223372036854775807e18 reject
+int -9223372036854775808.0 reject
+int 1e100 reject
+date 2026-11-14T00:01:02Z 1794614462.0
+date 2026-11-14T00:01:02.123Z 1794614462.1230001
+date 2026-11-14T08:01:02+08:00 1794614462.0
+date 2026-11-14T08:01:02+0800 1794614462.0
+date 2026-11-14 00:01:02Z reject
+date 2026-02-30T00:00:00Z 1772409600.0
+date 2026-11-14 reject
+date 2026-11-14T24:00:00Z 1794700800.0
+date 2026-11-14T00:00:60Z 1794614460.0
+space 9
+space a
+space b
+space c
+space d
+space 20
+space 85
+space a0
+space 1680
+space 2000
+space 2001
+space 2002
+space 2003
+space 2004
+space 2005
+space 2006
+space 2007
+space 2008
+space 2009
+space 200a
+space 200b
+space 2028
+space 2029
+space 202f
+space 205f
+space 3000
+encoding 4 Optional(42)
+encoding 2483028224 Optional(42)
+encoding 2415919360 Optional(42)
+encoding 2617245952 Optional(42)
+encoding 2550137088 Optional(42)

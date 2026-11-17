@@ -1,0 +1,6 @@
+Unhandled exception. System.Exception: Expected OperationCanceledException
+   at Contracts.ThrowsAsync[T](Func`1 action) in D:\OcPlayer-Core\tests\windows-sdk\Program.cs:line 43
+   at Contracts.Real(String endpoint) in D:\OcPlayer-Core\tests\windows-sdk\Program.cs:line 161
+   at Contracts.Main(String[] args) in D:\OcPlayer-Core\tests\windows-sdk\Program.cs:line 215
+   at Contracts.<Main>(String[] args)
+

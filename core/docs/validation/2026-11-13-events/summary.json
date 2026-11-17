@@ -1,0 +1,85 @@
+{
+  "date": "2026-11-13",
+  "goalComplete": false,
+  "scope": "Bounded notification delivery and durable playback session preferences with native macOS regression.",
+  "Rust": {
+    "passed": 57,
+    "failed": 0
+  },
+  "packages": {
+    "OcPlayerCore": {
+      "passed": 7,
+      "failed": 0
+    },
+    "JellyfinKit": {
+      "passed": 240,
+      "failed": 0
+    },
+    "MetadataKit": {
+      "passed": 306,
+      "failed": 0
+    },
+    "MoviePilotKit": {
+      "passed": 108,
+      "failed": 0
+    },
+    "BangumiKit": {
+      "passed": 99,
+      "failed": 0
+    }
+  },
+  "exportedAppleBinding": {
+    "passed": 7,
+    "failed": 0,
+    "sourceEquivalent": true,
+    "sameCasesAsNativeAdapter": true
+  },
+  "BangumiCABI": {
+    "passed": 4,
+    "failed": 0
+  },
+  "macOSApp": {
+    "executed": 1001,
+    "passed": 982,
+    "skipped": 19,
+    "failed": 0
+  },
+  "events": {
+    "maxEvents": 256,
+    "maxSerializedJSONBytes": 1048576,
+    "concurrentRustTickCount": 50000,
+    "concurrentThreads": 4,
+    "positionCount": 1000,
+    "retainedEvents": 7,
+    "coalesced": 50998,
+    "dropped": 0,
+    "byteOverflowVerified": true,
+    "singleOversizedEventRejected": true,
+    "searchRequestIsolationVerified": true,
+    "controlPriorityVerified": true,
+    "pollReleasesBytes": true,
+    "SwiftCABIStressVerified": true
+  },
+  "playback": {
+    "rateVolumeTracksPersistAcrossTimelineAndLifecycle": true,
+    "revisedDurationAndClampingVerified": true,
+    "pausedOpenSupported": true,
+    "nullTrackClearingVerified": true,
+    "invalidArgumentsPreserveState": true,
+    "nativeSelftestSeconds": 10,
+    "bundleLibrary": true,
+    "renderFailures": 0,
+    "audioFailures": 0
+  },
+  "librarySHA256": "f6bf01ec3064eb60b00c70f83e9d02d76b21e48d2b57ef80ddc0ddc05d156b78",
+  "application": "/tmp/ocplayer-bangumi-store-final/DerivedData/Build/Products/Debug/OcPlayer.app",
+  "nativeTestResults": "/tmp/ocplayer-bangumi-store-final/DerivedData/Logs/Test",
+  "remaining": [
+    "authoritative shared playback recovery/end/background policy",
+    "dynamic media server endpoints and native error/auth integration",
+    "remaining metadata/danmaku/matcher orchestration",
+    "shared account/sync lifecycle",
+    "settings/aggregate diagnostics",
+    "release packaging and Windows native adapter"
+  ]
+}

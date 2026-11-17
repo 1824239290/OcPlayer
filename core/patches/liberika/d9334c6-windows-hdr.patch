@@ -1,0 +1,1021 @@
+diff --git a/crates/erika/Cargo.toml b/crates/erika/Cargo.toml
+index 2b9ab62967555d987bf9665486c7d4f2da144206..bbd5ba388cbd146165b460b5ccf866aa52899ad0 100644
+--- a/crates/erika/Cargo.toml
++++ b/crates/erika/Cargo.toml
+@@ -42,11 +42,13 @@ coreaudio-rs.workspace = true
+ [target.'cfg(target_os = "windows")'.dependencies]
+ windows = { workspace = true, features = [
+   "Win32_Foundation",
++  "Win32_Devices_Display",
+   "Win32_Graphics_Direct3D",
+   "Win32_Graphics_Direct3D_Fxc",
+   "Win32_Graphics_Direct3D11",
+   "Win32_Graphics_Dxgi",
+   "Win32_Graphics_Dxgi_Common",
++  "Win32_Graphics_Gdi",
+   "Win32_Media_Audio",
+   "Win32_System_Com",
+   "Win32_System_Com_StructuredStorage",
+diff --git a/crates/erika/src/renderer/d3d11.rs b/crates/erika/src/renderer/d3d11.rs
+index ff187ae3456abc411ef6014cf1332da51a379202..21117572a42eb92bc74250a4c3521d89c4bae13a 100644
+--- a/crates/erika/src/renderer/d3d11.rs
++++ b/crates/erika/src/renderer/d3d11.rs
+@@ -1,7 +1,14 @@
+ use std::ffi::c_void;
+ use std::mem;
+ use std::ptr;
++use std::time::{Duration, Instant};
+ 
++use ::windows::Win32::Devices::Display::{
++    DISPLAYCONFIG_DEVICE_INFO_GET_SDR_WHITE_LEVEL, DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME,
++    DISPLAYCONFIG_DEVICE_INFO_HEADER, DISPLAYCONFIG_MODE_INFO, DISPLAYCONFIG_PATH_INFO,
++    DISPLAYCONFIG_SDR_WHITE_LEVEL, DISPLAYCONFIG_SOURCE_DEVICE_NAME, DisplayConfigGetDeviceInfo,
++    GetDisplayConfigBufferSizes, QDC_ONLY_ACTIVE_PATHS, QueryDisplayConfig,
++};
+ use ::windows::Win32::Foundation::{HMODULE, HWND};
+ use ::windows::Win32::Graphics::Direct3D::Fxc::D3DCompile;
+ use ::windows::Win32::Graphics::Direct3D::{
+@@ -31,12 +38,14 @@ use ::windows::Win32::Graphics::Dxgi::Common::{
+     DXGI_FORMAT_R32G32_FLOAT, DXGI_SAMPLE_DESC,
+ };
+ use ::windows::Win32::Graphics::Dxgi::{
+-    DXGI_ERROR_WAS_STILL_DRAWING, DXGI_HDR_METADATA_HDR10, DXGI_HDR_METADATA_TYPE_HDR10,
+-    DXGI_HDR_METADATA_TYPE_NONE, DXGI_PRESENT_DO_NOT_WAIT, DXGI_PRESENT_PARAMETERS,
+-    DXGI_SCALING_STRETCH, DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT, DXGI_SWAP_CHAIN_DESC1,
+-    DXGI_SWAP_CHAIN_FLAG, DXGI_SWAP_EFFECT_FLIP_DISCARD, DXGI_USAGE_RENDER_TARGET_OUTPUT,
+-    IDXGIAdapter, IDXGIDevice, IDXGIFactory2, IDXGISwapChain1, IDXGISwapChain3, IDXGISwapChain4,
++    CreateDXGIFactory1, DXGI_ERROR_WAS_STILL_DRAWING, DXGI_HDR_METADATA_HDR10,
++    DXGI_HDR_METADATA_TYPE_HDR10, DXGI_HDR_METADATA_TYPE_NONE, DXGI_OUTPUT_DESC1,
++    DXGI_PRESENT_DO_NOT_WAIT, DXGI_PRESENT_PARAMETERS, DXGI_SCALING_STRETCH,
++    DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT, DXGI_SWAP_CHAIN_DESC1, DXGI_SWAP_CHAIN_FLAG,
++    DXGI_SWAP_EFFECT_FLIP_DISCARD, DXGI_USAGE_RENDER_TARGET_OUTPUT, IDXGIAdapter, IDXGIDevice,
++    IDXGIFactory2, IDXGIOutput6, IDXGISwapChain1, IDXGISwapChain3, IDXGISwapChain4,
+ };
++use ::windows::Win32::Graphics::Gdi::{MONITOR_DEFAULTTONEAREST, MonitorFromWindow};
+ use ::windows::core::{IUnknown, Interface, PCSTR};
+ 
+ use crate::core::{
+@@ -194,11 +203,64 @@ float3 source_reference_to_nits(float3 rgb) {
+     return max(rgb, float3(0.0, 0.0, 0.0)) * source_reference_white_nits();
+ }
+ 
++// BT.2390's zero-black EETF: a Hermite shoulder in normalized PQ space.
++// Mapping one RGB maximum and scaling all channels together preserves hue.
++// PQ's 10000-nit encoding scale is distinct from both source and target peaks.
++float bt2390_nits(float input_nits) {
++    float src_peak = source_peak_nits();
++    float dst_peak = target_peak_nits();
++    if (src_peak <= dst_peak) {
++        return min(input_nits, dst_peak);
++    }
++    float src_pq = pq_inverse_eotf(src_peak / 10000.0);
++    float dst_pq = pq_inverse_eotf(dst_peak / 10000.0);
++    float limit = dst_pq / src_pq;
++    float knee = 1.5 * limit - 0.5;
++    float p = saturate(pq_inverse_eotf(max(input_nits, 0.0) / 10000.0) / src_pq);
++    if (p > knee) {
++        float t = (p - knee) / max(1.0 - knee, 0.000001);
++        float t2 = t * t;
++        float t3 = t2 * t;
++        p = (2.0 * t3 - 3.0 * t2 + 1.0) * knee
++          + (t3 - 2.0 * t2 + t) * (1.0 - knee)
++          + (-2.0 * t3 + 3.0 * t2) * limit;
++    }
++    return min(pq_eotf(max(p, 0.0) * src_pq) * 10000.0, dst_peak);
++}
++
++// BT.2446 Method A's luminance curve is designed for HDR-to-SDR conversion.
++// Apply its gain to RGB together, rather than compressing each channel with
++// the old near-white shoulder and changing the hue of bright colored objects.
++float bt2446a_nits(float input_nits) {
++    float src_peak = source_peak_nits();
++    float dst_peak = target_peak_nits();
++    float hdr_range = 1.0 + 32.0 * pow(src_peak / 10000.0, 1.0 / 2.4);
++    float sdr_range = 1.0 + 32.0 * pow(dst_peak / 10000.0, 1.0 / 2.4);
++    float x = pow(saturate(input_nits / src_peak), 1.0 / 2.4);
++    x = log(1.0 + (hdr_range - 1.0) * x) / log(hdr_range);
++    if (x <= 0.7399) {
++        x *= 1.077;
++    } else if (x < 0.9909) {
++        x = (-1.151 * x + 2.7811) * x - 0.6302;
++    } else {
++        x = 0.5 * x + 0.5;
++    }
++    x = (pow(sdr_range, x) - 1.0) / (sdr_range - 1.0);
++    return dst_peak * pow(saturate(x), 2.4);
++}
++
+ float3 tone_map_nits(float3 input_nits) {
+     float source_peak = source_peak_nits();
+     float target_peak = target_peak_nits();
+     float3 x = max(input_nits, float3(0.0, 0.0, 0.0)) / target_peak;
+     float white = max(source_peak / target_peak, 1.0);
++    if (tone_map == 3u || tone_map == 4u) {
++        float3 positive = max(input_nits, float3(0.0, 0.0, 0.0));
++        float peak = max(positive.r, max(positive.g, positive.b));
++        if (peak <= 0.000001) return float3(0.0, 0.0, 0.0);
++        float mapped = tone_map == 4u ? bt2446a_nits(peak) : bt2390_nits(peak);
++        return positive * (mapped / peak);
++    }
+     if (tone_map == 1u) {
+         float white2 = white * white;
+         return target_peak * clamp((x * (float3(1.0, 1.0, 1.0) + x / white2)) / (float3(1.0, 1.0, 1.0) + x), float3(0.0, 0.0, 0.0), float3(1.0, 1.0, 1.0));
+@@ -820,10 +882,64 @@ impl D3d11OutputMode {
+             Self::Hdr10 => TargetColorState::hdr10(ColorPrimaries::Bt2020),
+         }
+     }
++}
++
++#[derive(Debug, Clone, Copy, PartialEq)]
++struct DisplayLuminance {
++    hdr_active: bool,
++    hdr_peak_nits: f32,
++    sdr_white_nits: f32,
++    hdr_peak_known: bool,
++    sdr_white_known: bool,
++}
++
++impl Default for DisplayLuminance {
++    fn default() -> Self {
++        Self {
++            hdr_active: false,
++            hdr_peak_nits: 1000.0,
++            sdr_white_nits: 203.0,
++            hdr_peak_known: false,
++            sdr_white_known: false,
++        }
++    }
++}
++
++impl DisplayLuminance {
++    fn from_output(desc: Option<&DXGI_OUTPUT_DESC1>, white: Option<f32>) -> Self {
++        let hdr_active = display_hdr10_active(desc);
++        // SDR outputs commonly report DXGI's synthetic 80-nit default. It is
++        // not a calibrated panel maximum and must not change SDR normalization.
++        let peak = desc
++            .filter(|_| hdr_active)
++            .map(|d| d.MaxLuminance)
++            .filter(|n| n.is_finite() && (80.0..=10000.0).contains(n));
++        let white = white
++            .filter(|_| hdr_active)
++            .filter(|n| n.is_finite() && (1.0..=10000.0).contains(n));
++        let hdr_peak_nits = peak.unwrap_or(1000.0);
++        Self {
++            hdr_active,
++            hdr_peak_nits,
++            sdr_white_nits: white.unwrap_or(203.0).min(hdr_peak_nits),
++            hdr_peak_known: peak.is_some(),
++            sdr_white_known: white.is_some(),
++        }
++    }
+ 
+-    fn target_color_for_source(self, source: SourceColorState) -> TargetColorState {
+-        let _ = source;
+-        self.target_color()
++    fn target(self, mode: D3d11OutputMode, source: SourceColorState) -> TargetColorState {
++        let mut target = mode.target_color();
++        if mode == D3d11OutputMode::Hdr10 {
++            target.peak_nits = self.hdr_peak_nits;
++            target.reference_white_nits = self.sdr_white_nits;
++            target.edr_headroom = (target.peak_nits / target.reference_white_nits).max(1.0);
++        } else if source.is_hdr() && self.hdr_active && self.sdr_white_known {
++            // On an HDR desktop, DWM presents SDR code 1 at the user's SDR
++            // white level. Keep peak and reference white in that same domain.
++            target.peak_nits = self.sdr_white_nits;
++            target.reference_white_nits = self.sdr_white_nits;
++        }
++        target
+     }
+ }
+ 
+@@ -867,6 +983,11 @@ pub struct D3d11Renderer {
+     upscaler: D3d11ArtCnn,
+     next_frame_token: u64,
+     hdr10_output_unavailable: bool,
++    output_fallback_reason: OutputFallbackReason,
++    last_display_hdr_active: Option<bool>,
++    display_factory: Option<IDXGIFactory2>,
++    display_luminance: DisplayLuminance,
++    display_refresh_at: Option<Instant>,
+     stats: D3d11RendererStats,
+ }
+ 
+@@ -887,6 +1008,11 @@ impl D3d11Renderer {
+             upscaler: D3d11ArtCnn::default(),
+             next_frame_token: 0,
+             hdr10_output_unavailable: false,
++            output_fallback_reason: OutputFallbackReason::None,
++            last_display_hdr_active: None,
++            display_factory: None,
++            display_luminance: DisplayLuminance::default(),
++            display_refresh_at: None,
+             stats: D3d11RendererStats::default(),
+         })
+     }
+@@ -1039,7 +1165,9 @@ impl D3d11Renderer {
+         &mut self,
+         source: SourceColorState,
+     ) -> Result<D3d11OutputMode> {
++        self.refresh_display_luminance();
+         let source_is_hdr = source.is_hdr();
++        self.output_fallback_reason = OutputFallbackReason::None;
+         if source_is_hdr {
+             self.stats.hdr_source_frames += 1;
+         }
+@@ -1054,7 +1182,7 @@ impl D3d11Renderer {
+             }
+             return Ok(D3d11OutputMode::Sdr);
+         }
+-        if matches!(source.transfer, TransferFunction::Pq)
++        if hdr10_requested_for_source(self.requested_output_mode, source)
+             && self.try_enable_hdr10_output(source)?
+         {
+             self.stats.hdr10_output_frames += 1;
+@@ -1072,13 +1200,46 @@ impl D3d11Renderer {
+         if self.state.is_none() || self.surface.is_none() {
+             return Ok(false);
+         }
++        // PRESENT support describes the swap chain, not the physical display
++        // or the Windows HDR switch. Query the current output on every frame
++        // so moving the window or disabling HDR also returns to SDR.
++        let description = self
++            .surface
++            .as_ref()
++            .and_then(|surface| display_output_description(surface, &mut self.display_factory));
++        let display_hdr_active = display_hdr10_active(description.as_ref());
++        if self.last_display_hdr_active != Some(display_hdr_active) {
++            eprintln!(
++                "{}",
++                serde_json::json!({
++                    "event": "d3d11_display_output",
++                    "hdrActive": display_hdr_active,
++                    "colorSpace": description.as_ref().map(|desc| desc.ColorSpace.0),
++                    "bitsPerColor": description.as_ref().map(|desc| desc.BitsPerColor),
++                    "reportedMaxNits": description.as_ref().map(|desc| desc.MaxLuminance),
++                    "reportedFullFrameNits": description.as_ref().map(|desc| desc.MaxFullFrameLuminance),
++                    "displayName": description.as_ref().map(|desc| {
++                        let len = desc.DeviceName.iter().position(|ch| *ch == 0)
++                            .unwrap_or(desc.DeviceName.len());
++                        String::from_utf16_lossy(&desc.DeviceName[..len])
++                    }),
++                })
++            );
++            self.last_display_hdr_active = Some(display_hdr_active);
++        }
++        if !display_hdr_active {
++            self.output_fallback_reason = OutputFallbackReason::DisplayHdrUnsupported;
++            return Ok(false);
++        }
+         if self.hdr10_output_unavailable {
++            self.output_fallback_reason = OutputFallbackReason::SurfaceConfigureFailed;
+             return Ok(false);
+         }
+ 
+         if let Err(error) = self.set_output_mode(D3d11OutputMode::Hdr10) {
+             self.stats.hdr10_output_failures += 1;
+             self.hdr10_output_unavailable = true;
++            self.output_fallback_reason = OutputFallbackReason::SurfaceConfigureFailed;
+             trace(&format!("hdr10 output unavailable: {error}"));
+             self.set_output_mode(D3d11OutputMode::Sdr)?;
+             return Ok(false);
+@@ -1086,6 +1247,7 @@ impl D3d11Renderer {
+         if let Err(error) = self.update_hdr10_metadata(source) {
+             self.stats.hdr10_metadata_failures += 1;
+             self.hdr10_output_unavailable = true;
++            self.output_fallback_reason = OutputFallbackReason::SurfaceConfigureFailed;
+             trace(&format!("hdr10 metadata unavailable: {error}"));
+             self.set_output_mode(D3d11OutputMode::Sdr)?;
+             return Ok(false);
+@@ -1093,6 +1255,44 @@ impl D3d11Renderer {
+         Ok(true)
+     }
+ 
++    fn refresh_display_luminance(&mut self) {
++        if self
++            .display_refresh_at
++            .is_some_and(|t| t.elapsed() < Duration::from_secs(1))
++        {
++            return;
++        }
++        let first_refresh = self.display_refresh_at.is_none();
++        self.display_refresh_at = Some(Instant::now());
++        let desc = self
++            .surface
++            .as_ref()
++            .and_then(|s| display_output_description(s, &mut self.display_factory));
++        let white = desc
++            .as_ref()
++            .filter(|d| display_hdr10_active(Some(d)))
++            .and_then(display_sdr_white_nits);
++        let next = DisplayLuminance::from_output(desc.as_ref(), white);
++        if next != self.display_luminance || first_refresh {
++            eprintln!(
++                "{}",
++                serde_json::json!({
++                    "event": "d3d11_display_luminance",
++                    "hdrActive": next.hdr_active,
++                    "reportedMaxNits": desc.as_ref().map(|d| d.MaxLuminance),
++                    "reportedFullFrameNits": desc.as_ref().map(|d| d.MaxFullFrameLuminance),
++                    "hdrPeakNits": next.hdr_peak_nits,
++                    "hdrPeakKnown": next.hdr_peak_known,
++                    "sdrWhiteNits": if next.hdr_active { next.sdr_white_nits } else { 100.0 },
++                    "sdrWhiteKnown": next.sdr_white_known,
++                    "sdrPolicy": if next.hdr_active { "windows_sdr_white" } else { "standard_100_nit_reference" },
++                    "mapping": "sdr_bt2446a_hdr_bt2390_max_rgb",
++                })
++            );
++        }
++        self.display_luminance = next;
++    }
++
+     fn update_hdr10_metadata(&mut self, source: SourceColorState) -> Result<()> {
+         let swapchain = self
+             .surface
+@@ -1144,7 +1344,22 @@ impl D3d11Renderer {
+         }
+         let source_color = source_color_for_frame(frame);
+         let output_mode = self.select_output_mode_for_source(source_color)?;
+-        let target_color = output_mode.target_color_for_source(source_color);
++        let target_color = self.display_luminance.target(output_mode, source_color);
++        if self.stats.hardware_video_frames == 0 {
++            let uniforms = constants_for_frame(source_color, texture_format, target_color);
++            eprintln!(
++                "{}",
++                serde_json::json!({
++                    "event": "d3d11_video_color",
++                    "sourceTransfer": uniforms.source_transfer,
++                    "targetTransfer": uniforms.target_transfer,
++                    "toneMap": uniforms.tone_map,
++                    "fullRange": uniforms.full_range,
++                    "nits": uniforms.nits,
++                    "lumaCoefficients": uniforms.luma_coefficients,
++                })
++            );
++        }
+         let visible_width = texture_ref.width().max(1).min(desc.Width.max(1));
+         let visible_height = texture_ref.height().max(1).min(desc.Height.max(1));
+ 
+@@ -1203,11 +1418,13 @@ impl D3d11Renderer {
+     /// Target color state overlays are composited into: the attached surface's
+     /// swapchain encoding (PQ for HDR10, sRGB otherwise).
+     fn overlay_target_color(&self) -> TargetColorState {
+-        self.surface
++        let mode = self
++            .surface
+             .as_ref()
+             .map(|surface| surface.output_mode)
+-            .unwrap_or_default()
+-            .target_color()
++            .unwrap_or_default();
++        self.display_luminance
++            .target(mode, SourceColorState::default())
+     }
+ 
+     fn prepare_overlay_draws(
+@@ -1751,6 +1968,11 @@ impl RendererBackend for D3d11Renderer {
+             linear_shader_resource: None,
+         });
+         self.hdr10_output_unavailable = false;
++        self.output_fallback_reason = OutputFallbackReason::None;
++        self.last_display_hdr_active = None;
++        self.display_factory = None;
++        self.display_luminance = DisplayLuminance::default();
++        self.display_refresh_at = None;
+         self.stats.attached = true;
+         self.recreate_surface_targets()?;
+         self.render_clear(0.0)
+@@ -1763,6 +1985,12 @@ impl RendererBackend for D3d11Renderer {
+         self.stats.attached = false;
+         self.stats.surface_width = 0;
+         self.stats.surface_height = 0;
++        self.stats.hdr10_output_active = false;
++        self.output_fallback_reason = OutputFallbackReason::None;
++        self.last_display_hdr_active = None;
++        self.display_factory = None;
++        self.display_luminance = DisplayLuminance::default();
++        self.display_refresh_at = None;
+         Ok(())
+     }
+ 
+@@ -1811,7 +2039,7 @@ impl RendererBackend for D3d11Renderer {
+         self.ensure_default_device()?;
+         let source = source_color_for_frame(frame);
+         let output_mode = self.select_output_mode_for_source(source)?;
+-        let target = output_mode.target_color_for_source(source);
++        let target = self.display_luminance.target(output_mode, source);
+         let (texture_format, bytes_per_sample) = match planar.format {
+             PlanarPixelFormat::Nv12 => (D3d11VideoTextureFormat::Nv12, 1_u32),
+             PlanarPixelFormat::P010 => (D3d11VideoTextureFormat::P010, 2_u32),
+@@ -1968,10 +2196,18 @@ impl RendererBackend for D3d11Renderer {
+             },
+             native_data_space: -1,
+             requested_headroom: self.requested_output_mode.headroom(),
+-            active_headroom: if hdr10_active { 10_000.0 / 203.0 } else { 1.0 },
+-            active_headroom_known: self.stats.attached,
++            active_headroom: if hdr10_active {
++                (self.display_luminance.hdr_peak_nits / self.display_luminance.sdr_white_nits)
++                    .max(1.0)
++            } else {
++                1.0
++            },
++            active_headroom_known: self.stats.attached
++                && (!hdr10_active
++                    || (self.display_luminance.hdr_peak_known
++                        && self.display_luminance.sdr_white_known)),
+             extended_linear_active: false,
+-            fallback_reason: OutputFallbackReason::None,
++            fallback_reason: self.output_fallback_reason,
+             fallback_count: self.stats.hdr10_output_failures,
+             data_space_failures: self.stats.hdr10_output_failures,
+             headroom_updates: self.stats.hdr10_metadata_updates,
+@@ -2481,6 +2717,122 @@ fn configure_swapchain_color_space(
+         .map_err(|error| d3d_error("IDXGISwapChain3::SetColorSpace1", error))
+ }
+ 
++fn hdr10_requested_for_source(
++    requested: crate::renderer::output::OutputMode,
++    source: SourceColorState,
++) -> bool {
++    matches!(source.transfer, TransferFunction::Pq)
++        && requested.resolve_for_source(source.is_hdr()).is_edr()
++        && requested.headroom() > 1.0
++}
++
++fn display_hdr10_active(description: Option<&DXGI_OUTPUT_DESC1>) -> bool {
++    description.is_some_and(|desc| {
++        desc.AttachedToDesktop.as_bool()
++            && desc.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020
++    })
++}
++
++fn display_output_description(
++    surface: &AttachedSurface,
++    cached_factory: &mut Option<IDXGIFactory2>,
++) -> Option<DXGI_OUTPUT_DESC1> {
++    // Composition swap chains cannot identify their output themselves. Use
++    // the host HWND for both kinds of swap chain; an unknown monitor stays SDR.
++    if surface.hwnd.0.is_null() {
++        return None;
++    }
++    // GetDesc1 color information becomes stale when the desktop's HDR state
++    // changes. DXGI requires a current factory and an output from that factory.
++    if !cached_factory
++        .as_ref()
++        .is_some_and(|factory| unsafe { factory.IsCurrent().as_bool() })
++    {
++        *cached_factory = unsafe { CreateDXGIFactory1::<IDXGIFactory2>() }.ok();
++    }
++    let factory = cached_factory.as_ref()?;
++    let monitor = unsafe { MonitorFromWindow(surface.hwnd, MONITOR_DEFAULTTONEAREST) };
++    let mut adapter_index = 0;
++    while let Ok(adapter) = unsafe { factory.EnumAdapters(adapter_index) } {
++        let mut output_index = 0;
++        while let Ok(output) = unsafe { adapter.EnumOutputs(output_index) } {
++            if unsafe { output.GetDesc() }
++                .ok()
++                .is_some_and(|desc| desc.Monitor == monitor)
++            {
++                let output6: IDXGIOutput6 = output.cast().ok()?;
++                return unsafe { output6.GetDesc1() }.ok();
++            }
++            output_index += 1;
++        }
++        adapter_index += 1;
++    }
++    None
++}
++
++fn display_sdr_white_nits(desc: &DXGI_OUTPUT_DESC1) -> Option<f32> {
++    // Match the active path to this HWND's DXGI output, rather than assuming
++    // the primary display. Windows reports SDRWhiteLevel in 1/1000 of 80 nits.
++    for _ in 0..3 {
++        let (mut path_count, mut mode_count) = (0, 0);
++        if unsafe {
++            GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &mut path_count, &mut mode_count)
++        }
++        .0 != 0
++        {
++            return None;
++        }
++        let mut paths = vec![DISPLAYCONFIG_PATH_INFO::default(); path_count as usize];
++        let mut modes = vec![DISPLAYCONFIG_MODE_INFO::default(); mode_count as usize];
++        let result = unsafe {
++            QueryDisplayConfig(
++                QDC_ONLY_ACTIVE_PATHS,
++                &mut path_count,
++                paths.as_mut_ptr(),
++                &mut mode_count,
++                modes.as_mut_ptr(),
++                None,
++            )
++        };
++        if result.0 == 122 {
++            continue;
++        } // Display topology changed; retry sizes.
++        if result.0 != 0 {
++            return None;
++        }
++        for path in &paths[..path_count as usize] {
++            let mut source = DISPLAYCONFIG_SOURCE_DEVICE_NAME {
++                header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
++                    r#type: DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME,
++                    size: mem::size_of::<DISPLAYCONFIG_SOURCE_DEVICE_NAME>() as u32,
++                    adapterId: path.sourceInfo.adapterId,
++                    id: path.sourceInfo.id,
++                },
++                ..Default::default()
++            };
++            if unsafe { DisplayConfigGetDeviceInfo(&mut source.header) } != 0
++                || source.viewGdiDeviceName != desc.DeviceName
++            {
++                continue;
++            }
++            let mut white = DISPLAYCONFIG_SDR_WHITE_LEVEL {
++                header: DISPLAYCONFIG_DEVICE_INFO_HEADER {
++                    r#type: DISPLAYCONFIG_DEVICE_INFO_GET_SDR_WHITE_LEVEL,
++                    size: mem::size_of::<DISPLAYCONFIG_SDR_WHITE_LEVEL>() as u32,
++                    adapterId: path.targetInfo.adapterId,
++                    id: path.targetInfo.id,
++                },
++                ..Default::default()
++            };
++            if unsafe { DisplayConfigGetDeviceInfo(&mut white.header) } == 0 {
++                return Some(80.0 * white.SDRWhiteLevel as f32 / 1000.0);
++            }
++        }
++        return None;
++    }
++    None
++}
++
+ fn set_hdr10_metadata(
+     swapchain: &IDXGISwapChain1,
+     metadata: DXGI_HDR_METADATA_HDR10,
+@@ -2921,7 +3273,7 @@ fn compile_shader(entry: &'static str, target: &'static str) -> Result<ID3DBlob>
+ }
+ 
+ fn compile_shader_source(
+-    source: &'static [u8],
++    source: &[u8],
+     entry: &'static str,
+     target: &'static str,
+ ) -> Result<ID3DBlob> {
+@@ -2987,11 +3339,20 @@ fn constants_for_frame(
+     target: TargetColorState,
+ ) -> VideoUniforms {
+     let pipeline = VideoRenderPipeline::new(source, target);
+-    let uniforms = VideoUniforms::from_pipeline(
++    let mut uniforms = VideoUniforms::from_pipeline(
+         &pipeline,
+         matches!(texture_format, D3d11VideoTextureFormat::P010),
+         false,
+     );
++    // Leave SDR and HDR that fits the display unchanged. Only the Windows
++    // compressed-HDR paths use explicit curves instead of the old shoulder.
++    uniforms.tone_map = if !pipeline.requires_tone_mapping() {
++        0
++    } else if matches!(target.transfer, TransferFunction::Pq) {
++        3
++    } else {
++        4
++    };
+     if matches!(target.transfer, TransferFunction::Pq) {
+         uniforms.scene_linear_output()
+     } else {
+@@ -3190,6 +3551,7 @@ mod tests {
+         let renderer = D3d11Renderer::with_config(MetalRendererConfig {
+             output_mode: crate::renderer::metal::MetalOutputMode::Sdr,
+             luma_upscaler: LumaUpscalerMode::ArtCnnC4F16,
++            video_alpha_mode: VideoAlphaMode::Opaque,
+         })
+         .unwrap();
+ 
+@@ -3237,12 +3599,306 @@ mod tests {
+     #[test]
+     fn hdr10_output_mode_targets_bt2020_pq() {
+         let source = SourceColorState::new(ColorPrimaries::DisplayP3, TransferFunction::Pq);
+-        let target = D3d11OutputMode::Hdr10.target_color_for_source(source);
++        let display = DisplayLuminance {
++            hdr_active: true,
++            hdr_peak_nits: 600.0,
++            sdr_white_nits: 200.0,
++            hdr_peak_known: true,
++            sdr_white_known: true,
++        };
++        let target = display.target(D3d11OutputMode::Hdr10, source);
+ 
+         assert_eq!(target.primaries, ColorPrimaries::Bt2020);
+         assert_eq!(target.transfer, TransferFunction::Pq);
+-        assert_eq!(target.peak_nits, 10_000.0);
+-        assert_eq!(target.reference_white_nits, 203.0);
++        assert_eq!(target.peak_nits, 600.0);
++        assert_eq!(target.reference_white_nits, 200.0);
++    }
++
++    #[test]
++    fn explicit_sdr_does_not_promote_pq_video_to_hdr10() {
++        use crate::renderer::output::OutputMode;
++        let pq = SourceColorState::new(ColorPrimaries::Bt2020, TransferFunction::Pq);
++        assert!(!hdr10_requested_for_source(OutputMode::Sdr, pq));
++        assert!(hdr10_requested_for_source(OutputMode::auto(4.0), pq));
++        assert!(!hdr10_requested_for_source(OutputMode::auto(1.0), pq));
++        let sdr = SourceColorState::new(ColorPrimaries::Bt709, TransferFunction::Srgb);
++        assert!(!hdr10_requested_for_source(OutputMode::auto(4.0), sdr));
++    }
++
++    #[test]
++    fn hdr10_requires_an_active_hdr_desktop_output() {
++        let mut desc = DXGI_OUTPUT_DESC1 {
++            AttachedToDesktop: true.into(),
++            BitsPerColor: 10,
++            ColorSpace: DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709,
++            ..Default::default()
++        };
++        // A 10-bit output alone does not establish HDR; Windows may be in SDR.
++        assert!(!display_hdr10_active(Some(&desc)));
++        assert!(!display_hdr10_active(None));
++        desc.ColorSpace = DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
++        assert!(display_hdr10_active(Some(&desc)));
++        desc.AttachedToDesktop = false.into();
++        assert!(!display_hdr10_active(Some(&desc)));
++    }
++
++    #[test]
++    fn sdr_dxgi_defaults_do_not_change_video_white() {
++        let desc = DXGI_OUTPUT_DESC1 {
++            AttachedToDesktop: true.into(),
++            ColorSpace: DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709,
++            MaxLuminance: 80.0,
++            MaxFullFrameLuminance: 80.0,
++            ..Default::default()
++        };
++        let display = DisplayLuminance::from_output(Some(&desc), Some(80.0));
++        let source = SourceColorState::new(ColorPrimaries::Bt2020, TransferFunction::Pq);
++        let target = display.target(D3d11OutputMode::Sdr, source);
++        assert_eq!(
++            (target.peak_nits, target.reference_white_nits),
++            (100.0, 100.0)
++        );
++        assert!(!display.hdr_peak_known);
++        assert!(!display.sdr_white_known);
++        assert_eq!(
++            constants_for_frame(source, D3d11VideoTextureFormat::P010, target).tone_map,
++            4
++        );
++    }
++
++    #[test]
++    fn hdr_luminance_uses_display_peak_and_windows_white() {
++        let mut desc = DXGI_OUTPUT_DESC1 {
++            AttachedToDesktop: true.into(),
++            ColorSpace: DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020,
++            MaxLuminance: 600.0,
++            ..Default::default()
++        };
++        let source = SourceColorState::new(ColorPrimaries::Bt2020, TransferFunction::Pq);
++        let display = DisplayLuminance::from_output(Some(&desc), Some(200.0));
++        let hdr = display.target(D3d11OutputMode::Hdr10, source);
++        let sdr = display.target(D3d11OutputMode::Sdr, source);
++        assert_eq!(
++            (hdr.peak_nits, hdr.reference_white_nits, hdr.edr_headroom),
++            (600.0, 200.0, 3.0)
++        );
++        assert_eq!((sdr.peak_nits, sdr.reference_white_nits), (200.0, 200.0));
++        assert_eq!(
++            constants_for_frame(source, D3d11VideoTextureFormat::P010, hdr).tone_map,
++            3
++        );
++        desc.MaxLuminance = f32::NAN;
++        let fallback = DisplayLuminance::from_output(Some(&desc), Some(f32::INFINITY));
++        assert!(!fallback.hdr_peak_known && !fallback.sdr_white_known);
++        assert!(fallback.hdr_peak_nits.is_finite() && fallback.sdr_white_nits.is_finite());
++        let ordinary_sdr = SourceColorState::new(ColorPrimaries::Bt709, TransferFunction::Srgb);
++        let target = display.target(D3d11OutputMode::Sdr, ordinary_sdr);
++        assert_eq!(
++            (target.peak_nits, target.reference_white_nits),
++            (100.0, 100.0)
++        );
++        assert_eq!(
++            constants_for_frame(ordinary_sdr, D3d11VideoTextureFormat::Nv12, target).tone_map,
++            0
++        );
++    }
++
++    #[test]
++    fn hdr_to_sdr_shader_preserves_gray_steps_and_color_ratios() {
++        use ::windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_WARP;
++        use ::windows::Win32::Graphics::Direct3D11::{
++            D3D11_CPU_ACCESS_READ, D3D11_MAP_READ, D3D11_MAPPED_SUBRESOURCE, D3D11_USAGE_STAGING,
++        };
++        use ::windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_R32G32B32A32_FLOAT;
++        // Execute the actual compiled mapping/output shader on an offscreen
++        // WARP target. Independent f64 BT.2446A reference values below exercise
++        // grayscale separation; the final colored swatch checks uniform gain.
++        let mut source = SHADER_SOURCE.to_vec();
++        source.extend_from_slice(
++            br#"
++float4 mapping_probe(VsOut v) : SV_Target {
++    float values[10] = {0.0, 50.0, 100.0, 203.0, 300.0, 400.0, 600.0, 800.0, 1000.0, 400.0};
++    uint i = min((uint)v.position.x, 9u);
++    float3 input = values[i].xxx;
++    if (i == 9u) input *= float3(1.0, 0.5, 0.25);
++    float3 mapped = tone_map_nits(input);
++    return float4(target_reference_linear_to_output(target_nits_to_reference_linear(mapped)), 1.0);
++}
++"#,
++        );
++        let probe = compile_shader_source(&source, "mapping_probe", "ps_4_0").unwrap();
++        let (mut device, mut context) = (None, None);
++        unsafe {
++            D3D11CreateDevice(
++                None,
++                D3D_DRIVER_TYPE_WARP,
++                HMODULE::default(),
++                D3D11_CREATE_DEVICE_BGRA_SUPPORT,
++                Some(&[D3D_FEATURE_LEVEL_11_0]),
++                D3D11_SDK_VERSION,
++                Some(&mut device),
++                None,
++                Some(&mut context),
++            )
++            .unwrap();
++        }
++        let state = D3d11DeviceState::new(device.unwrap(), context.unwrap()).unwrap();
++        let mut shader = None;
++        let mut texture = None;
++        let desc = D3D11_TEXTURE2D_DESC {
++            Width: 10,
++            Height: 1,
++            MipLevels: 1,
++            ArraySize: 1,
++            Format: DXGI_FORMAT_R32G32B32A32_FLOAT,
++            SampleDesc: DXGI_SAMPLE_DESC {
++                Count: 1,
++                Quality: 0,
++            },
++            Usage: D3D11_USAGE_DEFAULT,
++            BindFlags: D3D11_BIND_RENDER_TARGET.0 as u32,
++            ..Default::default()
++        };
++        unsafe {
++            state
++                .device
++                .CreatePixelShader(blob_bytes(&probe), None, Some(&mut shader))
++                .unwrap();
++            state
++                .device
++                .CreateTexture2D(&desc, None, Some(&mut texture))
++                .unwrap();
++        }
++        let texture = texture.unwrap();
++        let mut target = None;
++        unsafe {
++            state
++                .device
++                .CreateRenderTargetView(&texture, None, Some(&mut target))
++                .unwrap();
++        }
++        let common = constants_for_frame(
++            SourceColorState::new(ColorPrimaries::Bt2020, TransferFunction::Pq),
++            D3d11VideoTextureFormat::P010,
++            TargetColorState::sdr(ColorPrimaries::Bt709),
++        );
++        let constants = D3d11VideoConstants {
++            common,
++            texture_scales: [1.0; 4],
++        };
++        let vertices = video_vertices(D3d11TexRect::FULL);
++        let stride = mem::size_of::<VideoVertex>() as u32;
++        let offset = 0;
++        unsafe {
++            state.context.UpdateSubresource(
++                &state.constants,
++                0,
++                None,
++                &constants as *const _ as *const c_void,
++                0,
++                0,
++            );
++            state.context.UpdateSubresource(
++                &state.vertex_buffer,
++                0,
++                None,
++                vertices.as_ptr() as *const c_void,
++                0,
++                0,
++            );
++            state.context.RSSetViewports(Some(&[D3D11_VIEWPORT {
++                Width: 10.0,
++                Height: 1.0,
++                MinDepth: 0.0,
++                MaxDepth: 1.0,
++                ..Default::default()
++            }]));
++            state
++                .context
++                .IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
++            state.context.IASetInputLayout(&state.input_layout);
++            state.context.IASetVertexBuffers(
++                0,
++                1,
++                Some(&Some(state.vertex_buffer.clone())),
++                Some(&stride),
++                Some(&offset),
++            );
++            state.context.VSSetShader(&state.vertex_shader, None);
++            state.context.PSSetShader(&shader.unwrap(), None);
++            state
++                .context
++                .PSSetConstantBuffers(0, Some(&[Some(state.constants.clone())]));
++            state.context.OMSetRenderTargets(Some(&[target]), None);
++            state.context.Draw(6, 0);
++            state.context.OMSetRenderTargets(None, None);
++        }
++        let mut readback = None;
++        let staging = D3D11_TEXTURE2D_DESC {
++            Usage: D3D11_USAGE_STAGING,
++            BindFlags: 0,
++            CPUAccessFlags: D3D11_CPU_ACCESS_READ.0 as u32,
++            ..desc
++        };
++        let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
++        unsafe {
++            state
++                .device
++                .CreateTexture2D(&staging, None, Some(&mut readback))
++                .unwrap();
++            state
++                .context
++                .CopyResource(readback.as_ref().unwrap(), &texture);
++            state
++                .context
++                .Map(
++                    readback.as_ref().unwrap(),
++                    0,
++                    D3D11_MAP_READ,
++                    0,
++                    Some(&mut mapped),
++                )
++                .unwrap();
++        }
++        let pixels = unsafe { std::slice::from_raw_parts(mapped.pData as *const f32, 40) }.to_vec();
++        unsafe {
++            state.context.Unmap(readback.as_ref().unwrap(), 0);
++        }
++        let reference_nits: [f32; 9] = [
++            0.0, 12.64842, 22.663416, 40.595345, 53.74323, 64.4562, 80.35747, 91.612206, 100.0,
++        ];
++        let mut codes = Vec::new();
++        for (i, nits) in reference_nits.into_iter().enumerate() {
++            let expected = (nits / 100.0).powf(1.0 / 2.2);
++            assert!(
++                (pixels[i * 4] - expected).abs() < 0.0005,
++                "band {i}: {} != {expected}",
++                pixels[i * 4]
++            );
++            assert!((pixels[i * 4] - pixels[i * 4 + 1]).abs() < 0.00001);
++            assert!((pixels[i * 4] - pixels[i * 4 + 2]).abs() < 0.00001);
++            codes.push((pixels[i * 4] * 255.0).round() as u32);
++        }
++        assert!(
++            codes.windows(2).all(|w| w[0] < w[1]),
++            "gray codes: {codes:?}"
++        );
++        let colored: Vec<f32> = pixels[36..39].iter().map(|v| v.powf(2.2)).collect();
++        assert!((colored[1] / colored[0] - 0.5).abs() < 0.0005);
++        assert!((colored[2] / colored[0] - 0.25).abs() < 0.0005);
++        eprintln!("BT2446A offscreen gray codes: {codes:?}");
++    }
++
++    #[test]
++    fn pq_to_sdr_enables_tone_mapping_and_sdr_encoding() {
++        let source = SourceColorState::new(ColorPrimaries::Bt2020, TransferFunction::Pq);
++        let target = D3d11OutputMode::Sdr.target_color();
++        let uniforms =
++            VideoUniforms::from_pipeline(&VideoRenderPipeline::new(source, target), true, false);
++        assert_ne!(uniforms.tone_map, 0);
++        assert_eq!(target.transfer, TransferFunction::Srgb);
++        assert_eq!(target.primaries, ColorPrimaries::Bt709);
++        assert_eq!(uniforms.edr_output, 0);
+     }
+ 
+     #[test]
+diff --git a/examples/windows_native_demo/src/main.rs b/examples/windows_native_demo/src/main.rs
+index 61f97b619df262aee9c2f90026f466fad6b856aa..cfec670a75d5f87bef03ffa8cf7b4ba046561666 100644
+--- a/examples/windows_native_demo/src/main.rs
++++ b/examples/windows_native_demo/src/main.rs
+@@ -44,6 +44,8 @@ mod windows_demo {
+         danmaku_path: Option<String>,
+         synthetic_danmaku_rate: Option<f64>,
+         renderer: RendererBackendPreference,
++        output_mode: erika::renderer::output::OutputMode,
++        frame_at: Option<f64>,
+     }
+ 
+     #[derive(Debug, Default)]
+@@ -89,6 +91,9 @@ mod windows_demo {
+ 
+         if let Some(media) = options.media.clone() {
+             presenter.open(MediaRequest::new(media))?;
++            if let Some(position) = options.frame_at {
++                presenter.seek(Duration::from_secs_f64(position))?;
++            }
+             presenter.play()?;
+         }
+ 
+@@ -98,6 +103,7 @@ mod windows_demo {
+         let mut last_title_update = Instant::now() - TITLE_UPDATE_INTERVAL;
+         let mut metrics = SmokeMetrics::default();
+         let mut running = true;
++        let mut frame_frozen = false;
+         while running {
+             let (next_running, commands) = pump_messages();
+             running = next_running;
+@@ -113,6 +119,18 @@ mod windows_demo {
+                 presenter.resize_surface(width, height, scale)?;
+             }
+             presenter.render_tick(start.elapsed().as_secs_f64())?;
++            if options.frame_at.is_some()
++                && !frame_frozen
++                && presenter.runtime_snapshot().stats.decoded_video_frames > 0
++            {
++                presenter.pause()?;
++                frame_frozen = true;
++                println!(
++                    "erika_still_frame requested={:.6} media_time={:.6}",
++                    options.frame_at.unwrap(),
++                    presenter.runtime_snapshot().media_time.as_secs_f64()
++                );
++            }
+             metrics.record(&presenter);
+             log_metrics_if_due(
+                 metrics_log.as_mut(),
+@@ -146,9 +164,34 @@ mod windows_demo {
+         let mut danmaku_path = None;
+         let mut synthetic_danmaku_rate = None;
+         let mut renderer = RendererBackendPreference::PlatformNative;
++        let mut output_mode = erika::renderer::output::OutputMode::auto(10_000.0 / 203.0);
++        let mut frame_at = None;
+         let mut args = std::env::args().skip(1);
+         while let Some(arg) = args.next() {
+             match arg.as_str() {
++                "--frame-at" => {
++                    let value = args
++                        .next()
++                        .and_then(|value| value.parse::<f64>().ok())
++                        .filter(|value| value.is_finite() && *value >= 0.0)
++                        .ok_or_else(|| {
++                            erika::PlayerError::Renderer(
++                                "--frame-at requires finite nonnegative seconds".to_string(),
++                            )
++                        })?;
++                    frame_at = Some(value);
++                }
++                "--output-mode" => {
++                    output_mode = match args.next().as_deref() {
++                        Some("auto") => erika::renderer::output::OutputMode::auto(10_000.0 / 203.0),
++                        Some("sdr") => erika::renderer::output::OutputMode::Sdr,
++                        _ => {
++                            return Err(erika::PlayerError::Renderer(
++                                "--output-mode requires auto or sdr".to_string(),
++                            ));
++                        }
++                    };
++                }
+                 "--smoke-seconds" => {
+                     let value = args.next().ok_or_else(|| {
+                         erika::PlayerError::Renderer("--smoke-seconds requires a value".to_string())
+@@ -204,12 +247,15 @@ mod windows_demo {
+             danmaku_path,
+             synthetic_danmaku_rate,
+             renderer,
++            output_mode,
++            frame_at,
+         })
+     }
+ 
+     fn presenter_config(options: &DemoOptions) -> erika::Result<PresenterConfig> {
+         let mut config = PresenterConfig::default();
+         config.player.renderer = options.renderer;
++        config.renderer.output_mode = options.output_mode;
+         config.danmaku = load_danmaku_timeline(options)?;
+         config.danmaku_config.font_size = 28.0;
+         config.danmaku_config.display_area = 0.85;
+@@ -265,7 +311,7 @@ mod windows_demo {
+     unsafe fn create_window() -> erika::Result<HWND> {
+         let hinstance = unsafe { GetModuleHandleW(ptr::null()) };
+         let class_name = wide("ErikaWindowsNativeDemo");
+-        let title = wide("Erika Windows Native Demo");
++        let title = wide("Erika Windows HDR Fix 2026-11-15");
+         let window_class = WNDCLASSW {
+             style: CS_HREDRAW | CS_VREDRAW,
+             lpfnWndProc: Some(wndproc),
+@@ -367,7 +413,7 @@ mod windows_demo {
+         let snapshot = presenter.runtime_snapshot();
+         let duration = snapshot.media_time.as_secs_f64().max(0.0);
+         let title = format!(
+-            "Erika Windows Native Demo  t={duration:.2}s  sw={} hw={} zero={} direct={} shared={} cpu={} hdr10={} hdr_src={} sdr_tm={} audio_q={} underflow={}",
++            "Erika Windows HDR Fix 2026-11-15  t={duration:.2}s  sw={} hw={} zero={} direct={} shared={} cpu={} hdr10={} hdr_src={} sdr_tm={} audio_q={} underflow={}",
+             snapshot.renderer.software_video_frames,
+             snapshot.renderer.hardware_video_frames,
+             snapshot.renderer.zero_copy_video_frames,

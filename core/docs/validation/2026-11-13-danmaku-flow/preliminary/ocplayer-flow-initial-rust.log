@@ -1,0 +1,79 @@
+   Compiling ocp-danmaku v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-danmaku)
+warning: unused import: `Serialize`
+  --> crates/ocp-danmaku/src/flow.rs:10:26
+   |
+10 | use serde::{Deserialize, Serialize};
+   |                          ^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+error[E0599]: `std::option::Option<i64>` doesn't implement `std::fmt::Display`
+    --> crates/ocp-danmaku/src/flow.rs:240:25
+     |
+ 240 |             vec![Some(n.to_string()), None]
+     |                         ^^^^^^^^^ method cannot be called on `std::option::Option<i64>` due to unsatisfied trait bounds
+     |
+    ::: /opt/homebrew/Cellar/rust/1.99.1/lib/rustlib/src/rust/library/core/src/option.rs:598:1
+     |
+ 598 | pub enum Option<T> {
+     | ------------------ doesn't satisfy `std::option::Option<i64>: ToString` or `std::option::Option<i64>: std::fmt::Display`
+     |
+     = note: the following trait bounds were not satisfied:
+             `std::option::Option<i64>: std::fmt::Display`
+             which is required by `std::option::Option<i64>: ToString`
+note: the method `to_string` exists on the type `i64`
+    --> /opt/homebrew/Cellar/rust/1.99.1/lib/rustlib/src/rust/library/alloc/src/string.rs:2917:5
+     |
+2917 |     fn to_string(&self) -> String;
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: consider using `Option::expect` to unwrap the `i64` value, panicking if the value is an `Option::None`
+     |
+ 240 |             vec![Some(n.expect("REASON").to_string()), None]
+     |                        +++++++++++++++++
+
+error[E0308]: mismatched types
+   --> crates/ocp-danmaku/src/flow.rs:391:30
+    |
+391 |             self.select_hint(hint);
+    |                  ----------- ^^^^ expected `IntroHint`, found `Option<IntroHint>`
+    |                  |
+    |                  arguments to this method are incorrect
+    |
+    = note: expected struct `IntroHint`
+                 found enum `std::option::Option<IntroHint>`
+note: method defined here
+   --> crates/ocp-danmaku/src/flow.rs:369:8
+    |
+369 |     fn select_hint(&mut self, hint: IntroHint) {
+    |        ^^^^^^^^^^^            ---------------
+help: consider using `Option::expect` to unwrap the `std::option::Option<IntroHint>` value, panicking if the value is an `Option::None`
+    |
+391 |             self.select_hint(hint.expect("REASON"));
+    |                                  +++++++++++++++++
+
+warning: irrefutable `if let` pattern
+   --> crates/ocp-danmaku/src/flow.rs:375:16
+    |
+375 |             if let id = self.anime_id() {
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this pattern will always match, so the `if let` is useless
+    = help: consider replacing the `if let` with a `let`
+    = note: `#[warn(irrefutable_let_patterns)]` on by default
+
+warning: irrefutable `if let` pattern
+   --> crates/ocp-danmaku/src/flow.rs:383:12
+    |
+383 |         if let id = self.anime_id() {
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: this pattern will always match, so the `if let` is useless
+    = help: consider replacing the `if let` with a `let`
+
+Some errors have detailed explanations: E0308, E0599.
+For more information about an error, try `rustc --explain E0308`.
+warning: `ocp-danmaku` (lib test) generated 3 warnings (2 duplicates)
+error: could not compile `ocp-danmaku` (lib test) due to 2 previous errors; 3 warnings emitted
+warning: build failed, waiting for other jobs to finish...
+warning: `ocp-danmaku` (lib) generated 3 warnings (1 duplicate)
+error: could not compile `ocp-danmaku` (lib) due to 2 previous errors; 3 warnings emitted

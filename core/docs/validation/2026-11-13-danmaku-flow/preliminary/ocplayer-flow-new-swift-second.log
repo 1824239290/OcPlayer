@@ -1,0 +1,23 @@
+Building for debugging...
+[Using on-disk description]
+[2 / 13] DanmakuKitTests-product
+[4 / 15] DanmakuKitTests-product
+[10 / 14] DanmakuKitTests-product
+Build complete! (1.35秒)
+Test Suite 'Selected tests' started at 2026-11-13 23:37:25.870.
+Test Suite 'DanmakuKitTests.xctest' started at 2026-11-13 23:37:25.871.
+Test Suite 'RustDanmakuFlowTests' started at 2026-11-13 23:37:25.871.
+Test Case '-[DanmakuKitTests.RustDanmakuFlowTests testCancelAfterInjectionDoesNotResolveIDsOrPersistIntro]' started.
+Test Case '-[DanmakuKitTests.RustDanmakuFlowTests testCancelAfterInjectionDoesNotResolveIDsOrPersistIntro]' passed (0.032 seconds).
+Test Case '-[DanmakuKitTests.RustDanmakuFlowTests testManualAndCachedAutomaticMatchNativeControlFlow]' started.
+Test Case '-[DanmakuKitTests.RustDanmakuFlowTests testManualAndCachedAutomaticMatchNativeControlFlow]' passed (0.028 seconds).
+Test Case '-[DanmakuKitTests.RustDanmakuFlowTests testProductionRenderMatchesNativeNumericUnicodeAndStableOrdering]' started.
+Test Case '-[DanmakuKitTests.RustDanmakuFlowTests testProductionRenderMatchesNativeNumericUnicodeAndStableOrdering]' passed (0.253 seconds).
+Test Case '-[DanmakuKitTests.RustDanmakuFlowTests testRevisionChangeDuringReadyCannotInjectIntoSamePlaybackUUID]' started.
+Test Case '-[DanmakuKitTests.RustDanmakuFlowTests testRevisionChangeDuringReadyCannotInjectIntoSamePlaybackUUID]' passed (0.014 seconds).
+Test Suite 'RustDanmakuFlowTests' passed at 2026-11-13 23:37:26.198.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.327 (0.327) seconds
+Test Suite 'DanmakuKitTests.xctest' passed at 2026-11-13 23:37:26.198.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.327 (0.327) seconds
+Test Suite 'Selected tests' passed at 2026-11-13 23:37:26.198.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.327 (0.328) seconds

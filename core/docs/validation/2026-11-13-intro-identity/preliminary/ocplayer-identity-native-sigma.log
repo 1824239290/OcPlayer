@@ -1,0 +1,28 @@
+Building for debugging...
+[Using on-disk description]
+Build complete! (0.33秒)
+Test Suite 'Selected tests' started at 2026-11-13 23:08:27.613.
+Test Suite 'DanmakuKitTests.xctest' started at 2026-11-13 23:08:27.614.
+Test Suite 'RustIntroIdentityTests' started at 2026-11-13 23:08:27.614.
+Test Case '-[DanmakuKitTests.RustIntroIdentityTests testBestMatchAgainstNativeAtGraphemeAndIDBoundaries]' started.
+Test Case '-[DanmakuKitTests.RustIntroIdentityTests testBestMatchAgainstNativeAtGraphemeAndIDBoundaries]' passed (0.251 seconds).
+Test Case '-[DanmakuKitTests.RustIntroIdentityTests testCancelStoredResolutionDoesNotWriteNegativeCache]' started.
+Test Case '-[DanmakuKitTests.RustIntroIdentityTests testCancelStoredResolutionDoesNotWriteNegativeCache]' passed (0.088 seconds).
+Test Case '-[DanmakuKitTests.RustIntroIdentityTests testCompleteNetworkResolverMatchesNativeOrderedFlow]' started.
+Test Case '-[DanmakuKitTests.RustIntroIdentityTests testCompleteNetworkResolverMatchesNativeOrderedFlow]' passed (0.072 seconds).
+Test Case '-[DanmakuKitTests.RustIntroIdentityTests testNativeAndCoreStoreInteroperabilityAndCachedEmptyRepair]' started.
+Test Case '-[DanmakuKitTests.RustIntroIdentityTests testNativeAndCoreStoreInteroperabilityAndCachedEmptyRepair]' passed (0.012 seconds).
+Test Case '-[DanmakuKitTests.RustIntroIdentityTests testPlanSevenDayBoundaryDirectAndPositiveZeroID]' started.
+Test Case '-[DanmakuKitTests.RustIntroIdentityTests testPlanSevenDayBoundaryDirectAndPositiveZeroID]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.RustIntroIdentityTests testSearchTitlesAndSHAKeysMatchNativeUnicodeRules]' started.
+Test Case '-[DanmakuKitTests.RustIntroIdentityTests testSearchTitlesAndSHAKeysMatchNativeUnicodeRules]' passed (0.186 seconds).
+Test Case '-[DanmakuKitTests.RustIntroIdentityTests testStoredResolverActivationCacheForceAndPostRequestClock]' started.
+Test Case '-[DanmakuKitTests.RustIntroIdentityTests testStoredResolverActivationCacheForceAndPostRequestClock]' passed (2.097 seconds).
+Test Case '-[DanmakuKitTests.RustIntroIdentityTests testStoreWritesThroughMemoryWhenAtomicWriteFails]' started.
+Test Case '-[DanmakuKitTests.RustIntroIdentityTests testStoreWritesThroughMemoryWhenAtomicWriteFails]' passed (0.009 seconds).
+Test Suite 'RustIntroIdentityTests' passed at 2026-11-13 23:08:30.331.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 2.716 (2.717) seconds
+Test Suite 'DanmakuKitTests.xctest' passed at 2026-11-13 23:08:30.331.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 2.716 (2.717) seconds
+Test Suite 'Selected tests' passed at 2026-11-13 23:08:30.331.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 2.716 (2.718) seconds

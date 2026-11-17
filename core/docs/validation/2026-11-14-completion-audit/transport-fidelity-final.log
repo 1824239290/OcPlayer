@@ -1,0 +1,12 @@
+test_all_codings_decode_as_native_and_keep_raw_headers (__main__.TransportFidelity.test_all_codings_decode_as_native_and_keep_raw_headers) ... ok
+test_bad_compressed_body_is_not_replayed (__main__.TransportFidelity.test_bad_compressed_body_is_not_replayed) ... ok
+test_compressed_sse_delivers_events_before_the_body_finishes (__main__.TransportFidelity.test_compressed_sse_delivers_events_before_the_body_finishes) ... ok
+test_json_domain_decoding_and_probe_share_the_decompressor (__main__.TransportFidelity.test_json_domain_decoding_and_probe_share_the_decompressor) ... ok
+test_moviepilot_permission_map_is_an_ignored_native_extension (__main__.TransportFidelity.test_moviepilot_permission_map_is_an_ignored_native_extension) ... ok
+test_native_rejected_encoding_chains_fail_without_replay (__main__.TransportFidelity.test_native_rejected_encoding_chains_fail_without_replay) ... ok
+test_same_origin_redirect_preserves_decoded_reply (__main__.TransportFidelity.test_same_origin_redirect_preserves_decoded_reply) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 5.797s
+
+OK

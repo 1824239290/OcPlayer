@@ -1,0 +1,216 @@
+{"mode":"real","checks":31,"contracts":3,"passed":["real Core: business API, exact integers, cancellation, reused IDs, events and surface lifecycle","real Core playback lifecycle, retained settings and validation","Windows hidden HWND adapter lifecycle and ordered Core events (metadata only)"],"windowsRuntimeTested":true,"operatingSystem":"Microsoft Windows 10.0.26300","architecture":"X64"}
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 53884)
+Traceback (most recent call last):
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\http\server.py", line 440, in handle
+    self.handle_one_request()
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\http\server.py", line 428, in handle_one_request
+    method()
+  File "D:\OcPlayer-Core\tests\windows-sdk\run_contracts.py", line 26, in do_GET
+    super().do_GET()
+  File "D:\OcPlayer-Core\tests\network_contract.py", line 46, in do_GET
+    return self.respond({'Id': 'fixture', 'ServerName': 'fixture', 'ProductName': 'Jellyfin', 'Version': '1'})
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\OcPlayer-Core\tests\network_contract.py", line 37, in respond
+    self.wfile.write(body)
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 845, in write
+    self._sock.sendall(b)
+ConnectionAbortedError: [WinError 10053] ��������е�������ֹ��һ���ѽ��������ӡ�
+----------------------------------------
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 53904)
+Traceback (most recent call last):
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\http\server.py", line 440, in handle
+    self.handle_one_request()
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\http\server.py", line 428, in handle_one_request
+    method()
+  File "D:\OcPlayer-Core\tests\danmaku_server.py", line 41, in do_GET
+    self.handle_gateway()
+  File "D:\OcPlayer-Core\tests\danmaku_server.py", line 38, in handle_gateway
+    self.respond(result,headers={'X-Gateway-Cache':'HIT'})
+  File "D:\OcPlayer-Core\tests\danmaku_server.py", line 17, in respond
+    try: self.wfile.write(body)
+         ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 845, in write
+    self._sock.sendall(b)
+ConnectionAbortedError: [WinError 10053] ��������е�������ֹ��һ���ѽ��������ӡ�
+----------------------------------------
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 61610)
+Traceback (most recent call last):
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\http\server.py", line 440, in handle
+    self.handle_one_request()
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\http\server.py", line 428, in handle_one_request
+    method()
+  File "D:\OcPlayer-Core\tests\danmaku_server.py", line 41, in do_GET
+    self.handle_gateway()
+  File "D:\OcPlayer-Core\tests\danmaku_server.py", line 38, in handle_gateway
+    self.respond(result,headers={'X-Gateway-Cache':'HIT'})
+  File "D:\OcPlayer-Core\tests\danmaku_server.py", line 17, in respond
+    try: self.wfile.write(body)
+         ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 845, in write
+    self._sock.sendall(b)
+ConnectionAbortedError: [WinError 10053] ��������е�������ֹ��һ���ѽ��������ӡ�
+----------------------------------------
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 51273)
+Traceback (most recent call last):
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+  File "D:\OcPlayer-Core\tests\intro_provider_server.py", line 13, in handle
+    super().handle()
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\http\server.py", line 440, in handle
+    self.handle_one_request()
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\http\server.py", line 428, in handle_one_request
+    method()
+  File "D:\OcPlayer-Core\tests\intro_provider_server.py", line 104, in handle_provider
+    return self.respond({'data': {'Page': {'media': media}}})
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\OcPlayer-Core\tests\intro_provider_server.py", line 30, in respond
+    self.wfile.write(body)
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 845, in write
+    self._sock.sendall(b)
+ConnectionAbortedError: [WinError 10053] ��������е�������ֹ��һ���ѽ��������ӡ�
+----------------------------------------
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 49580)
+Traceback (most recent call last):
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+  File "D:\OcPlayer-Core\tests\intro_provider_server.py", line 13, in handle
+    super().handle()
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\http\server.py", line 440, in handle
+    self.handle_one_request()
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\http\server.py", line 428, in handle_one_request
+    method()
+  File "D:\OcPlayer-Core\tests\intro_provider_server.py", line 57, in handle_provider
+    return self.respond({'found': True, 'results': [
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\OcPlayer-Core\tests\intro_provider_server.py", line 30, in respond
+    self.wfile.write(body)
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 845, in write
+    self._sock.sendall(b)
+ConnectionAbortedError: [WinError 10053] ��������е�������ֹ��һ���ѽ��������ӡ�
+----------------------------------------
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 49581)
+Traceback (most recent call last):
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+  File "D:\OcPlayer-Core\tests\intro_provider_server.py", line 13, in handle
+    super().handle()
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\http\server.py", line 440, in handle
+    self.handle_one_request()
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\http\server.py", line 428, in handle_one_request
+    method()
+  File "D:\OcPlayer-Core\tests\intro_provider_server.py", line 57, in handle_provider
+    return self.respond({'found': True, 'results': [
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\OcPlayer-Core\tests\intro_provider_server.py", line 30, in respond
+    self.wfile.write(body)
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 845, in write
+    self._sock.sendall(b)
+ConnectionAbortedError: [WinError 10053] ��������е�������ֹ��һ���ѽ��������ӡ�
+----------------------------------------
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 53856)
+Traceback (most recent call last):
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\http\server.py", line 440, in handle
+    self.handle_one_request()
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\http\server.py", line 428, in handle_one_request
+    method()
+  File "D:\OcPlayer-Core\tests\moviepilot_contract.py", line 49, in do_GET
+    return self.respond(status=status, raw=bytes(range(256)) * 100,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\OcPlayer-Core\tests\moviepilot_contract.py", line 34, in respond
+    self.wfile.write(body)
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 845, in write
+    self._sock.sendall(b)
+ConnectionAbortedError: [WinError 10053] ��������е�������ֹ��һ���ѽ��������ӡ�
+----------------------------------------
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 53862)
+Traceback (most recent call last):
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\http\server.py", line 440, in handle
+    self.handle_one_request()
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\http\server.py", line 428, in handle_one_request
+    method()
+  File "D:\OcPlayer-Core\tests\network_contract.py", line 79, in do_GET
+    return self.respond({'unknown': [0, False]})
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\OcPlayer-Core\tests\network_contract.py", line 37, in respond
+    self.wfile.write(body)
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 845, in write
+    self._sock.sendall(b)
+ConnectionAbortedError: [WinError 10053] ��������е�������ֹ��һ���ѽ��������ӡ�
+----------------------------------------
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 55034)
+Traceback (most recent call last):
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\http\server.py", line 442, in handle
+    self.handle_one_request()
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\http\server.py", line 428, in handle_one_request
+    method()
+  File "D:\OcPlayer-Core\tests\standalone_danmaku_server.py", line 84, in do_GET
+    def do_GET(self): self.handle_request()
+                      ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\OcPlayer-Core\tests\standalone_danmaku_server.py", line 82, in handle_request
+    return self.respond({'count': 6, 'comments': comments})
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\OcPlayer-Core\tests\standalone_danmaku_server.py", line 17, in respond
+    try: self.wfile.write(body)
+         ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\15199\AppData\Local\Programs\DeepSeek Harness\resources\runtime\primary-runtime\dependencies\python\Lib\socketserver.py", line 845, in write
+    self._sock.sendall(b)
+ConnectionAbortedError: [WinError 10053] ��������е�������ֹ��һ���ѽ��������ӡ�
+----------------------------------------
+{"platform": "Windows-11-10.0.26300-SP0", "architecture": "AMD64", "python": "3.12.14", "library": "D:\\OcPlayer-Core\\target\\debug\\ocp_ffi.dll", "librarySha256": "da76837da70a31974d14de8ec154562e192e3d5442001b673f15eff03d1580a0", "sdk": {"mode": "real", "checks": 31, "contracts": 3, "passed": ["real Core: business API, exact integers, cancellation, reused IDs, events and surface lifecycle", "real Core playback lifecycle, retained settings and validation", "Windows hidden HWND adapter lifecycle and ordered Core events (metadata only)"], "windowsRuntimeTested": true, "operatingSystem": "Microsoft Windows 10.0.26300", "architecture": "X64"}, "abi": {"executed": 218, "passed": 216, "failures": 0, "errors": 0, "skipped": [{"test": "test_all_codings_decode_as_native_and_keep_raw_headers (transport_fidelity_contract.TransportFidelity.test_all_codings_decode_as_native_and_keep_raw_headers)", "reason": "requires an independent Apple URLSession probe; Core transport tests still run"}, {"test": "test_native_rejected_encoding_chains_fail_without_replay (transport_fidelity_contract.TransportFidelity.test_native_rejected_encoding_chains_fail_without_replay)", "reason": "requires an independent Apple URLSession probe; Core transport tests still run"}]}, "seconds": 92.579}

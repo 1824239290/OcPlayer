@@ -1,0 +1,48 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Provisioning 45 / 47]
+[1 / 4] JellyfinAPI
+[2 / 5] JellyfinKit
+[3 / 6] JellyfinKit
+[7 / 9] JellyfinKit
+[10 / 11] JellyfinKitTests-product
+[12 / 12] JellyfinKitTests-product
+Build complete! (3.11秒)
+Test Suite 'Selected tests' started at 2026-11-14 13:10:48.244.
+Test Suite 'JellyfinKitTests.xctest' started at 2026-11-14 13:10:48.244.
+Test Suite 'PlaybackPreparationHTTPTests' started at 2026-11-14 13:10:48.244.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:31: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP] : failed - Unexpected fallback: DecodingError.dataCorrupted: Data was corrupted. Debug description: The given data was not valid JSON.. Underlying error: Error Domain=NSCocoaErrorDomain Code=3840 "Number 9.223372036854776e+18 is not representable in Swift." UserInfo={NSDebugDescription=Number 9.223372036854776e+18 is not representable in Swift.}
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:40: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("nil") is not equal to ("Optional("direct")")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:40: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("nil") is not equal to ("Optional("native-session")")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:41: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(9223372036854775807)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:41: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("nil") is not equal to ("Optional("/原盘/片.mkv")")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:42: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("Optional(7200.0)") is not equal to ("Optional(7200.25)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:42: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("nil") is not equal to ("Optional("HDR10")")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:43: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("[]") is not equal to ("["stream"]")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:43: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("nil") is not equal to ("Optional("stream")")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:46: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("nil") is not equal to ("Optional("direct")")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:46: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("nil") is not equal to ("Optional("native-session")")
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP]' failed (1.060 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:31: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP] : failed - Unexpected fallback: DecodingError.dataCorrupted: Data was corrupted. Debug description: The given data was not valid JSON.. Underlying error: Error Domain=NSCocoaErrorDomain Code=3840 "Number 9.223372036854776e+18 is not representable in Swift." UserInfo={NSDebugDescription=Number 9.223372036854776e+18 is not representable in Swift.}
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:40: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("nil") is not equal to ("Optional("direct")")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:40: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("nil") is not equal to ("Optional("native-session")")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:41: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(9223372036854775807)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:41: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("nil") is not equal to ("Optional("/原盘/片.mkv")")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:42: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("Optional(7200.0)") is not equal to ("Optional(7200.25)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:42: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("nil") is not equal to ("Optional("HDR10")")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:43: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("[]") is not equal to ("["stream"]")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:43: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("nil") is not equal to ("Optional("stream")")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:46: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("nil") is not equal to ("Optional("direct")")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:46: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("nil") is not equal to ("Optional("native-session")")
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP]' failed (0.141 seconds).
+Test Suite 'PlaybackPreparationHTTPTests' failed at 2026-11-14 13:10:49.446.
+	 Executed 2 tests, with 22 failures (0 unexpected) in 1.201 (1.201) seconds
+Test Suite 'JellyfinKitTests.xctest' failed at 2026-11-14 13:10:49.446.
+	 Executed 2 tests, with 22 failures (0 unexpected) in 1.201 (1.201) seconds
+Test Suite 'Selected tests' failed at 2026-11-14 13:10:49.446.
+	 Executed 2 tests, with 22 failures (0 unexpected) in 1.201 (1.202) seconds
+Note: Some test targets reported failures:
+  - JellyfinKitTests (XCTest)

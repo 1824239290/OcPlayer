@@ -1,0 +1,66 @@
+[selftest] start file=/tmp/ocp-repository-flow-eof.mp4
+[selftest] opening pos=0µs dur=0µs surface=false | 解码 10 · 渲染 20 · 硬解 10 · 软解 0 · 零拷贝 10 · 音频 21 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 30.8MB · drawables 3 · device 11.6MB
+进程 113.7MB · 峰值RSS 192.7MB · malloc 126.2MB
+[selftest] core=opening pos=0.0s rate=1.0 volume=0.4
+[selftest] playing pos=633333µs dur=5133333µs surface=true | 解码 22 · 渲染 50 · 硬解 22 · 软解 0 · 零拷贝 22 · 音频 40 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 30.8MB · drawables 3 · device 11.6MB
+进程 148.1MB · 峰值RSS 216.1MB · malloc 126.2MB
+[selftest] core=playing pos=0.0s rate=1.0 volume=0.4
+[selftest] playing pos=1166666µs dur=5133333µs surface=true | 解码 38 · 渲染 81 · 硬解 38 · 软解 0 · 零拷贝 38 · 音频 64 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 30.8MB · drawables 3 · device 11.6MB
+进程 147.9MB · 峰值RSS 216.3MB · malloc 126.2MB
+[selftest] core=playing pos=0.966666s rate=1.0 volume=0.4
+[selftest] playing pos=1666666µs dur=5133333µs surface=true | 解码 53 · 渲染 112 · 硬解 53 · 软解 0 · 零拷贝 53 · 音频 88 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 30.8MB · drawables 3 · device 11.6MB
+进程 147.6MB · 峰值RSS 217.6MB · malloc 126.2MB
+[selftest] core=playing pos=1.466666s rate=1.0 volume=0.4
+[selftest] playing pos=2166666µs dur=5133333µs surface=true | 解码 69 · 渲染 143 · 硬解 69 · 软解 0 · 零拷贝 69 · 音频 112 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 30.8MB · drawables 3 · device 11.6MB
+进程 159.8MB · 峰值RSS 241.7MB · malloc 134.2MB
+[selftest] core=playing pos=2.166666s rate=1.0 volume=0.4
+[selftest] playing pos=2566666µs dur=5133333µs surface=true | 解码 84 · 渲染 174 · 硬解 84 · 软解 0 · 零拷贝 84 · 音频 137 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 30.8MB · drawables 3 · device 11.6MB
+进程 157.4MB · 峰值RSS 241.7MB · malloc 134.2MB
+[selftest] core=playing pos=2.466666s rate=1.0 volume=0.4
+[selftest] playing pos=3200000µs dur=5133333µs surface=true | 解码 99 · 渲染 204 · 硬解 99 · 软解 0 · 零拷贝 99 · 音频 160 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 30.8MB · drawables 3 · device 11.6MB
+进程 154.8MB · 峰值RSS 241.7MB · malloc 134.2MB
+[selftest] core=playing pos=3.2s rate=1.0 volume=0.4
+[selftest] playing pos=3700000µs dur=5133333µs surface=true | 解码 115 · 渲染 235 · 硬解 115 · 软解 0 · 零拷贝 115 · 音频 184 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 30.8MB · drawables 3 · device 11.6MB
+进程 156.2MB · 峰值RSS 241.7MB · malloc 134.2MB
+[selftest] core=playing pos=3.7s rate=1.0 volume=0.4
+[selftest] playing pos=4233333µs dur=5133333µs surface=true | 解码 130 · 渲染 266 · 硬解 130 · 软解 0 · 零拷贝 130 · 音频 209 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 30.8MB · drawables 3 · device 11.6MB
+进程 155.4MB · 峰值RSS 241.7MB · malloc 134.2MB
+[selftest] core=playing pos=4.1s rate=1.0 volume=0.4
+[selftest] playing pos=4633333µs dur=5133333µs surface=true | 解码 146 · 渲染 297 · 硬解 146 · 软解 0 · 零拷贝 146 · 音频 233 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 30.8MB · drawables 3 · device 11.6MB
+进程 153.5MB · 峰值RSS 241.7MB · malloc 134.2MB
+[selftest] core=playing pos=4.633333s rate=1.0 volume=0.4
+[selftest] stopped pos=5100000µs dur=5133333µs surface=true | 解码 154 · 渲染 320 · 硬解 154 · 软解 0 · 零拷贝 154 · 音频 238 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 40.5MB · drawables 3 · device 63.4MB
+进程 156.5MB · 峰值RSS 241.7MB · malloc 134.2MB
+[selftest] core=ended pos=5.1s rate=1.0 volume=0.4
+[selftest] stopped pos=5100000µs dur=5133333µs surface=true | 解码 154 · 渲染 323 · 硬解 154 · 软解 0 · 零拷贝 154 · 音频 238 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 40.5MB · drawables 3 · device 63.4MB
+进程 156.7MB · 峰值RSS 241.7MB · malloc 134.2MB
+[selftest] core=ended pos=5.1s rate=1.0 volume=0.4
+[selftest] stopped pos=5100000µs dur=5133333µs surface=true | 解码 154 · 渲染 325 · 硬解 154 · 软解 0 · 零拷贝 154 · 音频 238 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 40.5MB · drawables 3 · device 63.4MB
+进程 156.6MB · 峰值RSS 241.7MB · malloc 134.2MB
+[selftest] core=ended pos=5.1s rate=1.0 volume=0.4
+[selftest] stopped pos=5100000µs dur=5133333µs surface=true | 解码 154 · 渲染 328 · 硬解 154 · 软解 0 · 零拷贝 154 · 音频 238 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 40.5MB · drawables 3 · device 63.4MB
+进程 154.9MB · 峰值RSS 241.7MB · malloc 134.2MB
+[selftest] core=ended pos=5.1s rate=1.0 volume=0.4
+[selftest] stopped pos=5100000µs dur=5133333µs surface=true | 解码 154 · 渲染 331 · 硬解 154 · 软解 0 · 零拷贝 154 · 音频 238 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 40.5MB · drawables 3 · device 63.4MB
+进程 154.8MB · 峰值RSS 241.7MB · malloc 134.2MB
+[selftest] core=ended pos=5.1s rate=1.0 volume=0.4
+[selftest] stopped pos=5100000µs dur=5133333µs surface=true | 解码 154 · 渲染 333 · 硬解 154 · 软解 0 · 零拷贝 154 · 音频 238 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 40.5MB · drawables 3 · device 63.4MB
+进程 154.7MB · 峰值RSS 241.7MB · malloc 134.2MB
+[selftest] core=ended pos=5.1s rate=1.0 volume=0.4
+[selftest] done

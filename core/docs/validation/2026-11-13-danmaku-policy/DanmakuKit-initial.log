@@ -1,0 +1,823 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Constructing description]
+[Planning deferred tasks]
+[1 / 1]
+[6 / 20] DanmakuKit
+[11 / 25] DanmakuKit
+[13 / 27] DanmakuKit
+[15 / 29] DanmakuKit
+[20 / 30] DanmakuKit
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Sources/DanmakuKit/DanmakuLoadOrchestrator.swift:128:26: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 126 |             try Task.checkCancellation()
+ 127 |             if forceRematch {
+ 128 |                 _ = try? await playback.clearDanmaku(uuid: matchContext.uuid)
+     |                          `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 129 |             }
+ 130 |             // 先无条件 claim（幂等，取 max）：isCurrent 依赖 claim 已存在。
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Sources/DanmakuKit/DanmakuLoadOrchestrator.swift:584:32: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 582 |             let accepted: Bool
+ 583 |             if payload.entries != nil || payload.json != nil {
+ 584 |                 accepted = try await playback.replaceDanmaku(
+     |                                `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 585 |                     uuid: uuid,
+ 586 |                     entries: payload.entries ?? [],
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Sources/DanmakuKit/DanmakuLoadOrchestrator.swift:592:32: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 590 |                 )
+ 591 |             } else {
+ 592 |                 accepted = try await playback.clearDanmaku(uuid: uuid)
+     |                                `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 593 |             }
+ 594 |             guard accepted else {
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[25 / 30] DanmakuKitTests-product
+[34 / 39] DanmakuKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuFieldsParseTests.swift:26:17: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+ 24 |     private func accepts(_ p: String, _ m: String = "正文") -> Bool {
+ 25 |         let comments = [DanmakuComment(cid: 1, p: p, m: m)]
+ 26 |         return (try? DanmakuJSONConverter.entries(from: comments))??.isEmpty == false
+    |                 `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+ 27 |     }
+ 28 | 
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/FileHashRangePolicyTests.swift:311:27: warning: capture of 'self' with non-Sendable type 'FileHashRangePolicyTests.DripBodyURLProtocol?' in a '@Sendable' closure [#SendableClosureCaptures]
+309 |             }
+310 |             DispatchQueue.global().asyncAfter(deadline: .now() + Self.interChunkDelay) { [weak self] in
+311 |                 guard let self else { return }
+    |                           `- warning: capture of 'self' with non-Sendable type 'FileHashRangePolicyTests.DripBodyURLProtocol?' in a '@Sendable' closure [#SendableClosureCaptures]
+312 |                 self.lock.lock()
+313 |                 let stopped = self.stopped
+
+Swift.Optional:1:21: note: generic enum 'Optional' does not conform to the 'Sendable' protocol
+1 | @frozen public enum Optional<Wrapped> : ~Copyable, ~Escapable where Wrapped : ~Copyable, Wrapped : ~Escapable {
+  |                     `- note: generic enum 'Optional' does not conform to the 'Sendable' protocol
+2 |     case none
+3 |     case some(Wrapped)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/FileHashRangePolicyTests.swift:378:27: warning: capture of 'self' with non-Sendable type 'FileHashRangePolicyTests.FloodBodyURLProtocol?' in a '@Sendable' closure [#SendableClosureCaptures]
+376 |             }
+377 |             DispatchQueue.global().asyncAfter(deadline: .now() + Self.interChunkDelay) { [weak self] in
+378 |                 guard let self else { return }
+    |                           `- warning: capture of 'self' with non-Sendable type 'FileHashRangePolicyTests.FloodBodyURLProtocol?' in a '@Sendable' closure [#SendableClosureCaptures]
+379 |                 self.lock.lock()
+380 |                 let stopped = self.stopped
+
+Swift.Optional:1:21: note: generic enum 'Optional' does not conform to the 'Sendable' protocol
+1 | @frozen public enum Optional<Wrapped> : ~Copyable, ~Escapable where Wrapped : ~Copyable, Wrapped : ~Escapable {
+  |                     `- note: generic enum 'Optional' does not conform to the 'Sendable' protocol
+2 |     case none
+3 |     case some(Wrapped)
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+[36 / 39] DanmakuKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/AniSkipTests.swift:169:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+167 | 
+168 |         let identity = AniSkipAnimeIdentity(title: "僕は友達が少ない", seasonNumber: 1)
+169 |         try await TestSupport.withMock({ request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+170 |             XCTAssertEqual(request.url?.host, "graphql.anilist.co")
+171 |             return TestSupport.response(
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/AniSkipTests.swift:199:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+197 |         let counter = TestSupport.RequestCounter()
+198 | 
+199 |         try await TestSupport.withMock({ request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+200 |             counter.count += 1
+201 |             return TestSupport.response(#"{"data":{"Page":{"media":[]}}}"#, url: request.url!)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/AniSkipTests.swift:212:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+210 |         // 8 天后负缓存过期，允许重试。
+211 |         clock.now = Date(timeIntervalSince1970: 1_000_000 + 8 * 24 * 3600)
+212 |         try await TestSupport.withMock({ request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+213 |             counter.count += 1
+214 |             return TestSupport.response(
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/AniSkipTests.swift:238:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+236 |             seasonNumber: 1)
+237 |         let searches = SearchRecorder()
+238 |         try await TestSupport.withMock({ request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+239 |             if let search = GraphQLRequestBody.searchVariable(of: request) {
+240 |                 searches.list.append(search)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/AniSkipTests.swift:263:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+261 | 
+262 |         let identity = AniSkipAnimeIdentity(title: "きみが死ぬまで恋をしたい")
+263 |         try await TestSupport.withMock({ request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+264 |             return TestSupport.response(
+265 |                 #"{"data":{"Page":{"media":[{"id":1,"idMal":111,"title":{"native":"別の作品"}},{"id":2,"idMal":null,"title":{"native":"きみが死ぬまで恋をしたい"}},{"id":3,"idMal":61126,"title":{"native":"きみが死ぬまで恋をしたい"}}]}}}"#,
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/AniSkipTests.swift:282:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+280 | 
+281 |         let identity = AniSkipAnimeIdentity(title: "我的朋友很少")
+282 |         try await TestSupport.withMock({ request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+283 |             return TestSupport.response(
+284 |                 #"{"data":{"Page":{"media":[{"id":1,"idMal":null,"title":{"native":"僕は友達が少ない"}},{"id":2,"idMal":10719,"title":{"native":"僕は友達が少ない"},"synonyms":["我的朋友很少"]}]}}}"#,
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/AniSkipTests.swift:300:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+298 | 
+299 |         let identity = AniSkipAnimeIdentity(title: "二十世紀電氣目録")
+300 |         try await TestSupport.withMock({ _ in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+301 |             TestSupport.response(
+302 |                 #"{"data":{"Page":{"media":[{"id":1,"idMal":62856,"title":{"native":"二十世紀電氣目録 -ユーレカ・エヴリカ-"}}]}}}"#,
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/AniSkipTests.swift:323:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+321 |         let counter = TestSupport.RequestCounter()
+322 | 
+323 |         try await TestSupport.withMock({ request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+324 |             counter.count += 1
+325 |             return TestSupport.response(#"{"data":{"Page":{"media":[]}}}"#, url: request.url!)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/AniSkipTests.swift:345:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+343 |         let counter = TestSupport.RequestCounter()
+344 | 
+345 |         try await TestSupport.withMock({ request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+346 |             counter.count += 1
+347 |             return TestSupport.response(#"{"data":{"Page":{"media":[]}}}"#, url: request.url!)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/AniSkipTests.swift:357:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+355 | 
+356 |         // AniList 后来收录了：forceRefresh 重解析能拿到并写回正缓存。
+357 |         try await TestSupport.withMock({ request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+358 |             counter.count += 1
+359 |             return TestSupport.response(
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/AniSkipTests.swift:384:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+382 |         let counter = TestSupport.RequestCounter()
+383 | 
+384 |         try await TestSupport.withMock({ request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+385 |             counter.count += 1
+386 |             return TestSupport.response(
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/AniSkipTests.swift:414:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+412 |         let identity = AniSkipAnimeIdentity(title: "二十世纪电气目录", seasonNumber: 1)
+413 |         let counter = TestSupport.RequestCounter()
+414 |         try await TestSupport.withMock({ request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+415 |             counter.count += 1
+416 |             return TestSupport.response(
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuLoadOrchestratorTests.swift:24:9: warning: main actor-isolated property 'cache' can not be mutated from a nonisolated context
+  13 | final class DanmakuLoadOrchestratorTests: XCTestCase {
+  14 | 
+  15 |     private var cache: DanmakuCache!
+     |                 `- note: mutation of this property is only permitted within the actor
+  16 |     private var service: DanmakuService!
+  17 |     private var orchestrator: DanmakuLoadOrchestrator!
+     :
+  22 |         let directory = FileManager.default.temporaryDirectory
+  23 |             .appendingPathComponent("DanmakuOrchestratorTests-\(UUID().uuidString)", isDirectory: true)
+  24 |         cache = DanmakuCache(directory: directory)
+     |         `- warning: main actor-isolated property 'cache' can not be mutated from a nonisolated context
+  25 |         service = DanmakuService(cache: cache)
+  26 |         orchestrator = DanmakuLoadOrchestrator(
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuLoadOrchestratorTests.swift:25:9: warning: main actor-isolated property 'service' can not be mutated from a nonisolated context
+  14 | 
+  15 |     private var cache: DanmakuCache!
+  16 |     private var service: DanmakuService!
+     |                 `- note: mutation of this property is only permitted within the actor
+  17 |     private var orchestrator: DanmakuLoadOrchestrator!
+  18 |     private var playback: FakePlaybackHost!
+     :
+  23 |             .appendingPathComponent("DanmakuOrchestratorTests-\(UUID().uuidString)", isDirectory: true)
+  24 |         cache = DanmakuCache(directory: directory)
+  25 |         service = DanmakuService(cache: cache)
+     |         `- warning: main actor-isolated property 'service' can not be mutated from a nonisolated context
+  26 |         orchestrator = DanmakuLoadOrchestrator(
+  27 |             service: service,
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuLoadOrchestratorTests.swift:25:41: warning: main actor-isolated property 'cache' can not be referenced from a nonisolated context
+  13 | final class DanmakuLoadOrchestratorTests: XCTestCase {
+  14 | 
+  15 |     private var cache: DanmakuCache!
+     |                 `- note: property declared here
+  16 |     private var service: DanmakuService!
+  17 |     private var orchestrator: DanmakuLoadOrchestrator!
+     :
+  23 |             .appendingPathComponent("DanmakuOrchestratorTests-\(UUID().uuidString)", isDirectory: true)
+  24 |         cache = DanmakuCache(directory: directory)
+  25 |         service = DanmakuService(cache: cache)
+     |                                         `- warning: main actor-isolated property 'cache' can not be referenced from a nonisolated context
+  26 |         orchestrator = DanmakuLoadOrchestrator(
+  27 |             service: service,
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuLoadOrchestratorTests.swift:26:9: warning: main actor-isolated property 'orchestrator' can not be mutated from a nonisolated context
+  15 |     private var cache: DanmakuCache!
+  16 |     private var service: DanmakuService!
+  17 |     private var orchestrator: DanmakuLoadOrchestrator!
+     |                 `- note: mutation of this property is only permitted within the actor
+  18 |     private var playback: FakePlaybackHost!
+  19 | 
+     :
+  24 |         cache = DanmakuCache(directory: directory)
+  25 |         service = DanmakuService(cache: cache)
+  26 |         orchestrator = DanmakuLoadOrchestrator(
+     |         `- warning: main actor-isolated property 'orchestrator' can not be mutated from a nonisolated context
+  27 |             service: service,
+  28 |             session: TestSupport.mockedSession(),
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuLoadOrchestratorTests.swift:26:24: warning: call to main actor-isolated initializer 'init(service:session:retryPolicy:aniSkipClient:aniSkipIDResolver:titleAliases:animeSkipClientProvider:theIntroDBClient:introLearningStore:totalBudget:)' in a synchronous nonisolated context [#ActorIsolatedCall]
+  24 |         cache = DanmakuCache(directory: directory)
+  25 |         service = DanmakuService(cache: cache)
+  26 |         orchestrator = DanmakuLoadOrchestrator(
+     |                        `- warning: call to main actor-isolated initializer 'init(service:session:retryPolicy:aniSkipClient:aniSkipIDResolver:titleAliases:animeSkipClientProvider:theIntroDBClient:introLearningStore:totalBudget:)' in a synchronous nonisolated context [#ActorIsolatedCall]
+  27 |             service: service,
+  28 |             session: TestSupport.mockedSession(),
+
+DanmakuKit.DanmakuLoadOrchestrator.init:2:19: note: calls to initializer 'init(service:session:retryPolicy:aniSkipClient:aniSkipIDResolver:titleAliases:animeSkipClientProvider:theIntroDBClient:introLearningStore:totalBudget:)' from outside of its actor context are implicitly asynchronous
+1 | struct DanmakuLoadOrchestrator {
+2 | @MainActor public init(service: DanmakuKit.DanmakuService, session: URLSession = DanmakuNetworking.makeSession(), retryPolicy: DiagnosticsKit.RetryPolicy = RetryPolicy(), aniSkipClient: DanmakuKit.AniSkipClient? = nil, aniSkipIDResolver: DanmakuKit.AniSkipIDResolver? = nil, titleAliases: (any DanmakuKit.DanmakuTitleAliasProviding)? = nil, animeSkipClientProvider: (@Sendable () -> DanmakuKit.AnimeSkipClient?)? = nil, theIntroDBClient: DanmakuKit.TheIntroDBClient? = nil, introLearningStore: DanmakuKit.IntroLearningStore? = nil, totalBudget: Duration = .seconds(30))}
+  |                   `- note: calls to initializer 'init(service:session:retryPolicy:aniSkipClient:aniSkipIDResolver:titleAliases:animeSkipClientProvider:theIntroDBClient:introLearningStore:totalBudget:)' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuLoadOrchestratorTests.swift:27:22: warning: main actor-isolated property 'service' can not be referenced from a nonisolated context
+  14 | 
+  15 |     private var cache: DanmakuCache!
+  16 |     private var service: DanmakuService!
+     |                 `- note: property declared here
+  17 |     private var orchestrator: DanmakuLoadOrchestrator!
+  18 |     private var playback: FakePlaybackHost!
+     :
+  25 |         service = DanmakuService(cache: cache)
+  26 |         orchestrator = DanmakuLoadOrchestrator(
+  27 |             service: service,
+     |                      `- warning: main actor-isolated property 'service' can not be referenced from a nonisolated context
+  28 |             session: TestSupport.mockedSession(),
+  29 |             // 零等待重试策略：编排层透传给网关客户端，重试用例不空等退避。
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuLoadOrchestratorTests.swift:32:9: warning: main actor-isolated property 'playback' can not be mutated from a nonisolated context
+  16 |     private var service: DanmakuService!
+  17 |     private var orchestrator: DanmakuLoadOrchestrator!
+  18 |     private var playback: FakePlaybackHost!
+     |                 `- note: mutation of this property is only permitted within the actor
+  19 | 
+  20 |     override func setUp() {
+     :
+  30 |             retryPolicy: RetryPolicy(attempts: 3, base: 0, jitter: 0.0...0.0)
+  31 |         )
+  32 |         playback = FakePlaybackHost()
+     |         `- warning: main actor-isolated property 'playback' can not be mutated from a nonisolated context
+  33 |     }
+  34 | 
+
+[#ActorIsolatedCall]: <https://docs.swift.org/compiler/documentation/diagnostics/actor-isolated-call>
+[38 / 40] DanmakuKitTests-product
+Build complete! (3.80秒)
+Test Suite 'All tests' started at 2026-11-13 20:16:19.600.
+Test Suite 'DanmakuKitTests.xctest' started at 2026-11-13 20:16:19.601.
+Test Suite 'AniSkipClientTests' started at 2026-11-13 20:16:19.601.
+Test Case '-[DanmakuKitTests.AniSkipClientTests testIntervalsConvertToHint]' started.
+Test Case '-[DanmakuKitTests.AniSkipClientTests testIntervalsConvertToHint]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.AniSkipClientTests testInvalidParametersThrowWithoutNetwork]' started.
+Test Case '-[DanmakuKitTests.AniSkipClientTests testInvalidParametersThrowWithoutNetwork]' passed (0.005 seconds).
+Test Case '-[DanmakuKitTests.AniSkipClientTests testKnownEpisodeLengthIsPassedThrough]' started.
+Test Case '-[DanmakuKitTests.AniSkipClientTests testKnownEpisodeLengthIsPassedThrough]' passed (0.004 seconds).
+Test Case '-[DanmakuKitTests.AniSkipClientTests testNoDataReturnsNilInsteadOfThrowing]' started.
+Test Case '-[DanmakuKitTests.AniSkipClientTests testNoDataReturnsNilInsteadOfThrowing]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.AniSkipClientTests testSkipTimesParsesIntervals]' started.
+Test Case '-[DanmakuKitTests.AniSkipClientTests testSkipTimesParsesIntervals]' passed (0.001 seconds).
+Test Suite 'AniSkipClientTests' passed at 2026-11-13 20:16:19.614.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.012 (0.013) seconds
+Test Suite 'AniSkipIDResolverTests' started at 2026-11-13 20:16:19.614.
+Test Case '-[DanmakuKitTests.AniSkipIDResolverTests testAlternativeTitleUsedWhenPrimaryMisses]' started.
+Test Case '-[DanmakuKitTests.AniSkipIDResolverTests testAlternativeTitleUsedWhenPrimaryMisses]' passed (0.525 seconds).
+Test Case '-[DanmakuKitTests.AniSkipIDResolverTests testContainmentMatchesDecoratedNativeTitle]' started.
+Test Case '-[DanmakuKitTests.AniSkipIDResolverTests testContainmentMatchesDecoratedNativeTitle]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.AniSkipIDResolverTests testDirectMalIDBypassesNetwork]' started.
+Test Case '-[DanmakuKitTests.AniSkipIDResolverTests testDirectMalIDBypassesNetwork]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.AniSkipIDResolverTests testExactTitleMatchBeatsFirstResultWithMalID]' started.
+Test Case '-[DanmakuKitTests.AniSkipIDResolverTests testExactTitleMatchBeatsFirstResultWithMalID]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.AniSkipIDResolverTests testForceRefreshBypassesNegativeCache]' started.
+Test Case '-[DanmakuKitTests.AniSkipIDResolverTests testForceRefreshBypassesNegativeCache]' passed (0.003 seconds).
+Test Case '-[DanmakuKitTests.AniSkipIDResolverTests testForceRefreshBypassesPositiveCache]' started.
+Test Case '-[DanmakuKitTests.AniSkipIDResolverTests testForceRefreshBypassesPositiveCache]' passed (0.003 seconds).
+Test Case '-[DanmakuKitTests.AniSkipIDResolverTests testLegacyNegativeCacheRecordIsIgnored]' started.
+Test Case '-[DanmakuKitTests.AniSkipIDResolverTests testLegacyNegativeCacheRecordIsIgnored]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.AniSkipIDResolverTests testNegativeCacheExpiresAfterSevenDays]' started.
+Test Case '-[DanmakuKitTests.AniSkipIDResolverTests testNegativeCacheExpiresAfterSevenDays]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.AniSkipIDResolverTests testNegativeCacheOnlyAfterAllCandidatesFail]' started.
+Test Case '-[DanmakuKitTests.AniSkipIDResolverTests testNegativeCacheOnlyAfterAllCandidatesFail]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.AniSkipIDResolverTests testSearchResolvesFirstResultWithMalID]' started.
+Test Case '-[DanmakuKitTests.AniSkipIDResolverTests testSearchResolvesFirstResultWithMalID]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.AniSkipIDResolverTests testSearchTitlesDedupeAndOrder]' started.
+Test Case '-[DanmakuKitTests.AniSkipIDResolverTests testSearchTitlesDedupeAndOrder]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.AniSkipIDResolverTests testSynonymCountsAsExactMatch]' started.
+Test Case '-[DanmakuKitTests.AniSkipIDResolverTests testSynonymCountsAsExactMatch]' passed (0.002 seconds).
+Test Suite 'AniSkipIDResolverTests' passed at 2026-11-13 20:16:20.161.
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.546 (0.547) seconds
+Test Suite 'AniSkipIDStoreTests' started at 2026-11-13 20:16:20.161.
+Test Case '-[DanmakuKitTests.AniSkipIDStoreTests testCorruptedFileReadsAsEmptyAndStaysWritable]' started.
+Test Case '-[DanmakuKitTests.AniSkipIDStoreTests testCorruptedFileReadsAsEmptyAndStaysWritable]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.AniSkipIDStoreTests testMissingFileReadsAsEmptyAndStaysWritable]' started.
+Test Case '-[DanmakuKitTests.AniSkipIDStoreTests testMissingFileReadsAsEmptyAndStaysWritable]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.AniSkipIDStoreTests testWritesSurviveAcrossInstances]' started.
+Test Case '-[DanmakuKitTests.AniSkipIDStoreTests testWritesSurviveAcrossInstances]' passed (0.001 seconds).
+Test Suite 'AniSkipIDStoreTests' passed at 2026-11-13 20:16:20.164.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+Test Suite 'DandanplaySettingsStoreTests' started at 2026-11-13 20:16:20.164.
+Test Case '-[DanmakuKitTests.DandanplaySettingsStoreTests testAPIKeyRoundTrip]' started.
+Test Case '-[DanmakuKitTests.DandanplaySettingsStoreTests testAPIKeyRoundTrip]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DandanplaySettingsStoreTests testDefaults]' started.
+Test Case '-[DanmakuKitTests.DandanplaySettingsStoreTests testDefaults]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DandanplaySettingsStoreTests testGatewayURLSetter]' started.
+Test Case '-[DanmakuKitTests.DandanplaySettingsStoreTests testGatewayURLSetter]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.DandanplaySettingsStoreTests testInvalidURLFallsBackToDefault]' started.
+Test Case '-[DanmakuKitTests.DandanplaySettingsStoreTests testInvalidURLFallsBackToDefault]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.DandanplaySettingsStoreTests testIsConfigured]' started.
+Test Case '-[DanmakuKitTests.DandanplaySettingsStoreTests testIsConfigured]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.DandanplaySettingsStoreTests testNormalizedURLFunction]' started.
+Test Case '-[DanmakuKitTests.DandanplaySettingsStoreTests testNormalizedURLFunction]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DandanplaySettingsStoreTests testSchemeAutoCompletion]' started.
+Test Case '-[DanmakuKitTests.DandanplaySettingsStoreTests testSchemeAutoCompletion]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.DandanplaySettingsStoreTests testURLStringRoundTrip]' started.
+Test Case '-[DanmakuKitTests.DandanplaySettingsStoreTests testURLStringRoundTrip]' passed (0.003 seconds).
+Test Suite 'DandanplaySettingsStoreTests' passed at 2026-11-13 20:16:20.178.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.012 (0.013) seconds
+Test Suite 'DanmakuCacheTests' started at 2026-11-13 20:16:20.178.
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testClaimedRevisionRejectsLateOlderMutation]' started.
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testClaimedRevisionRejectsLateOlderMutation]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testCommentMemoryCacheIsBounded]' started.
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testCommentMemoryCacheIsBounded]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testCommentsServedFromMemoryAfterFileRemoved]' started.
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testCommentsServedFromMemoryAfterFileRemoved]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testCommentsStoredAndRetrieved]' started.
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testCommentsStoredAndRetrieved]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testCommentsTTLExpiry]' started.
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testCommentsTTLExpiry]' passed (0.057 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testCorruptedCommentsAreNotCached]' started.
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testCorruptedCommentsAreNotCached]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testCorruptedCommentsDoNotEnterMemory]' started.
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testCorruptedCommentsDoNotEnterMemory]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testCorruptedMappingDoesNotGetOverwritten]' started.
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testCorruptedMappingDoesNotGetOverwritten]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testDiskReadBackfillsMemoryCache]' started.
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testDiskReadBackfillsMemoryCache]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testEpisodeIDMappingPersists]' started.
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testEpisodeIDMappingPersists]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testEpisodeMatchPersistsShiftAndTitles]' started.
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testEpisodeMatchPersistsShiftAndTitles]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testExpiredCommentsAreEvictedFromMemory]' started.
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testExpiredCommentsAreEvictedFromMemory]' passed (0.060 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testLegacyEpisodeIDMappingMigrates]' started.
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testLegacyEpisodeIDMappingMigrates]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testMemoryCacheEvictsLeastRecentlyUsed]' started.
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testMemoryCacheEvictsLeastRecentlyUsed]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testNewerRemovalRejectsLateOlderWrite]' started.
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testNewerRemovalRejectsLateOlderWrite]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testOlderRevisionCannotOverwriteNewerMatch]' started.
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testOlderRevisionCannotOverwriteNewerMatch]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testPurgeClearsCommentCache]' started.
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testPurgeClearsCommentCache]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testRemovingEpisodeMatchPreservesOtherMappings]' started.
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testRemovingEpisodeMatchPreservesOtherMappings]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testStaleMemoryDoesNotDeleteFileWrittenElsewhere]' started.
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testStaleMemoryDoesNotDeleteFileWrittenElsewhere]' passed (4.011 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testZeroCapacityDisablesMemoryCache]' started.
+Test Case '-[DanmakuKitTests.DanmakuCacheTests testZeroCapacityDisablesMemoryCache]' passed (0.003 seconds).
+Test Suite 'DanmakuCacheTests' passed at 2026-11-13 20:16:24.330.
+	 Executed 20 tests, with 0 failures (0 unexpected) in 4.150 (4.153) seconds
+Test Suite 'DanmakuCandidateScorerTests' started at 2026-11-13 20:16:24.330.
+Test Case '-[DanmakuKitTests.DanmakuCandidateScorerTests testEpisodeExtraction]' started.
+Test Case '-[DanmakuKitTests.DanmakuCandidateScorerTests testEpisodeExtraction]' passed (0.006 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCandidateScorerTests testEpisodeMatchAndMismatchScoring]' started.
+Test Case '-[DanmakuKitTests.DanmakuCandidateScorerTests testEpisodeMatchAndMismatchScoring]' passed (0.011 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCandidateScorerTests testMovieAndEpisodeAreMutuallyExclusive]' started.
+Test Case '-[DanmakuKitTests.DanmakuCandidateScorerTests testMovieAndEpisodeAreMutuallyExclusive]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCandidateScorerTests testPickBestCandidateFromMatches]' started.
+Test Case '-[DanmakuKitTests.DanmakuCandidateScorerTests testPickBestCandidateFromMatches]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCandidateScorerTests testPickBestEpisodeFromSearchResults]' started.
+Test Case '-[DanmakuKitTests.DanmakuCandidateScorerTests testPickBestEpisodeFromSearchResults]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCandidateScorerTests testSeasonConsistencyScoring]' started.
+Test Case '-[DanmakuKitTests.DanmakuCandidateScorerTests testSeasonConsistencyScoring]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCandidateScorerTests testSpecialCandidateDoesNotMatchPlainEpisode]' started.
+Test Case '-[DanmakuKitTests.DanmakuCandidateScorerTests testSpecialCandidateDoesNotMatchPlainEpisode]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCandidateScorerTests testSpecialTargetAcceptsSameIndexNumberedEpisodeAsFallback]' started.
+Test Case '-[DanmakuKitTests.DanmakuCandidateScorerTests testSpecialTargetAcceptsSameIndexNumberedEpisodeAsFallback]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCandidateScorerTests testSpecialTargetPrefersPreferredNamespace]' started.
+Test Case '-[DanmakuKitTests.DanmakuCandidateScorerTests testSpecialTargetPrefersPreferredNamespace]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCandidateScorerTests testSpecialTargetWithKnownNamespace]' started.
+Test Case '-[DanmakuKitTests.DanmakuCandidateScorerTests testSpecialTargetWithKnownNamespace]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuCandidateScorerTests testTypeGateRejectsMovieCandidateForSpecialTarget]' started.
+Test Case '-[DanmakuKitTests.DanmakuCandidateScorerTests testTypeGateRejectsMovieCandidateForSpecialTarget]' passed (0.001 seconds).
+Test Suite 'DanmakuCandidateScorerTests' passed at 2026-11-13 20:16:24.359.
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.027 (0.029) seconds
+Test Suite 'DanmakuEpisodeTokenTests' started at 2026-11-13 20:16:24.359.
+Test Case '-[DanmakuKitTests.DanmakuEpisodeTokenTests testDoesNotMistakeWordsForSpecialPrefix]' started.
+Test Case '-[DanmakuKitTests.DanmakuEpisodeTokenTests testDoesNotMistakeWordsForSpecialPrefix]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuEpisodeTokenTests testParsesNumberedEpisodeForms]' started.
+Test Case '-[DanmakuKitTests.DanmakuEpisodeTokenTests testParsesNumberedEpisodeForms]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.DanmakuEpisodeTokenTests testParsesSpecialNamespaces]' started.
+Test Case '-[DanmakuKitTests.DanmakuEpisodeTokenTests testParsesSpecialNamespaces]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuEpisodeTokenTests testSearchValueMatchesOfficialEpisodeParameter]' started.
+Test Case '-[DanmakuKitTests.DanmakuEpisodeTokenTests testSearchValueMatchesOfficialEpisodeParameter]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuEpisodeTokenTests testSpecialKeywordDetection]' started.
+Test Case '-[DanmakuKitTests.DanmakuEpisodeTokenTests testSpecialKeywordDetection]' passed (0.000 seconds).
+Test Suite 'DanmakuEpisodeTokenTests' passed at 2026-11-13 20:16:24.364.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
+Test Suite 'DanmakuFieldsParseTests' started at 2026-11-13 20:16:24.364.
+Test Case '-[DanmakuKitTests.DanmakuFieldsParseTests testBlankContentRejectedButWhitespaceInsideKept]' started.
+Test Case '-[DanmakuKitTests.DanmakuFieldsParseTests testBlankContentRejectedButWhitespaceInsideKept]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuFieldsParseTests testContentIsNotTrimmedInOutput]' started.
+Test Case '-[DanmakuKitTests.DanmakuFieldsParseTests testContentIsNotTrimmedInOutput]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuFieldsParseTests testEmptyFieldsRejected]' started.
+Test Case '-[DanmakuKitTests.DanmakuFieldsParseTests testEmptyFieldsRejected]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuFieldsParseTests testFewerThanThreeFieldsRejected]' started.
+Test Case '-[DanmakuKitTests.DanmakuFieldsParseTests testFewerThanThreeFieldsRejected]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuFieldsParseTests testNumericValidationUnchanged]' started.
+Test Case '-[DanmakuKitTests.DanmakuFieldsParseTests testNumericValidationUnchanged]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuFieldsParseTests testTrailingFieldsIgnoredEvenWhenGarbage]' started.
+Test Case '-[DanmakuKitTests.DanmakuFieldsParseTests testTrailingFieldsIgnoredEvenWhenGarbage]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuFieldsParseTests testValidFormsAccepted]' started.
+Test Case '-[DanmakuKitTests.DanmakuFieldsParseTests testValidFormsAccepted]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuFieldsParseTests testZeroWidthSpaceOnlyContentStillRejected]' started.
+Test Case '-[DanmakuKitTests.DanmakuFieldsParseTests testZeroWidthSpaceOnlyContentStillRejected]' passed (0.000 seconds).
+Test Suite 'DanmakuFieldsParseTests' passed at 2026-11-13 20:16:24.368.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
+Test Suite 'DanmakuFilenameParserTests' started at 2026-11-13 20:16:24.368.
+Test Case '-[DanmakuKitTests.DanmakuFilenameParserTests testCanonicalMatchNameFallsBackToRawName]' started.
+Test Case '-[DanmakuKitTests.DanmakuFilenameParserTests testCanonicalMatchNameFallsBackToRawName]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuFilenameParserTests testCanonicalMatchNameForSpecials]' started.
+Test Case '-[DanmakuKitTests.DanmakuFilenameParserTests testCanonicalMatchNameForSpecials]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuFilenameParserTests testCanonicalMatchNameKeepsInformativeRawName]' started.
+Test Case '-[DanmakuKitTests.DanmakuFilenameParserTests testCanonicalMatchNameKeepsInformativeRawName]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuFilenameParserTests testCanonicalMatchNameReplacesBareNumericFileName]' started.
+Test Case '-[DanmakuKitTests.DanmakuFilenameParserTests testCanonicalMatchNameReplacesBareNumericFileName]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuFilenameParserTests testNormalizeFullWidth]' started.
+Test Case '-[DanmakuKitTests.DanmakuFilenameParserTests testNormalizeFullWidth]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuFilenameParserTests testSeasonAndEpisodePatterns]' started.
+Test Case '-[DanmakuKitTests.DanmakuFilenameParserTests testSeasonAndEpisodePatterns]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.DanmakuFilenameParserTests testSimpleGenericFiles]' started.
+Test Case '-[DanmakuKitTests.DanmakuFilenameParserTests testSimpleGenericFiles]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuFilenameParserTests testSingleBracketSlotIsKeptAsTitle]' started.
+Test Case '-[DanmakuKitTests.DanmakuFilenameParserTests testSingleBracketSlotIsKeptAsTitle]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuFilenameParserTests testStandardReleaseGroupsWithEpisode]' started.
+Test Case '-[DanmakuKitTests.DanmakuFilenameParserTests testStandardReleaseGroupsWithEpisode]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuFilenameParserTests testUnlistedReleaseGroupLeadingSlotIsStripped]' started.
+Test Case '-[DanmakuKitTests.DanmakuFilenameParserTests testUnlistedReleaseGroupLeadingSlotIsStripped]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuFilenameParserTests testYearBracketIsStripped]' started.
+Test Case '-[DanmakuKitTests.DanmakuFilenameParserTests testYearBracketIsStripped]' passed (0.000 seconds).
+Test Suite 'DanmakuFilenameParserTests' passed at 2026-11-13 20:16:24.376.
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.007 (0.008) seconds
+Test Suite 'DanmakuIntroDetectorTests' started at 2026-11-13 20:16:24.376.
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testColdOpenEpisodeEstimatesNonZeroStart]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testColdOpenEpisodeEstimatesNonZeroStart]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testJumpPostsClusterMedianWithLandingConfirmation]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testJumpPostsClusterMedianWithLandingConfirmation]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testJumpTargetScansOnlyAfterKeyword]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testJumpTargetScansOnlyAfterKeyword]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testLandingOnlyPathWithoutJumpTargets]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testLandingOnlyPathWithoutJumpTargets]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testMissingUIDDoesNotCountAsDistinctUser]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testMissingUIDDoesNotCountAsDistinctUser]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testOutlierJumpTargetsAreRejected]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testOutlierJumpTargetsAreRejected]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testSameTargetUsersWithoutConfirmationAreRejected]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testSameTargetUsersWithoutConfirmationAreRejected]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testSingleUserLandingSpamIsRejected]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testSingleUserLandingSpamIsRejected]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testStartEstimateDroppedWhenWindowUnreasonable]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testStartEstimateDroppedWhenWindowUnreasonable]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testThreeUsersSameTargetWithConfirmationIsAccepted]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testThreeUsersSameTargetWithConfirmationIsAccepted]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testTimestampVariants]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testTimestampVariants]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testTwoDistinctTargetsWithConfirmationAreAccepted]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testTwoDistinctTargetsWithConfirmationAreAccepted]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testWeakSignalsAreRejected]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroDetectorTests testWeakSignalsAreRejected]' passed (0.000 seconds).
+Test Suite 'DanmakuIntroDetectorTests' passed at 2026-11-13 20:16:24.383.
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.007 (0.008) seconds
+Test Suite 'DanmakuIntroFastPathTests' started at 2026-11-13 20:16:24.383.
+Test Case '-[DanmakuKitTests.DanmakuIntroFastPathTests testJumpMatchEndIsFirstOccurrence]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroFastPathTests testJumpMatchEndIsFirstOccurrence]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuIntroFastPathTests testJumpTargetUsesKeywordArrayOrderNotTextOrder]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroFastPathTests testJumpTargetUsesKeywordArrayOrderNotTextOrder]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuIntroFastPathTests testKeywordsHaveNoCanonicalDecomposition]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroFastPathTests testKeywordsHaveNoCanonicalDecomposition]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuIntroFastPathTests testNonASCIIAfterFourthSegmentStillFallsBack]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroFastPathTests testNonASCIIAfterFourthSegmentStillFallsBack]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuIntroFastPathTests testParseTimeAndUIDMatchesOracleOnCraftedInputs]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroFastPathTests testParseTimeAndUIDMatchesOracleOnCraftedInputs]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuIntroFastPathTests testParseTimeAndUIDMatchesOracleOnRandomInputs]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroFastPathTests testParseTimeAndUIDMatchesOracleOnRandomInputs]' passed (0.131 seconds).
+Test Case '-[DanmakuKitTests.DanmakuIntroFastPathTests testPrecomputedNeedleTableIsComplete]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroFastPathTests testPrecomputedNeedleTableIsComplete]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuIntroFastPathTests testScanKeywordsMatchesOracle]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroFastPathTests testScanKeywordsMatchesOracle]' passed (0.163 seconds).
+Test Suite 'DanmakuIntroFastPathTests' passed at 2026-11-13 20:16:24.680.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.296 (0.297) seconds
+Test Suite 'DanmakuIntroHintFlowTests' started at 2026-11-13 20:16:24.680.
+Test Case '-[DanmakuKitTests.DanmakuIntroHintFlowTests testCorruptIntroHintFileIsRegenerated]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroHintFlowTests testCorruptIntroHintFileIsRegenerated]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.DanmakuIntroHintFlowTests testIntroHintPersistsAcrossInstances]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroHintFlowTests testIntroHintPersistsAcrossInstances]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuIntroHintFlowTests testLegacyHintJSONDecodesWithDanmakuSource]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroHintFlowTests testLegacyHintJSONDecodesWithDanmakuSource]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuIntroHintFlowTests testPayloadDetectsHintWithoutPersisting]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroHintFlowTests testPayloadDetectsHintWithoutPersisting]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.DanmakuIntroHintFlowTests testPayloadWithoutSignalsCarriesNoHint]' started.
+Test Case '-[DanmakuKitTests.DanmakuIntroHintFlowTests testPayloadWithoutSignalsCarriesNoHint]' passed (0.001 seconds).
+Test Suite 'DanmakuIntroHintFlowTests' passed at 2026-11-13 20:16:24.687.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.007 (0.007) seconds
+Test Suite 'DanmakuJSONConverterTests' started at 2026-11-13 20:16:24.687.
+Test Case '-[DanmakuKitTests.DanmakuJSONConverterTests testAllInvalidReturnsNil]' started.
+Test Case '-[DanmakuKitTests.DanmakuJSONConverterTests testAllInvalidReturnsNil]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuJSONConverterTests testAllModes]' started.
+Test Case '-[DanmakuKitTests.DanmakuJSONConverterTests testAllModes]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuJSONConverterTests testBasicConversion]' started.
+Test Case '-[DanmakuKitTests.DanmakuJSONConverterTests testBasicConversion]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuJSONConverterTests testContentEscaping]' started.
+Test Case '-[DanmakuKitTests.DanmakuJSONConverterTests testContentEscaping]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuJSONConverterTests testDuplicateCIDsEmitNoID]' started.
+Test Case '-[DanmakuKitTests.DanmakuJSONConverterTests testDuplicateCIDsEmitNoID]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuJSONConverterTests testEmptyListReturnsNil]' started.
+Test Case '-[DanmakuKitTests.DanmakuJSONConverterTests testEmptyListReturnsNil]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuJSONConverterTests testEntriesMatchJSONRoundTrip]' started.
+Test Case '-[DanmakuKitTests.DanmakuJSONConverterTests testEntriesMatchJSONRoundTrip]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuJSONConverterTests testEntriesNilWhenNothingValid]' started.
+Test Case '-[DanmakuKitTests.DanmakuJSONConverterTests testEntriesNilWhenNothingValid]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuJSONConverterTests testFractionalSeconds]' started.
+Test Case '-[DanmakuKitTests.DanmakuJSONConverterTests testFractionalSeconds]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuJSONConverterTests testNoCIDEntriesEmitNoID]' started.
+Test Case '-[DanmakuKitTests.DanmakuJSONConverterTests testNoCIDEntriesEmitNoID]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuJSONConverterTests testSkipsInvalidEntries]' started.
+Test Case '-[DanmakuKitTests.DanmakuJSONConverterTests testSkipsInvalidEntries]' passed (0.000 seconds).
+Test Suite 'DanmakuJSONConverterTests' passed at 2026-11-13 20:16:24.689.
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'DanmakuJSONParserTests' started at 2026-11-13 20:16:24.689.
+Test Case '-[DanmakuKitTests.DanmakuJSONParserTests testInvalidJSONReturnsNil]' started.
+Test Case '-[DanmakuKitTests.DanmakuJSONParserTests testInvalidJSONReturnsNil]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuJSONParserTests testParsesModesAndClampsColor]' started.
+Test Case '-[DanmakuKitTests.DanmakuJSONParserTests testParsesModesAndClampsColor]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuJSONParserTests testRoundTripsWithConverter]' started.
+Test Case '-[DanmakuKitTests.DanmakuJSONParserTests testRoundTripsWithConverter]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuJSONParserTests testSkipsInvalidEntries]' started.
+Test Case '-[DanmakuKitTests.DanmakuJSONParserTests testSkipsInvalidEntries]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.DanmakuJSONParserTests testValidEmptyCommentsReturnsEmpty]' started.
+Test Case '-[DanmakuKitTests.DanmakuJSONParserTests testValidEmptyCommentsReturnsEmpty]' passed (0.000 seconds).
+Test Suite 'DanmakuJSONParserTests' passed at 2026-11-13 20:16:24.691.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'DanmakuLoadOrchestratorTests' started at 2026-11-13 20:16:24.691.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testAniSkipHintWinsOverDanmakuDetectionAndPersists]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testAniSkipHintWinsOverDanmakuDetectionAndPersists]' passed (0.005 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testAniSkipResolutionFallsBackToOriginalTitle]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testAniSkipResolutionFallsBackToOriginalTitle]' passed (0.005 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testAniSkipResolutionMergesAliasProviderTitles]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testAniSkipResolutionMergesAliasProviderTitles]' passed (0.004 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testBudgetCutReportsRetryableFailureNotNoMatch]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testBudgetCutReportsRetryableFailureNotNoMatch]' passed (0.651 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testBudgetDoesNotAffectCachedMatchPath]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testBudgetDoesNotAffectCachedMatchPath]' passed (0.004 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testBudgetExhaustedStillReportsFailure]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testBudgetExhaustedStillReportsFailure]' passed (0.214 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testCachedIntroHintWinsWithoutAniSkipRequest]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testCachedIntroHintWinsWithoutAniSkipRequest]' passed (0.005 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testCachedMatchReuseSkipsHashAndGateway]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testCachedMatchReuseSkipsHashAndGateway]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testCancellationPreventsInjection]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testCancellationPreventsInjection]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testCandidateAcceptedWhenIsMatchedIsFalse]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testCandidateAcceptedWhenIsMatchedIsFalse]' passed (0.006 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testEmptyPayloadBecomesEmptyOutcome]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testEmptyPayloadBecomesEmptyOutcome]' passed (0.004 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testFingerprintUnavailableFailsWithManualSuggestion]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testFingerprintUnavailableFailsWithManualSuggestion]' passed (0.005 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testFingerprintUnavailableFallbackToSearchSuccess]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testFingerprintUnavailableFallbackToSearchSuccess]' passed (0.005 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testForceRematchClearsRememberedMatch]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testForceRematchClearsRememberedMatch]' passed (0.004 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testFullPipelineHashThenMatchThenLoad]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testFullPipelineHashThenMatchThenLoad]' passed (0.005 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testGatewayErrorsYieldFailedInsteadOfNoMatch]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testGatewayErrorsYieldFailedInsteadOfNoMatch]' passed (0.004 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testInjectionUsesPlaybackUUIDNotCacheKey]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testInjectionUsesPlaybackUUIDNotCacheKey]' passed (0.003 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testKernelTrackRouteInjectsJSONWithoutOverlayEntries]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testKernelTrackRouteInjectsJSONWithoutOverlayEntries]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testMatchFallbackToTitleSearchWhenHashFails]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testMatchFallbackToTitleSearchWhenHashFails]' passed (0.005 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testMatchFallbackToTMDBIdSearch]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testMatchFallbackToTMDBIdSearch]' passed (0.006 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testMixedCleanAndErrorTiersYieldFailed]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testMixedCleanAndErrorTiersYieldFailed]' passed (0.005 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testMovieCandidatesAreExcludedForSpecialTarget]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testMovieCandidatesAreExcludedForSpecialTarget]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testNoMatchOutcome]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testNoMatchOutcome]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testOverlayRouteDoesNotBuildKernelJSON]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testOverlayRouteDoesNotBuildKernelJSON]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testRetryableGatewayErrorRetriesThenShortCircuits]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testRetryableGatewayErrorRetriesThenShortCircuits]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testSlowFingerprintDoesNotConsumeBudget]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testSlowFingerprintDoesNotConsumeBudget]' passed (0.517 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testStaleRevisionCannotInjectAfterSwitch]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testStaleRevisionCannotInjectAfterSwitch]' passed (0.004 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testWaitUntilReadyTimeoutFailsWithoutInjection]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testWaitUntilReadyTimeoutFailsWithoutInjection]' passed (0.003 seconds).
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testWaterfallRespectsTotalBudget]' started.
+Test Case '-[DanmakuKitTests.DanmakuLoadOrchestratorTests testWaterfallRespectsTotalBudget]' passed (1.213 seconds).
+Test Suite 'DanmakuLoadOrchestratorTests' passed at 2026-11-13 20:16:27.384.
+	 Executed 29 tests, with 0 failures (0 unexpected) in 2.690 (2.694) seconds
+Test Suite 'DanmakuServiceTests' started at 2026-11-13 20:16:27.384.
+Test Case '-[DanmakuKitTests.DanmakuServiceTests testAutomaticMatchCanDeferPersistenceUntilCallerConfirmsGeneration]' started.
+Test Case '-[DanmakuKitTests.DanmakuServiceTests testAutomaticMatchCanDeferPersistenceUntilCallerConfirmsGeneration]' passed (0.004 seconds).
+Test Case '-[DanmakuKitTests.DanmakuServiceTests testAutomaticMatchPersistsShiftAndCachesComments]' started.
+Test Case '-[DanmakuKitTests.DanmakuServiceTests testAutomaticMatchPersistsShiftAndCachesComments]' passed (0.003 seconds).
+Test Case '-[DanmakuKitTests.DanmakuServiceTests testCachedMatchReturnsPersistedMappingWithoutGatewayWork]' started.
+Test Case '-[DanmakuKitTests.DanmakuServiceTests testCachedMatchReturnsPersistedMappingWithoutGatewayWork]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuServiceTests testPayloadBuildsOnlyTheRequestedRepresentation]' started.
+Test Case '-[DanmakuKitTests.DanmakuServiceTests testPayloadBuildsOnlyTheRequestedRepresentation]' passed (0.001 seconds).
+Test Suite 'DanmakuServiceTests' passed at 2026-11-13 20:16:27.395.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.010 (0.011) seconds
+Test Suite 'DanmakuTitleAliasResolverTests' started at 2026-11-13 20:16:27.396.
+Test Case '-[DanmakuKitTests.DanmakuTitleAliasResolverTests testCacheKeyIgnoresPunctuationAndWidth]' started.
+Test Case '-[DanmakuKitTests.DanmakuTitleAliasResolverTests testCacheKeyIgnoresPunctuationAndWidth]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.DanmakuTitleAliasResolverTests testCacheSurvivesStoreReopen]' started.
+Test Case '-[DanmakuKitTests.DanmakuTitleAliasResolverTests testCacheSurvivesStoreReopen]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.DanmakuTitleAliasResolverTests testEmptyTitleSkipsProvider]' started.
+Test Case '-[DanmakuKitTests.DanmakuTitleAliasResolverTests testEmptyTitleSkipsProvider]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.DanmakuTitleAliasResolverTests testNegativeCacheExpiresAfterAWeek]' started.
+Test Case '-[DanmakuKitTests.DanmakuTitleAliasResolverTests testNegativeCacheExpiresAfterAWeek]' passed (0.003 seconds).
+Test Case '-[DanmakuKitTests.DanmakuTitleAliasResolverTests testResolvesAndCachesPermanently]' started.
+Test Case '-[DanmakuKitTests.DanmakuTitleAliasResolverTests testResolvesAndCachesPermanently]' passed (0.002 seconds).
+Test Suite 'DanmakuTitleAliasResolverTests' passed at 2026-11-13 20:16:27.406.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.010 (0.011) seconds
+Test Suite 'FileHashRangePolicyTests' started at 2026-11-13 20:16:27.407.
+Test Case '-[DanmakuKitTests.FileHashRangePolicyTests testFullBodyAcceptedOnlyWhenWholeFileFitsInHead]' started.
+Test Case '-[DanmakuKitTests.FileHashRangePolicyTests testFullBodyAcceptedOnlyWhenWholeFileFitsInHead]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.FileHashRangePolicyTests testFullBodyRejectedWhenSizeUnknown]' started.
+Test Case '-[DanmakuKitTests.FileHashRangePolicyTests testFullBodyRejectedWhenSizeUnknown]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.FileHashRangePolicyTests testMalformedOrUnexpectedRangesRejected]' started.
+Test Case '-[DanmakuKitTests.FileHashRangePolicyTests testMalformedOrUnexpectedRangesRejected]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.FileHashRangePolicyTests testOtherStatusCodesReported]' started.
+Test Case '-[DanmakuKitTests.FileHashRangePolicyTests testOtherStatusCodesReported]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.FileHashRangePolicyTests testOversizedBodyIsCutOffByHardLimit]' started.
+Test Case '-[DanmakuKitTests.FileHashRangePolicyTests testOversizedBodyIsCutOffByHardLimit]' passed (0.449 seconds).
+Test Case '-[DanmakuKitTests.FileHashRangePolicyTests testParentTaskCancellationStopsTheRequest]' started.
+Test Case '-[DanmakuKitTests.FileHashRangePolicyTests testParentTaskCancellationStopsTheRequest]' passed (0.105 seconds).
+Test Case '-[DanmakuKitTests.FileHashRangePolicyTests testPartialContentAccepted]' started.
+Test Case '-[DanmakuKitTests.FileHashRangePolicyTests testPartialContentAccepted]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.FileHashRangePolicyTests testRejectedResponseStopsBeforeBodyFinishes]' started.
+Test Case '-[DanmakuKitTests.FileHashRangePolicyTests testRejectedResponseStopsBeforeBodyFinishes]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.FileHashRangePolicyTests testSmallFullBodyResponseIsAcceptedAndHashed]' started.
+Test Case '-[DanmakuKitTests.FileHashRangePolicyTests testSmallFullBodyResponseIsAcceptedAndHashed]' passed (0.002 seconds).
+Test Suite 'FileHashRangePolicyTests' passed at 2026-11-13 20:16:27.968.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.560 (0.562) seconds
+Test Suite 'FileHashTests' started at 2026-11-13 20:16:27.968.
+Test Case '-[DanmakuKitTests.FileHashTests testEmptyFileMD5]' started.
+Test Case '-[DanmakuKitTests.FileHashTests testEmptyFileMD5]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.FileHashTests testLocalHashHonorsTaskCancellation]' started.
+Test Case '-[DanmakuKitTests.FileHashTests testLocalHashHonorsTaskCancellation]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.FileHashTests testOnlyHead16MiBForLargeFile]' started.
+Test Case '-[DanmakuKitTests.FileHashTests testOnlyHead16MiBForLargeFile]' passed (4.406 seconds).
+Test Case '-[DanmakuKitTests.FileHashTests testReadFailureErrorIsDistinct]' started.
+Test Case '-[DanmakuKitTests.FileHashTests testReadFailureErrorIsDistinct]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.FileHashTests testRemoteRangeHashIncludesHeaders]' started.
+Test Case '-[DanmakuKitTests.FileHashTests testRemoteRangeHashIncludesHeaders]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.FileHashTests testRemoteRangeRejectsIncompleteDeclaredHead]' started.
+Test Case '-[DanmakuKitTests.FileHashTests testRemoteRangeRejectsIncompleteDeclaredHead]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.FileHashTests testRemoteRangeRejectsMalformedContentRange]' started.
+Test Case '-[DanmakuKitTests.FileHashTests testRemoteRangeRejectsMalformedContentRange]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.FileHashTests testRemoteRangeRejectsNonzeroStart]' started.
+Test Case '-[DanmakuKitTests.FileHashTests testRemoteRangeRejectsNonzeroStart]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.FileHashTests testRemoteRangeRejectsTruncatedResponse]' started.
+Test Case '-[DanmakuKitTests.FileHashTests testRemoteRangeRejectsTruncatedResponse]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.FileHashTests testRemoteSourceThatIgnoresRangeIsRejected]' started.
+Test Case '-[DanmakuKitTests.FileHashTests testRemoteSourceThatIgnoresRangeIsRejected]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.FileHashTests testSmallFileMD5]' started.
+Test Case '-[DanmakuKitTests.FileHashTests testSmallFileMD5]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.FileHashTests testUnreadableFile]' started.
+Test Case '-[DanmakuKitTests.FileHashTests testUnreadableFile]' passed (0.000 seconds).
+Test Suite 'FileHashTests' passed at 2026-11-13 20:16:32.383.
+	 Executed 12 tests, with 0 failures (0 unexpected) in 4.414 (4.415) seconds
+Test Suite 'GatewayClientTests' started at 2026-11-13 20:16:32.383.
+Test Case '-[DanmakuKitTests.GatewayClientTests testBaseURLWithQueryIsRejected]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testBaseURLWithQueryIsRejected]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testBusinessErrorIsNotRetried]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testBusinessErrorIsNotRetried]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testBusinessErrorUserMessagePassesServerTextThrough]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testBusinessErrorUserMessagePassesServerTextThrough]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testCommentsCountDefaultsFromArray]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testCommentsCountDefaultsFromArray]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testCommentsNullArrayAllowed]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testCommentsNullArrayAllowed]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testCommentsPathAndDefaults]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testCommentsPathAndDefaults]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testConnectionLevelErrorsAreRetried]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testConnectionLevelErrorsAreRetried]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testDecodingFailure]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testDecodingFailure]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testForbiddenMapsToDedicatedErrorWithoutRetry]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testForbiddenMapsToDedicatedErrorWithoutRetry]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testMatchBusinessError]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testMatchBusinessError]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testMatchRejectsInvalidInputsBeforeNetwork]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testMatchRejectsInvalidInputsBeforeNetwork]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testMatchSentAndDecoded]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testMatchSentAndDecoded]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testMatchWithoutHashIsRejectedBeforeNetwork]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testMatchWithoutHashIsRejectedBeforeNetwork]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testNonRetryableStatusIsNotRetried]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testNonRetryableStatusIsNotRetried]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testOtherHTTPStatus]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testOtherHTTPStatus]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testRateLimitedRetriesRespectingRetryAfter]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testRateLimitedRetriesRespectingRetryAfter]' passed (0.005 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testRateLimited]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testRateLimited]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testRetryExhaustsAttemptsAndThrowsLastError]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testRetryExhaustsAttemptsAndThrowsLastError]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testRetrySucceedsAfterTransient500]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testRetrySucceedsAfterTransient500]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testRetrySucceedsAfterTransient502]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testRetrySucceedsAfterTransient502]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testRetrySucceedsAfterTransientTimeout]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testRetrySucceedsAfterTransientTimeout]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testSearchAnimeQueryAndDecoded]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testSearchAnimeQueryAndDecoded]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testSearchEpisodesQueryAndDecoded]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testSearchEpisodesQueryAndDecoded]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testSearchEpisodesRequiresParams]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testSearchEpisodesRequiresParams]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testSearchEpisodesSupportsTMDBQuery]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testSearchEpisodesSupportsTMDBQuery]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testTimedOutRequestMapsToNetworkUserMessage]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testTimedOutRequestMapsToNetworkUserMessage]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.GatewayClientTests testUnauthorized]' started.
+Test Case '-[DanmakuKitTests.GatewayClientTests testUnauthorized]' passed (0.000 seconds).
+Test Suite 'GatewayClientTests' passed at 2026-11-13 20:16:32.405.
+	 Executed 27 tests, with 0 failures (0 unexpected) in 0.020 (0.022) seconds
+Test Suite 'GatewayFailureClassificationTests' started at 2026-11-13 20:16:32.405.
+Test Case '-[DanmakuKitTests.GatewayFailureClassificationTests testBoundaryBetweenClientAndServerErrors]' started.
+Test Case '-[DanmakuKitTests.GatewayFailureClassificationTests testBoundaryBetweenClientAndServerErrors]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.GatewayFailureClassificationTests testGatewayLevelFailuresShortCircuit]' started.
+Test Case '-[DanmakuKitTests.GatewayFailureClassificationTests testGatewayLevelFailuresShortCircuit]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.GatewayFailureClassificationTests testRequestScopedFailuresDoNotShortCircuit]' started.
+Test Case '-[DanmakuKitTests.GatewayFailureClassificationTests testRequestScopedFailuresDoNotShortCircuit]' passed (0.000 seconds).
+Test Suite 'GatewayFailureClassificationTests' passed at 2026-11-13 20:16:32.406.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+Test Suite 'MultiSourceIntroTests' started at 2026-11-13 20:16:32.406.
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testAgreementTakesMedianAndVotes]' started.
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testAgreementTakesMedianAndVotes]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testAnilistOnlyHitIsPositiveCached]' started.
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testAnilistOnlyHitIsPositiveCached]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testAnimeSkipFullPathViaMock]' started.
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testAnimeSkipFullPathViaMock]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testAnimeSkipIntervalReconstruction]' started.
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testAnimeSkipIntervalReconstruction]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testAnimeSkipSeasonAndNumberMatching]' started.
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testAnimeSkipSeasonAndNumberMatching]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testCrossEpisodeConsensusRequiresDistinctEpisodes]' started.
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testCrossEpisodeConsensusRequiresDistinctEpisodes]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testDisagreementFallsBackToHighestPrioritySource]' started.
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testDisagreementFallsBackToHighestPrioritySource]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testEmptyIntervalsReturnNil]' started.
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testEmptyIntervalsReturnNil]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testLearningStorePersistsAcrossInstances]' started.
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testLearningStorePersistsAcrossInstances]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testSiblingAggregatedHintRequiresConsensus]' started.
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testSiblingAggregatedHintRequiresConsensus]' passed (0.003 seconds).
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testSiblingHintsOnlyReturnDanmakuSource]' started.
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testSiblingHintsOnlyReturnDanmakuSource]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testTheIntroDBMissingIntroReturnsNil]' started.
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testTheIntroDBMissingIntroReturnsNil]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testTheIntroDBNotFoundThrows]' started.
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testTheIntroDBNotFoundThrows]' passed (0.000 seconds).
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testTheIntroDBParsesIntroSegments]' started.
+Test Case '-[DanmakuKitTests.MultiSourceIntroTests testTheIntroDBParsesIntroSegments]' passed (0.000 seconds).
+Test Suite 'MultiSourceIntroTests' passed at 2026-11-13 20:16:32.419.
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.013 (0.014) seconds
+Test Suite 'RustDanmakuIntegrationTests' started at 2026-11-13 20:16:32.420.
+Test Case '-[DanmakuKitTests.RustDanmakuIntegrationTests testAllWireResponsesKeepCommentsModesCacheAndPool]' started.
+Test Case '-[DanmakuKitTests.RustDanmakuIntegrationTests testAllWireResponsesKeepCommentsModesCacheAndPool]' passed (0.095 seconds).
+Test Case '-[DanmakuKitTests.RustDanmakuIntegrationTests testCancellationDoesNotReplay]' started.
+Test Case '-[DanmakuKitTests.RustDanmakuIntegrationTests testCancellationDoesNotReplay]' passed (0.070 seconds).
+Test Case '-[DanmakuKitTests.RustDanmakuIntegrationTests testProductionActivationAndInjectedTransportGate]' started.
+Test Case '-[DanmakuKitTests.RustDanmakuIntegrationTests testProductionActivationAndInjectedTransportGate]' passed (0.057 seconds).
+Test Case '-[DanmakuKitTests.RustDanmakuIntegrationTests testTypedErrorsAndSoleRetryOwner]' started.
+Test Case '-[DanmakuKitTests.RustDanmakuIntegrationTests testTypedErrorsAndSoleRetryOwner]' passed (0.062 seconds).
+Test Suite 'RustDanmakuIntegrationTests' passed at 2026-11-13 20:16:32.704.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.284 (0.285) seconds
+Test Suite 'DanmakuKitTests.xctest' passed at 2026-11-13 20:16:32.704.
+	 Executed 232 tests, with 0 failures (0 unexpected) in 13.078 (13.103) seconds
+Test Suite 'All tests' passed at 2026-11-13 20:16:32.704.
+	 Executed 232 tests, with 0 failures (0 unexpected) in 13.078 (13.104) seconds
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.

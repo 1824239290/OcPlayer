@@ -1,0 +1,64 @@
+    Checking ocp-core v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-core)
+error[E0382]: use of moved value: `fallback`
+   --> crates/ocp-core/src/settings_backup.rs:397:29
+    |
+367 |             let fallback = match (name, field.name) {
+    |                 -------- move occurs because `fallback` has type `Value`, which does not implement the `Copy` trait
+...
+390 |                     value = fallback;
+    |                             -------- value moved here
+...
+397 |                     value = fallback;
+    |                             ^^^^^^^^ value used here after move
+    |
+note: these 3 reinitializations and 7 others might get skipped
+   --> crates/ocp-core/src/settings_backup.rs:378:47
+    |
+378 |                 ("danmaku", "displayArea") => json!(0.75),
+    |                                               ^^^^^^^^^^^
+379 |                 ("danmaku", "fontSize") => json!(22.0),
+    |                                            ^^^^^^^^^^^
+380 |                 (_, _) if field.optional => Value::Null,
+    |                                             ^^^^^^^^^^^
+    = note: this error originates in the macro `$crate::json_internal` which comes from the expansion of the macro `json` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: consider cloning the value if the performance cost is acceptable
+    |
+390 |                     value = fallback.clone();
+    |                                     ++++++++
+
+error[E0382]: use of moved value: `fallback`
+   --> crates/ocp-core/src/settings_backup.rs:404:29
+    |
+367 |             let fallback = match (name, field.name) {
+    |                 -------- move occurs because `fallback` has type `Value`, which does not implement the `Copy` trait
+...
+390 |                     value = fallback;
+    |                             -------- value moved here
+...
+397 |                     value = fallback;
+    |                             -------- value moved here
+...
+404 |                     value = fallback;
+    |                             ^^^^^^^^ value used here after move
+    |
+note: these 3 reinitializations and 7 others might get skipped
+   --> crates/ocp-core/src/settings_backup.rs:378:47
+    |
+378 |                 ("danmaku", "displayArea") => json!(0.75),
+    |                                               ^^^^^^^^^^^
+379 |                 ("danmaku", "fontSize") => json!(22.0),
+    |                                            ^^^^^^^^^^^
+380 |                 (_, _) if field.optional => Value::Null,
+    |                                             ^^^^^^^^^^^
+    = note: this error originates in the macro `$crate::json_internal` which comes from the expansion of the macro `json` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: consider cloning the value if the performance cost is acceptable
+    |
+390 |                     value = fallback.clone();
+    |                                     ++++++++
+help: consider cloning the value if the performance cost is acceptable
+    |
+397 |                     value = fallback.clone();
+    |                                     ++++++++
+
+For more information about this error, try `rustc --explain E0382`.
+error: could not compile `ocp-core` (lib) due to 2 previous errors

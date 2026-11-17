@@ -1,0 +1,134 @@
+{
+  "rust": 182,
+  "independentRust": 182,
+  "abi": 175,
+  "abiSuites": {
+    "moviepilot-contract-tests.log": 10,
+    "danmaku-contract-tests.log": 4,
+    "playback-tracks-contract-tests.log": 7,
+    "intro-contract-tests.log": 9,
+    "intro-provider-contract-tests.log": 6,
+    "moviepilot-account-contract-tests.log": 5,
+    "danmaku-cache-contract-tests.log": 6,
+    "playback-preparation-contract-tests.log": 11,
+    "network-contract-tests.log": 7,
+    "tmdb-matcher-contract-tests.log": 4,
+    "tmdb-enrichment-contract-tests.log": 8,
+    "intro-identity-contract-tests.log": 6,
+    "bangumi-auth-flow-contract-tests.log": 8,
+    "bangumi-contract-tests.log": 4,
+    "repository-progress-contract-tests.log": 4,
+    "moviepilot-flow-contract-tests.log": 7,
+    "bangumi-account-contract-tests.log": 5,
+    "media-repository-contract-tests.log": 6,
+    "danmaku-policy-contract-tests.log": 4,
+    "repository-composition-contract-tests.log": 3,
+    "media-login-contract-tests.log": 10,
+    "tmdb-wire-contract-tests.log": 5,
+    "standalone-contract-tests.log": 10,
+    "bangumi-sync-contract-tests.log": 6,
+    "bangumi-progress-contract-tests.log": 9,
+    "repository-flow-contract-tests.log": 5,
+    "danmaku-flow-contract-tests.log": 6
+  },
+  "exportedSDK": {
+    "executed": 26,
+    "passed": 26,
+    "skipped": 0,
+    "failures": 0
+  },
+  "nativePackages": {
+    "OcPlayerCore": {
+      "executed": 26,
+      "passed": 26,
+      "skipped": 0,
+      "failures": 0
+    },
+    "JellyfinKit": {
+      "executed": 272,
+      "passed": 272,
+      "skipped": 0,
+      "failures": 0
+    },
+    "MetadataKit": {
+      "executed": 337,
+      "passed": 337,
+      "skipped": 0,
+      "failures": 0
+    },
+    "MoviePilotKit": {
+      "executed": 134,
+      "passed": 134,
+      "skipped": 0,
+      "failures": 0
+    },
+    "BangumiKit": {
+      "executed": 122,
+      "passed": 122,
+      "skipped": 0,
+      "failures": 0
+    },
+    "PlaybackKit": {
+      "executed": 102,
+      "passed": 102,
+      "skipped": 0,
+      "failures": 0
+    },
+    "DanmakuKit": {
+      "executed": 272,
+      "passed": 272,
+      "skipped": 0,
+      "failures": 0
+    }
+  },
+  "nativeTotal": 1265,
+  "app": {
+    "executed": 1013,
+    "passed": 994,
+    "skipped": 19,
+    "failures": 0
+  },
+  "disabledJellyfin": {
+    "executed": 272,
+    "passed": 257,
+    "skipped": 15,
+    "failures": 0
+  },
+  "sourceFiles": 71,
+  "sourceCopy": "/var/folders/07/f4r9g1zd0jbg1c2sh6b4vsg80000gn/T/ocp-continuation-source-final-lea9loqd",
+  "sourceAndNativeInputsUnchanged": true,
+  "sourceLibrarySHA256": "c47bc6bd946755af23ce0932dc6872654668407f66b7521155432ff35a9841df",
+  "embeddedLibrarySHA256": "80ff395a0205d97ddd24398546e9770a994387353ae08e90a9b10526e55ae0ab",
+  "runtimeSections": {
+    "__TEXT/__text": "fd61461a59e38b3d946e40e59fb3f0f5df47fd5a3ec99ea37e82d7a5503ed142",
+    "__TEXT/__stubs": "b91cc27bb20fa894e0f8c1d5f39da5e62c5bd7ffaebcc54f2de5b82970406406",
+    "__TEXT/__stub_helper": "371c37e13ca03a7b397563c3de0053c43a50fc04e17b38025b433e9b96b69186",
+    "__TEXT/__gcc_except_tab": "15ac59ef2173ede5c0d2f216427ca1a920d05e22c7268cd2ea70ae9bd85dc28e",
+    "__TEXT/__cstring": "545550fc15c2fce738576594836c3a7a4e8fb67b57ace10eabd8d6f98979a033",
+    "__TEXT/__const": "5b102a8107b6ed3e7e9dbc559f4641c18fcf13d8517730e74283be8a0b26f758",
+    "__TEXT/__unwind_info": "fddf9ba2e7d3f530b6a573301344345e17e926a159546dbdc527c0047774e875",
+    "__TEXT/__eh_frame": "90b7c725965bce1304364aa70ee87051519911cb66ee0ed3d617e1223ad3c3e3",
+    "__DATA_CONST/__const": "d3060edd12ced91dec53c9c23716da5441a6c45506bceddbaa5ff2116baace26",
+    "__DATA_CONST/__got": "d0774f54a1dfcd5adf2174abe4b2ab0ce2992be8c656f969a8630928b735a96d",
+    "__DATA/__la_symbol_ptr": "990bfd0a60fcd3d16d5fabb6012bc3df815127ef541066ab4174f1b7fd6e5a9b",
+    "__DATA/__data": "4f5ba2956e49fad6fd860123bf71ff80ed18069290e713aef75b88a28c1dbdc8",
+    "__DATA/__thread_vars": "3f5660fae9508d5fa4289b7c14b950e641c9a5646f06b3f0251060e7f03adebc",
+    "__DATA/__thread_data": "9ae65cf32e8d10cfc6d077df31c5a82287d7ea9108a1e39d4f10a82ea393d883"
+  },
+  "runtimeSectionCount": 14,
+  "runtimeSectionsMatch": true,
+  "derivedDataReuse": "/tmp/ocp-preparation-macos/DerivedData",
+  "appPath": "/tmp/ocp-continuation-macos/DerivedData/Build/Products/Debug/OcPlayer.app",
+  "nativeInputFiles": 775,
+  "gateInputFiles": 57,
+  "deepStrictSignaturePassed": true,
+  "disabledAppPreparationTests": {
+    "executed": 23,
+    "passed": 22,
+    "skipped": 1,
+    "failures": 0
+  },
+  "bundledControlsAndNaturalEOF": true,
+  "renderAndAudioFailures": 0,
+  "eofObservedPosition": 5.133333
+}

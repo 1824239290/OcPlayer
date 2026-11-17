@@ -1,0 +1,6 @@
+test_cookie_cache_is_bounded_and_eviction_never_reuses_old_cookie (__main__.NetworkContract.test_cookie_cache_is_bounded_and_eviction_never_reuses_old_cookie) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.515s
+
+OK

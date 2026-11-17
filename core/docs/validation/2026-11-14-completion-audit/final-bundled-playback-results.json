@@ -1,0 +1,87 @@
+[
+  {
+    "name": "hevc-main10",
+    "exitCode": 0,
+    "mediaSha256": "3a2998793b46644a33d1bf002dd197344587c05cb097b94a926666eecb0e5e0a",
+    "bundledCoreSha256": "f68802a6fc20308915159969012c75481a756ef5fc17727e7c5926126bb7bb75",
+    "controls": false,
+    "ended": true,
+    "lastCore": "[selftest] core=ended pos=5.021s rate=2.0 volume=0.4",
+    "lastNative": "[selftest] stopped pos=5021000µs dur=5021000µs surface=true | 解码 107 · 渲染 179 · 硬解 107 · 软解 0 · 零拷贝 107 · 音频 235 · 渲染失败 0 · 音频失败 0",
+    "counts": {
+      "解码": 107,
+      "渲染": 179,
+      "音频": 235,
+      "渲染失败": 0,
+      "音频失败": 0
+    }
+  },
+  {
+    "name": "vp9-opus",
+    "exitCode": 0,
+    "mediaSha256": "e5e72fb1438df9cfdb80dfb46f687077d0947c9068bb4f66de920a6282ddb14e",
+    "bundledCoreSha256": "f68802a6fc20308915159969012c75481a756ef5fc17727e7c5926126bb7bb75",
+    "controls": false,
+    "ended": true,
+    "lastCore": "[selftest] core=ended pos=4.792s rate=2.0 volume=0.4",
+    "lastNative": "[selftest] stopped pos=4792000µs dur=5008000µs surface=true | 解码 119 · 渲染 184 · 硬解 119 · 软解 0 · 零拷贝 119 · 音频 251 · 渲染失败 0 · 音频失败 0",
+    "counts": {
+      "解码": 119,
+      "渲染": 184,
+      "音频": 251,
+      "渲染失败": 0,
+      "音频失败": 0
+    }
+  },
+  {
+    "name": "av1-opus",
+    "exitCode": 0,
+    "mediaSha256": "445080528c07fe1ad3a7a3a5f294d86b10f73ca8f46c46a9bb302b4b47307b9f",
+    "bundledCoreSha256": "f68802a6fc20308915159969012c75481a756ef5fc17727e7c5926126bb7bb75",
+    "controls": false,
+    "ended": true,
+    "lastCore": "[selftest] core=ended pos=4.917s rate=2.0 volume=0.4",
+    "lastNative": "[selftest] stopped pos=4917000µs dur=5008000µs surface=true | 解码 115 · 渲染 180 · 硬解 0 · 软解 115 · 零拷贝 0 · 音频 251 · 渲染失败 0 · 音频失败 0",
+    "counts": {
+      "解码": 115,
+      "渲染": 180,
+      "音频": 251,
+      "渲染失败": 0,
+      "音频失败": 0
+    }
+  },
+  {
+    "name": "h264-controls",
+    "exitCode": 0,
+    "mediaSha256": "8e929749d03a676ef52834fca668b62b06c94facda36959a53c2806ae7373bd2",
+    "bundledCoreSha256": "f68802a6fc20308915159969012c75481a756ef5fc17727e7c5926126bb7bb75",
+    "controls": true,
+    "ended": false,
+    "lastCore": "[selftest] core=playing pos=5.566666s rate=1.0 volume=0.4",
+    "lastNative": "[selftest] playing pos=5800000µs dur=20000000µs surface=true | 解码 385 · 渲染 560 · 硬解 385 · 软解 0 · 零拷贝 385 · 音频 621 · 渲染失败 0 · 音频失败 0",
+    "counts": {
+      "解码": 385,
+      "渲染": 560,
+      "音频": 621,
+      "渲染失败": 0,
+      "音频失败": 0
+    }
+  },
+  {
+    "name": "h264-eof",
+    "exitCode": 0,
+    "mediaSha256": "f29dd8ab6f8c61245d61855b4193293537a40fd0ced376b2738c367cb1bbc1f5",
+    "bundledCoreSha256": "f68802a6fc20308915159969012c75481a756ef5fc17727e7c5926126bb7bb75",
+    "controls": false,
+    "ended": true,
+    "lastCore": "[selftest] core=ended pos=5.1s rate=1.0 volume=0.4",
+    "lastNative": "[selftest] stopped pos=5100000µs dur=5133333µs surface=true | 解码 154 · 渲染 325 · 硬解 154 · 软解 0 · 零拷贝 154 · 音频 238 · 渲染失败 0 · 音频失败 0",
+    "counts": {
+      "解码": 154,
+      "渲染": 325,
+      "音频": 238,
+      "渲染失败": 0,
+      "音频失败": 0
+    }
+  }
+]

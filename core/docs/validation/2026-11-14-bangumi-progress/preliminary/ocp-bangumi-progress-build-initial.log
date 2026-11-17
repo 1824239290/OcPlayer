@@ -1,0 +1,59 @@
+   Compiling ocp-bangumi v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-bangumi)
+error[E0573]: expected type, found variant `Counts`
+   --> crates/ocp-bangumi/src/progress.rs:281:29
+    |
+ 93 | struct Counts {
+    |        ------ you might have meant to refer to this struct
+...
+281 |                 let counts: Counts = decode(&response)?;
+    |                             ^^^^^^ not a type
+
+error[E0308]: mismatched types
+   --> crates/ocp-bangumi/src/progress.rs:317:36
+    |
+317 |                     self.subject = subject;
+    |                     ------------   ^^^^^^^ expected `i64`, found `Option<i64>`
+    |                     |
+    |                     expected due to the type of this binding
+    |
+    = note: expected type `i64`
+               found enum `std::option::Option<i64>`
+help: consider using `Option::expect` to unwrap the `std::option::Option<i64>` value, panicking if the value is an `Option::None`
+    |
+317 |                     self.subject = subject.expect("REASON");
+    |                                           +++++++++++++++++
+
+error[E0308]: mismatched types
+   --> crates/ocp-bangumi/src/progress.rs:334:58
+    |
+334 |                         self.log_then("watchingUnknown", &reason, next);
+    |                              --------                    ^^^^^^^ expected `&str`, found `&Option<String>`
+    |                              |
+    |                              arguments to this method are incorrect
+    |
+    = note: expected reference `&str`
+               found reference `&std::option::Option<std::string::String>`
+note: method defined here
+   --> crates/ocp-bangumi/src/progress.rs:231:8
+    |
+231 |     fn log_then(&mut self, kind: &str, reason: &str, next: Phase) {
+    |        ^^^^^^^^                        ------------
+
+error[E0308]: mismatched types
+   --> crates/ocp-bangumi/src/progress.rs:352:36
+    |
+352 |                     self.subject = subject;
+    |                     ------------   ^^^^^^^ expected `i64`, found `Option<i64>`
+    |                     |
+    |                     expected due to the type of this binding
+    |
+    = note: expected type `i64`
+               found enum `std::option::Option<i64>`
+help: consider using `Option::expect` to unwrap the `std::option::Option<i64>` value, panicking if the value is an `Option::None`
+    |
+352 |                     self.subject = subject.expect("REASON");
+    |                                           +++++++++++++++++
+
+Some errors have detailed explanations: E0308, E0573.
+For more information about an error, try `rustc --explain E0308`.
+error: could not compile `ocp-bangumi` (lib) due to 4 previous errors

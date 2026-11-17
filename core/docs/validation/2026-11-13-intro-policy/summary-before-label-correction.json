@@ -1,0 +1,127 @@
+{
+  "goalComplete": false,
+  "scope": "Shared intro detection/learning/source and sibling consensus, native player seek integration",
+  "rust": {
+    "passed": 79,
+    "failed": 0
+  },
+  "independentSourceRust": {
+    "passed": 79,
+    "failed": 0
+  },
+  "sourceCopyFiles": 47,
+  "packages": {
+    "OcPlayerCore": {
+      "executed": 14,
+      "passed": 14,
+      "skipped": 0,
+      "failed": 0
+    },
+    "JellyfinKit": {
+      "executed": 255,
+      "passed": 255,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MetadataKit": {
+      "executed": 306,
+      "passed": 306,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MoviePilotKit": {
+      "executed": 124,
+      "passed": 124,
+      "skipped": 0,
+      "failed": 0
+    },
+    "BangumiKit": {
+      "executed": 99,
+      "passed": 99,
+      "skipped": 0,
+      "failed": 0
+    },
+    "PlaybackKit": {
+      "executed": 96,
+      "passed": 96,
+      "skipped": 0,
+      "failed": 0
+    },
+    "DanmakuKit": {
+      "executed": 247,
+      "passed": 247,
+      "skipped": 0,
+      "failed": 0
+    }
+  },
+  "exportedAppleBinding": {
+    "executed": 14,
+    "passed": 14,
+    "skipped": 0,
+    "failed": 0
+  },
+  "cABI": {
+    "bangumi": {
+      "passed": 4,
+      "failed": 0
+    },
+    "network": {
+      "passed": 7,
+      "failed": 0
+    },
+    "moviepilot": {
+      "passed": 10,
+      "failed": 0
+    },
+    "media_login": {
+      "passed": 10,
+      "failed": 0
+    },
+    "danmaku": {
+      "passed": 4,
+      "failed": 0
+    },
+    "danmaku_policy": {
+      "passed": 4,
+      "failed": 0
+    },
+    "danmaku_cache": {
+      "passed": 6,
+      "failed": 0
+    },
+    "intro": {
+      "passed": 6,
+      "failed": 0
+    }
+  },
+  "macOSApp": {
+    "executed": 1008,
+    "passed": 989,
+    "skipped": 19,
+    "failed": 0
+  },
+  "coreDisabledDanmaku": {
+    "executed": 247,
+    "passed": 228,
+    "skipped": 19,
+    "failed": 0
+  },
+  "macOSBuild": "passed",
+  "finalCoreEmbedAndSignature": "passed",
+  "validationOrder": "Full macOS verification passed before the final hex-tail rounding repair. Final source then passed locked Rust, all C ABI, exported binding and complete DanmakuKit checks; rebuilt Core was embedded and signed in the same tested native application.",
+  "benchmarkContext": "Debug native Swift versus release Rust dylib, including Swift JSON encoding and ABI; observed 10000-comment timings are in post-precision/DanmakuKit-tests.log.",
+  "builtLibrarySHA256": "5cd7861557494d9f7604e1216279dfd015f699f20da7a3cdb8aa9dd707e88e6c",
+  "remaining": "Intro provider transport/identity resolution, complete shared async load/manual/promotion orchestration and other docs/macos-parity.md acceptance rows. Windows runtime tests deferred.",
+  "bundledPlayback": {
+    "status": "seek correctness needs investigation",
+    "renderFailures": 0,
+    "audioFailures": 0,
+    "observations": [
+      "Native metadata duration 20 seconds",
+      "After requested seek 3.5 seconds, Core/native position reaches about 14 seconds",
+      "After later requested seek 1 second, Core/native position reaches 4 seconds"
+    ],
+    "nativeDisabledComparison": "not yet performed",
+    "initialRate": 2.0
+  }
+}

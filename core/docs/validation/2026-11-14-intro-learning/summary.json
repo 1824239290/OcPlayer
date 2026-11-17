@@ -1,0 +1,54 @@
+{
+  "goalComplete": false,
+  "cohort": "complete manual-seek learning confirmation, consensus promotion and source-protected cross-episode propagation",
+  "rustTests": 93,
+  "directABI": {
+    "intro": 9,
+    "danmakuCache": 6,
+    "danmakuFlow": 6
+  },
+  "newNativeWorkflowTests": 6,
+  "DanmakuKit": {
+    "total": 272,
+    "passed": 272,
+    "skipped": 0,
+    "failed": 0
+  },
+  "coreDisabledDanmakuKit": {
+    "total": 272,
+    "passed": 228,
+    "skipped": 44,
+    "failed": 0
+  },
+  "macOSAppTests": {
+    "total": 1008,
+    "passed": 989,
+    "skipped": 19,
+    "failed": 0
+  },
+  "macOSDebugApplicationBuilt": true,
+  "app": "/tmp/ocplayer-flow-macos-final/DerivedData/Build/Products/Debug/OcPlayer.app",
+  "builtCoreSha256": "041013bf561336a7c9ca5eb1f8a421b182f91f4636f2124562422873e734880e",
+  "signedBundledCoreSha256": "0c0bb4d5245ba929f34f1a8258174a3df15c0df4b20708b5d82a02c26a118722",
+  "bundledSelftest": {
+    "durationSeconds": 10,
+    "clipSeconds": 20,
+    "pausePlay": true,
+    "seek70Percent": 14.0,
+    "seek20Percent": 4.0,
+    "initialSavedRate": 2.0,
+    "finalRate": 1.0,
+    "resize": true,
+    "renderFailures": 0,
+    "audioFailures": 0
+  },
+  "windowsRuntimeTested": false,
+  "remaining": [
+    "legacy standalone loader replacement",
+    "metadata/account scheduling",
+    "native deadline/TLS/redirect/streaming fidelity",
+    "configuration/diagnostics mapping",
+    "Apple release delivery and Windows adapter implementation"
+  ],
+  "preliminaryEvidence": "Initial Rust return-envelope compilation failure, initial Swift test initializer failures and initial C ABI outcome acronym serialization failures are retained; final complete passing logs are separate. This cohort ran affected Danmaku package, shared cache/load ABI and complete macOS app regression; other packages retain previous full-matrix evidence."
+}

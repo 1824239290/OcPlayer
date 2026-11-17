@@ -1,0 +1,320 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Using on-disk description]
+[1 / 1]
+[2 / 14] OcPlayerCore
+[4 / 16] OcPlayerCore
+[10 / 22] MoviePilotKit
+[13 / 25] OcPlayerCore
+[18 / 30] OcPlayerCore
+[18 / 30] MoviePilotKit
+[20 / 32] OcPlayerCore
+[22 / 32] MoviePilotKit
+[26 / 31] MoviePilotKitTests-product
+[32 / 37] MoviePilotKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotSessionRaceTests.swift:202:67: warning: 'AsyncRaceURLProtocol' inherits an unavailable 'Sendable' conformance; conforming here risks data races [#UnavailableSendableConformance]
+200 | }
+201 | 
+202 | private final class AsyncRaceURLProtocol: URLProtocol, @unchecked Sendable {
+    |                     |                                             `- warning: 'AsyncRaceURLProtocol' inherits an unavailable 'Sendable' conformance; conforming here risks data races [#UnavailableSendableConformance]
+    |                     `- note: 'AsyncRaceURLProtocol' inherits unavailable conformance to protocol 'Sendable' from superclass here
+203 |     nonisolated(unsafe) static var handler: (@Sendable (URLRequest) async -> (HTTPURLResponse, Data))?
+204 |     private var pending: Task<Void, Never>?
+
+[#UnavailableSendableConformance]: <https://docs.swift.org/compiler/documentation/diagnostics/unavailable-sendable-conformance>
+[36 / 40] MoviePilotKitTests-product
+Build complete! (4.70秒)
+Test Suite 'All tests' started at 2026-11-14 01:59:08.456.
+Test Suite 'MoviePilotKitTests.xctest' started at 2026-11-14 01:59:08.457.
+Test Suite 'MPEnvelopeTests' started at 2026-11-14 01:59:08.457.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testBareArrayIsReturnedUnchanged]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testBareArrayIsReturnedUnchanged]' passed (0.001 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testEnvelopeIsUnwrapped]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testEnvelopeIsUnwrapped]' passed (0.001 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testEnvelopeWithNullDataIsReturnedUnchanged]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testEnvelopeWithNullDataIsReturnedUnchanged]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testEnvelopeWithObjectPayload]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testEnvelopeWithObjectPayload]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testLeadingWhitespaceBeforeArrayIsHandled]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testLeadingWhitespaceBeforeArrayIsHandled]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testMalformedInputIsReturnedUnchanged]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testMalformedInputIsReturnedUnchanged]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testObjectWithoutSuccessKeyIsReturnedUnchanged]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testObjectWithoutSuccessKeyIsReturnedUnchanged]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testObjectWithSuccessButNoDataIsReturnedUnchanged]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testObjectWithSuccessButNoDataIsReturnedUnchanged]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testScalarDataPayloadDoesNotCrash]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testScalarDataPayloadDoesNotCrash]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testShallowCheckIsBehaviourallyIdenticalToTheReferenceImplementation]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testShallowCheckIsBehaviourallyIdenticalToTheReferenceImplementation]' passed (0.001 seconds).
+Test Suite 'MPEnvelopeTests' passed at 2026-11-14 01:59:08.463.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
+Test Suite 'MoviePilotClientTests' started at 2026-11-14 01:59:08.463.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests test403WithoutTokenMessageStaysForbiddenWithoutRelogin]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests test403WithoutTokenMessageStaysForbiddenWithoutRelogin]' passed (0.019 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testAuthorized401TriggersSilentReloginAndReplay]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testAuthorized401TriggersSilentReloginAndReplay]' passed (0.007 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testEnvelopeErrorMessageExtractedInsteadOfRawJSON]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testEnvelopeErrorMessageExtractedInsteadOfRawJSON]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testExpiredToken403WithEnvelopeTriggersSilentReloginAndReplay]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testExpiredToken403WithEnvelopeTriggersSilentReloginAndReplay]' passed (0.004 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testLoginSendsFormAndFetchesUser]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testLoginSendsFormAndFetchesUser]' passed (0.004 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testLoginWrongPasswordMapsToRequireLogin]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testLoginWrongPasswordMapsToRequireLogin]' passed (0.004 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testNotConfiguredWithoutServer]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testNotConfiguredWithoutServer]' passed (0.003 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testReloginFailureBroadcastsAndClearsToken]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testReloginFailureBroadcastsAndClearsToken]' passed (0.004 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testReloginNetworkErrorKeepsTokenAndThrowsNetwork]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testReloginNetworkErrorKeepsTokenAndThrowsNetwork]' passed (0.005 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testReloginRetryableNetworkErrorDoesNotReplayStaleToken]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testReloginRetryableNetworkErrorDoesNotReplayStaleToken]' passed (3.259 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testReloginTokenStill401TripsBreakerClearsAndBroadcasts]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testReloginTokenStill401TripsBreakerClearsAndBroadcasts]' passed (0.004 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testRetryable502RetriesAndSucceeds]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testRetryable502RetriesAndSucceeds]' passed (0.525 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testSignOutClearsSession]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testSignOutClearsSession]' passed (0.004 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testTokenFailureClassificationContract]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testTokenFailureClassificationContract]' passed (0.001 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testTokenNeverAppearsInURL]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testTokenNeverAppearsInURL]' passed (0.002 seconds).
+Test Suite 'MoviePilotClientTests' passed at 2026-11-14 01:59:12.311.
+	 Executed 15 tests, with 0 failures (0 unexpected) in 3.847 (3.849) seconds
+Test Suite 'MoviePilotMediaRankingTests' started at 2026-11-14 01:59:12.311.
+Test Case '-[MoviePilotKitTests.MoviePilotMediaRankingTests testAlreadySortedInputIsUnchanged]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotMediaRankingTests testAlreadySortedInputIsUnchanged]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotMediaRankingTests testEmptyInputIsEmpty]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotMediaRankingTests testEmptyInputIsEmpty]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotMediaRankingTests testNonTMDBResultWithIdentifierRanksHigher]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotMediaRankingTests testNonTMDBResultWithIdentifierRanksHigher]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotMediaRankingTests testSortingDoesNotAlterMediaObjects]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotMediaRankingTests testSortingDoesNotAlterMediaObjects]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotMediaRankingTests testTiesKeepServerOrder]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotMediaRankingTests testTiesKeepServerOrder]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotMediaRankingTests testTMDBSourceOutranksDoubanEvenWhenServerReturnsDoubanFirst]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotMediaRankingTests testTMDBSourceOutranksDoubanEvenWhenServerReturnsDoubanFirst]' passed (0.000 seconds).
+Test Suite 'MoviePilotMediaRankingTests' passed at 2026-11-14 01:59:12.313.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
+Test Suite 'MoviePilotModelsTests' started at 2026-11-14 01:59:12.313.
+Test Case '-[MoviePilotKitTests.MoviePilotModelsTests testStableHashDistinguishesTypes]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotModelsTests testStableHashDistinguishesTypes]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotModelsTests testStableHashIgnoresDictionaryOrder]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotModelsTests testStableHashIgnoresDictionaryOrder]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotModelsTests testSubscribeIDFallsBackToStableHash]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotModelsTests testSubscribeIDFallsBackToStableHash]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotModelsTests testTorrentAndDownloadTaskIDsAreStable]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotModelsTests testTorrentAndDownloadTaskIDsAreStable]' passed (0.000 seconds).
+Test Suite 'MoviePilotModelsTests' passed at 2026-11-14 01:59:12.314.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'MoviePilotServiceTests' started at 2026-11-14 01:59:12.314.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testAddDownloadEchoesRawObjectsVerbatim]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testAddDownloadEchoesRawObjectsVerbatim]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testAddDownloadServerRefusalThrowsWithMessage]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testAddDownloadServerRefusalThrowsWithMessage]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testAddSubscribeSendsValidBody]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testAddSubscribeSendsValidBody]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testDeleteAndRefreshSubscribes]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testDeleteAndRefreshSubscribes]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testDownloadControlHitsRightPaths]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testDownloadControlHitsRightPaths]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testDownloadingTasksDecode]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testDownloadingTasksDecode]' passed (0.001 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testIdempotencyClassification]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testIdempotencyClassification]' passed (0.001 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testIdempotentDeleteIsRetried]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testIdempotentDeleteIsRetried]' passed (1.354 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testIdempotentPutIsRetried]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testIdempotentPutIsRetried]' passed (0.634 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testNonIdempotentPostIsNotRetried]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testNonIdempotentPostIsNotRetried]' passed (0.006 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testSearchMediaDecodesTypedFields]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testSearchMediaDecodesTypedFields]' passed (0.003 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testSearchMediaHandlesAutoEnvelope]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testSearchMediaHandlesAutoEnvelope]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testSitesListDecodesThroughEnvelope]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testSitesListDecodesThroughEnvelope]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testStreamSearchParsesAppendAndDone]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testStreamSearchParsesAppendAndDone]' passed (0.006 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testStreamSearchReloginsOn401AndRetries]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testStreamSearchReloginsOn401AndRetries]' passed (0.004 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testSubscribesDecodesTypedFields]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testSubscribesDecodesTypedFields]' passed (0.003 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testUpdateSubscribeSendsValidBody]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testUpdateSubscribeSendsValidBody]' passed (0.002 seconds).
+Test Suite 'MoviePilotServiceTests' passed at 2026-11-14 01:59:14.344.
+	 Executed 17 tests, with 0 failures (0 unexpected) in 2.028 (2.030) seconds
+Test Suite 'MoviePilotSessionRaceTests' started at 2026-11-14 01:59:14.344.
+Test Case '-[MoviePilotKitTests.MoviePilotSessionRaceTests testDirectConfigurationChangeRejectsOldNotificationAndToken]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotSessionRaceTests testDirectConfigurationChangeRejectsOldNotificationAndToken]' passed (0.005 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotSessionRaceTests testFailedConfiguredLoginPreservesExistingCredentials]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotSessionRaceTests testFailedConfiguredLoginPreservesExistingCredentials]' passed (0.004 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotSessionRaceTests testLateOldToken401ReplaysAlreadyRefreshedToken]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotSessionRaceTests testLateOldToken401ReplaysAlreadyRefreshedToken]' passed (0.006 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotSessionRaceTests testNewerLoginWinsAgainstLateSuccessAndFailure]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotSessionRaceTests testNewerLoginWinsAgainstLateSuccessAndFailure]' passed (0.007 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotSessionRaceTests testSignOutRejectsLateLogin]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotSessionRaceTests testSignOutRejectsLateLogin]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotSessionRaceTests testSwitchCancelsOldRetryWithoutSendingOldToken]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotSessionRaceTests testSwitchCancelsOldRetryWithoutSendingOldToken]' passed (0.003 seconds).
+Test Suite 'MoviePilotSessionRaceTests' passed at 2026-11-14 01:59:14.372.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.027 (0.028) seconds
+Test Suite 'MoviePilotStoreTests' started at 2026-11-14 01:59:14.372.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testClearedTokenIsNotResurrectedFromLegacyKeyWhileRemovalIsDeferred]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testClearedTokenIsNotResurrectedFromLegacyKeyWhileRemovalIsDeferred]' passed (0.001 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testClearSessionDropsSessionPassword]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testClearSessionDropsSessionPassword]' passed (0.001 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testClearSessionFromBackgroundThreadKeepsDefaultsWritesOnMain]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testClearSessionFromBackgroundThreadKeepsDefaultsWritesOnMain]' passed (0.003 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testConfiguredWithTokenButWithoutRememberedPassword]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testConfiguredWithTokenButWithoutRememberedPassword]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testCredentialRestoreDeletesAbsentKeys]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testCredentialRestoreDeletesAbsentKeys]' passed (0.003 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testCredentialsLifecycle]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testCredentialsLifecycle]' passed (0.004 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testCredentialSnapshotRestoresFailedLoginState]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testCredentialSnapshotRestoresFailedLoginState]' passed (0.003 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testEnablingRememberPasswordPersistsSessionPassword]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testEnablingRememberPasswordPersistsSessionPassword]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testExpiredTokenWithoutRememberedPasswordReadsAsLoggedOut]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testExpiredTokenWithoutRememberedPasswordReadsAsLoggedOut]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testIntegrationStateIsUnconfiguredWithoutUsableAddressAndUsername]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testIntegrationStateIsUnconfiguredWithoutUsableAddressAndUsername]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testLegacyPlaintextPasswordIsDeletedNotMigrated]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testLegacyPlaintextPasswordIsDeletedNotMigrated]' passed (0.001 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testLegacyTokenIsMigratedToCredentialFile]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testLegacyTokenIsMigratedToCredentialFile]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testNormalizedURLAllowsHTTPForLAN]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testNormalizedURLAllowsHTTPForLAN]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testNormalizedURLRejectsNonOrigin]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testNormalizedURLRejectsNonOrigin]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testPasswordIsNotPersistedByDefault]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testPasswordIsNotPersistedByDefault]' passed (0.001 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testPasswordIsPersistedWhenRememberPasswordIsOn]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testPasswordIsPersistedWhenRememberPasswordIsOn]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testPasswordKeepsWhitespace]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testPasswordKeepsWhitespace]' passed (0.001 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testSignOutReadsAsLoggedOutNotUnconfigured]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testSignOutReadsAsLoggedOutNotUnconfigured]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testTurningOffRememberPasswordDeletesStoredPassword]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testTurningOffRememberPasswordDeletesStoredPassword]' passed (0.002 seconds).
+Test Suite 'MoviePilotStoreTests' passed at 2026-11-14 01:59:14.409.
+	 Executed 19 tests, with 0 failures (0 unexpected) in 0.036 (0.038) seconds
+Test Suite 'MoviePilotSubscribeFieldRulesTests' started at 2026-11-14 01:59:14.409.
+Test Case '-[MoviePilotKitTests.MoviePilotSubscribeFieldRulesTests testEmptyTextClearsPairedKeys]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotSubscribeFieldRulesTests testEmptyTextClearsPairedKeys]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotSubscribeFieldRulesTests testInvalidNumberClearsAndValidNumberWrites]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotSubscribeFieldRulesTests testInvalidNumberClearsAndValidNumberWrites]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotSubscribeFieldRulesTests testKeepRawValueFieldKeepsWhitespaceButClearsWhenBlank]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotSubscribeFieldRulesTests testKeepRawValueFieldKeepsWhitespaceButClearsWhenBlank]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotSubscribeFieldRulesTests testPairedKeysAreWrittenAndClearedTogether]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotSubscribeFieldRulesTests testPairedKeysAreWrittenAndClearedTogether]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotSubscribeFieldRulesTests testTextFieldTrimsValueAndClearsOnWhitespace]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotSubscribeFieldRulesTests testTextFieldTrimsValueAndClearsOnWhitespace]' passed (0.000 seconds).
+Test Suite 'MoviePilotSubscribeFieldRulesTests' passed at 2026-11-14 01:59:14.411.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'RustMoviePilotAuthenticationTests' started at 2026-11-14 01:59:14.411.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testConcurrentRawAndNamedExpiryShareOneTokenOnlyRelogin]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testConcurrentRawAndNamedExpiryShareOneTokenOnlyRelogin]' passed (0.500 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testInitialLoginUsesCoreAndRetainsAuthenticatedCookieConnection]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testInitialLoginUsesCoreAndRetainsAuthenticatedCookieConnection]' passed (0.081 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testLoginTokenIssuanceRetriesTransientGatewayAndSendsNoBearer]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testLoginTokenIssuanceRetriesTransientGatewayAndSendsNoBearer]' passed (0.825 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testMalformedSilentLoginTripsFuseAndClearsExpiredToken]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testMalformedSilentLoginTripsFuseAndClearsExpiredToken]' passed (0.086 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testNewerCoreLoginWinsAndCancelsEarlierAttempt]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testNewerCoreLoginWinsAndCancelsEarlierAttempt]' passed (0.070 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testProductionConfigurationLoadsCoreWithoutExplicitLibraryOverride]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testProductionConfigurationLoadsCoreWithoutExplicitLibraryOverride]' passed (0.060 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawBinaryJSONAndFormResponsesPreserveBytesAndQuery]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawBinaryJSONAndFormResponsesPreserveBytesAndQuery]' passed (0.060 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawHTTPErrorMappingAndExplicitNonIdempotencyNeverReplay]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawHTTPErrorMappingAndExplicitNonIdempotencyNeverReplay]' passed (0.061 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawRetryOwnerRetriesReadExactlyThreeTimesAndCreationOnce]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawRetryOwnerRetriesReadExactlyThreeTimesAndCreationOnce]' passed (0.060 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawTimeoutRemainsTypedAndDoesNotRetryWhenDisabled]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawTimeoutRemainsTypedAndDoesNotRetryWhenDisabled]' passed (0.142 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRejectedLoginAndInvalidUserCannotReplaceCommittedCredentials]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRejectedLoginAndInvalidUserCannotReplaceCommittedCredentials]' passed (0.071 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRejectedSilentLoginClearsTokenNotifiesAndDoesNotReissuePassword]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRejectedSilentLoginClearsTokenNotifiesAndDoesNotReissuePassword]' passed (0.060 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testSignOutCancelsInitialCoreLoginAndKeepsTokenCleared]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testSignOutCancelsInitialCoreLoginAndKeepsTokenCleared]' passed (0.071 seconds).
+Test Suite 'RustMoviePilotAuthenticationTests' passed at 2026-11-14 01:59:16.560.
+	 Executed 13 tests, with 0 failures (0 unexpected) in 2.147 (2.149) seconds
+Test Suite 'RustMoviePilotIntegrationTests' started at 2026-11-14 01:59:16.560.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testCancellationAbortsNativeRequestBeforeServerFinishes]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testCancellationAbortsNativeRequestBeforeServerFinishes]' passed (0.072 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testCancellingOneConcurrentStreamKeepsTheOtherAlive]' started.
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 55131)
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testCancellingOneConcurrentStreamKeepsTheOtherAlive]' passed (0.572 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testConcurrentStreamsRouteEachPartialToItsOwnRequest]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testConcurrentStreamsRouteEachPartialToItsOwnRequest]' passed (0.595 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testExpiredTokenReloginsAndEncodedDeleteRemainsOneSegment]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testExpiredTokenReloginsAndEncodedDeleteRemainsOneSegment]' passed (0.083 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testFailedCreationIsSentExactlyOnceWithoutSwiftReplay]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testFailedCreationIsSentExactlyOnceWithoutSwiftReplay]' passed (0.060 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testRawPayloadUserFieldsAndMalformedList]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testRawPayloadUserFieldsAndMalformedList]' passed (0.058 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testRetainedCoreReusesConnectionAndAccountCookieAcrossCommands]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testRetainedCoreReusesConnectionAndAccountCookieAcrossCommands]' passed (0.059 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testSignOutRejectsInFlightNativeResult]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testSignOutRejectsInFlightNativeResult]' passed (0.070 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testSSEPublishesBeforeCompletionAndHonorsReplace]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testSSEPublishesBeforeCompletionAndHonorsReplace]' passed (0.567 seconds).
+Test Suite 'RustMoviePilotIntegrationTests' passed at 2026-11-14 01:59:18.697.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 2.136 (2.137) seconds
+Test Suite 'MoviePilotKitTests.xctest' passed at 2026-11-14 01:59:18.697.
+	 Executed 104 tests, with 0 failures (0 unexpected) in 10.227 (10.240) seconds
+Test Suite 'All tests' passed at 2026-11-14 01:59:18.697.
+	 Executed 104 tests, with 0 failures (0 unexpected) in 10.227 (10.242) seconds
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite "JSONValue.init(any:)" started.
+◇ Suite "MPEnvelope.unwrapObjects" started.
+◇ Test booleansDoNotExposeIntValue() started.
+◇ Test bareArray() started.
+◇ Test nonObjectElementsThrowInsteadOfBeingDropped() started.
+◇ Test arrayWithoutEnvelopeKeys() started.
+◇ Test realisticTorrentWithZeroSeedersKeepsField() started.
+◇ Test booleans() started.
+◇ Test otherTypesUnchanged() started.
+◇ Test otherNumbersStayNumbers() started.
+◇ Test envelope() started.
+◇ Test empties() started.
+◇ Test numericVariants() started.
+◇ Test emptyArraySucceeds() started.
+◇ Test realBooleansStayBooleans() started.
+◇ Test nested() started.
+◇ Test realisticDownloadTask() started.
+◇ Test numericZeroAndOneStayNumbers() started.
+◇ Test numericZeroAndOne() started.
+◇ Test numericZeroAndOneExposeIntValue() started.
+◇ Test nonArrayPayloadThrowsTypedError() started.
+✔ Test realisticTorrentWithZeroSeedersKeepsField() passed after 0.001 seconds.
+✔ Test bareArray() passed after 0.001 seconds.
+✔ Test otherNumbersStayNumbers() passed after 0.001 seconds.
+✔ Test otherTypesUnchanged() passed after 0.001 seconds.
+✔ Test empties() passed after 0.001 seconds.
+✔ Test arrayWithoutEnvelopeKeys() passed after 0.001 seconds.
+◇ Test malformedJSONThrowsTypedError() started.
+✔ Test emptyArraySucceeds() passed after 0.001 seconds.
+✔ Test realisticDownloadTask() passed after 0.001 seconds.
+✔ Test realBooleansStayBooleans() passed after 0.001 seconds.
+✔ Test envelope() passed after 0.001 seconds.
+✔ Test numericZeroAndOneStayNumbers() passed after 0.001 seconds.
+✔ Test numericZeroAndOneExposeIntValue() passed after 0.001 seconds.
+✔ Test numericZeroAndOne() passed after 0.001 seconds.
+✔ Test nonArrayPayloadThrowsTypedError() passed after 0.001 seconds.
+✔ Test booleansDoNotExposeIntValue() passed after 0.001 seconds.
+✔ Test booleans() passed after 0.001 seconds.
+✔ Test malformedJSONThrowsTypedError() passed after 0.001 seconds.
+✔ Test nested() passed after 0.001 seconds.
+✔ Suite "JSONValue.init(any:)" passed after 0.002 seconds.
+✔ Test numericVariants() passed after 0.002 seconds.
+✔ Test nonObjectElementsThrowInsteadOfBeingDropped() passed after 0.003 seconds.
+✔ Suite "MPEnvelope.unwrapObjects" passed after 0.003 seconds.
+✔ Test run with 20 tests in 2 suites passed after 0.004 seconds.

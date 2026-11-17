@@ -1,0 +1,54 @@
+{
+  "platform": "macOS arm64",
+  "date": "2026-11-13",
+  "source": "complete raw logs alongside this file",
+  "goalComplete": false,
+  "checks": {
+    "OcPlayerCore": {
+      "executed": 4,
+      "passed": 4,
+      "skipped": 0,
+      "failed": 0,
+      "includesSwiftTesting": true
+    },
+    "JellyfinKit": {
+      "executed": 240,
+      "passed": 240,
+      "skipped": 0,
+      "failed": 0,
+      "includesSwiftTesting": true
+    },
+    "MetadataKit": {
+      "executed": 304,
+      "passed": 304,
+      "skipped": 0,
+      "failed": 0,
+      "includesSwiftTesting": true
+    },
+    "MoviePilotKit": {
+      "executed": 108,
+      "passed": 108,
+      "skipped": 0,
+      "failed": 0,
+      "includesSwiftTesting": true
+    },
+    "Rust": {
+      "passed": 42,
+      "failed": 0
+    },
+    "Playback": {
+      "seconds": 10,
+      "coreLoadedFromBundle": true,
+      "controls": [
+        "pause",
+        "resume",
+        "seek",
+        "rate",
+        "resize"
+      ],
+      "renderFailures": 0,
+      "audioFailures": 0
+    }
+  },
+  "application": "/tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.app"
+}

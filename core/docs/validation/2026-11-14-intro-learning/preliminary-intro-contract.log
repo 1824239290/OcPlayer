@@ -1,0 +1,69 @@
+test_corruption_cached_empty_failed_write_memory_and_validation (__main__.IntroContract.test_corruption_cached_empty_failed_write_memory_and_validation) ... ok
+test_cross_episode_consensus_boundaries_chain_and_source_upgrade (__main__.IntroContract.test_cross_episode_consensus_boundaries_chain_and_source_upgrade) ... ok
+test_detector_strong_signals_and_single_user_rejection (__main__.IntroContract.test_detector_strong_signals_and_single_user_rejection) ... ok
+test_learning_flow_confirmation_exact_ids_and_local_only_update (__main__.IntroContract.test_learning_flow_confirmation_exact_ids_and_local_only_update) ... FAIL
+test_learning_flow_consensus_protects_sources_and_explicit_identity (__main__.IntroContract.test_learning_flow_consensus_protects_sources_and_explicit_identity) ... ERROR
+test_learning_flow_preflight_validation_and_best_effort_write_through (__main__.IntroContract.test_learning_flow_preflight_validation_and_best_effort_write_through) ... ERROR
+test_learning_persistence_exact_ids_reference_dates_and_cap (__main__.IntroContract.test_learning_persistence_exact_ids_reference_dates_and_cap) ... ok
+test_source_cluster_representative_tie_and_sibling_start_consensus (__main__.IntroContract.test_source_cluster_representative_tie_and_sibling_start_consensus) ... ok
+test_timestamp_keyword_priority_and_grapheme_fields (__main__.IntroContract.test_timestamp_keyword_priority_and_grapheme_fields) ... ok
+
+======================================================================
+ERROR: test_learning_flow_consensus_protects_sources_and_explicit_identity (__main__.IntroContract.test_learning_flow_consensus_protects_sources_and_explicit_identity)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/intro_contract.py", line 106, in test_learning_flow_consensus_protects_sources_and_explicit_identity
+    self.assertEqual(outcome['updatedEpisodeIDs'], [50001, 50002, 90001])
+                     ~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'updatedEpisodeIDs'
+
+======================================================================
+ERROR: test_learning_flow_preflight_validation_and_best_effort_write_through (__main__.IntroContract.test_learning_flow_preflight_validation_and_best_effort_write_through)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/intro_contract.py", line 131, in test_learning_flow_preflight_validation_and_best_effort_write_through
+    self.assertEqual(outcome['updatedEpisodeIDs'], [50001, 50002])
+                     ~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+KeyError: 'updatedEpisodeIDs'
+
+======================================================================
+FAIL: test_learning_flow_confirmation_exact_ids_and_local_only_update (__main__.IntroContract.test_learning_flow_confirmation_exact_ids_and_local_only_update)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/intro_contract.py", line 82, in test_learning_flow_confirmation_exact_ids_and_local_only_update
+    self.assertEqual(outcome, {'kind': 'confirmed', 'animeID': anime,
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                              'hint': dict(hint, source='learned', evidenceCount=4),
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                              'updatedEpisodeIDs': [episode], 'applyToCurrent': False})
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'animeId': 9007199254740993, 'applyToCurre[165 chars]807]} != {'kind': 'confirmed', 'animeID': 9007199254[161 chars]alse}
+- {'animeId': 9007199254740993,
+?         ^
+
++ {'animeID': 9007199254740993,
+?         ^
+
+   'applyToCurrent': False,
+-  'hint': {'endSeconds': 130.0,
+?                            --
+
++  'hint': {'endSeconds': 130,
+            'evidenceCount': 4,
+            'source': 'learned',
+-           'startSeconds': 12.0},
+?                             --
+
++           'startSeconds': 12},
+   'kind': 'confirmed',
+-  'updatedEpisodeIds': [9223372036854775807]}
+?                  ^
+
++  'updatedEpisodeIDs': [9223372036854775807]}
+?                  ^
+
+
+----------------------------------------------------------------------
+Ran 9 tests in 1.659s
+
+FAILED (failures=1, errors=2)

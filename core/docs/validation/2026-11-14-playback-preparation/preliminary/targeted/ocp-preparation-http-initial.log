@@ -1,0 +1,31 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Provisioning 1 / 47]
+[Pre-planning 1 / 1016]
+[Planning deferred tasks]
+[7 / 54] CNIOLinux
+[11 / 20] JellyfinKitTests-product
+[13 / 22] JellyfinKitTests-product
+[19 / 21] JellyfinKitTests-product
+[21 / 21] JellyfinKitTests-product
+Build complete! (3.12秒)
+Test Suite 'Selected tests' started at 2026-11-14 13:01:49.830.
+Test Suite 'JellyfinKitTests.xctest' started at 2026-11-14 13:01:49.831.
+Test Suite 'PlaybackPreparationHTTPTests' started at 2026-11-14 13:01:49.831.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:32: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP] : failed - Preparation did not present
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:33: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP] : XCTUnwrap failed: expected non-nil value of type "PreparedPlayback"
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP]' failed (0.965 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:32: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP] : failed - Preparation did not present
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:33: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP] : XCTUnwrap failed: expected non-nil value of type "PreparedPlayback"
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP]' failed (0.141 seconds).
+Test Suite 'PlaybackPreparationHTTPTests' failed at 2026-11-14 13:01:50.937.
+	 Executed 2 tests, with 4 failures (0 unexpected) in 1.105 (1.106) seconds
+Test Suite 'JellyfinKitTests.xctest' failed at 2026-11-14 13:01:50.937.
+	 Executed 2 tests, with 4 failures (0 unexpected) in 1.105 (1.106) seconds
+Test Suite 'Selected tests' failed at 2026-11-14 13:01:50.937.
+	 Executed 2 tests, with 4 failures (0 unexpected) in 1.105 (1.107) seconds
+Note: Some test targets reported failures:
+  - JellyfinKitTests (XCTest)

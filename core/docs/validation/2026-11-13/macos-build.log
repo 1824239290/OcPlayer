@@ -1,0 +1,515 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project OcPlayer.xcodeproj -scheme OcPlayer-macOS -configuration Debug -destination platform=macOS,arch=arm64 -derivedDataPath /tmp/ocplayer-core-macos -disableAutomaticPackageResolution CODE_SIGNING_ALLOWED=NO build
+
+Build settings from command line:
+    CODE_SIGNING_ALLOWED = NO
+
+Resolve Package Graph
+
+
+Resolved source packages:
+  AppDesignKit: /Users/jumusu/Documents/project/OcPlayer/Packages/AppDesignKit @ local
+  GRDB: https://github.com/groue/GRDB.swift @ 7.12.0
+  PlaybackKit: /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit @ local
+  ErikaKit: /Users/jumusu/Documents/project/OcPlayer/Packages/ErikaKit @ local
+  swift-system: https://github.com/apple/swift-system.git @ 1.8.1
+  BangumiKit: /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit @ local
+  swift-nio-transport-services: https://github.com/apple/swift-nio-transport-services.git @ 1.28.0
+  OcPlayerCore: /Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore @ local
+  CoreModel: /Users/jumusu/Documents/project/OcPlayer/Packages/CoreModel @ local
+  swift-atomics: https://github.com/apple/swift-atomics.git @ 1.3.1
+  DiagnosticsKit: /Users/jumusu/Documents/project/OcPlayer/Packages/DiagnosticsKit @ local
+  swift-nio: https://github.com/apple/swift-nio.git @ 2.105.0
+  JellyfinAPI: https://github.com/jellyfin/jellyfin-sdk-swift @ 3.3.0
+  swift-collections: https://github.com/apple/swift-collections.git @ 1.7.5
+  MoviePilotKit: /Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit @ local
+  DanmakuRenderKit: /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuRenderKit @ local
+  JellyfinKit: /Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit @ local
+  DanmakuKit: /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit @ local
+  MetadataKit: /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit @ local
+  Get: https://github.com/kean/Get @ 2.2.1
+
+ComputePackagePrebuildTargetDependencyGraph
+
+Prepare packages
+
+CreateBuildRequest
+
+SendProjectDescription
+
+CreateBuildOperation
+
+ComputeTargetDependencyGraph
+note: Building targets in dependency order
+note: Target dependency graph (66 targets)
+    Target 'OcPlayer-macOS' in project 'OcPlayer'
+        ➜ Explicit dependency on target 'BangumiKit-product' in project 'BangumiKit'
+        ➜ Explicit dependency on target 'MetadataKit-product' in project 'MetadataKit'
+        ➜ Explicit dependency on target 'PlaybackKit-product' in project 'PlaybackKit'
+        ➜ Explicit dependency on target 'MoviePilotKit-product' in project 'MoviePilotKit'
+        ➜ Explicit dependency on target 'ErikaKit-product' in project 'ErikaKit'
+        ➜ Explicit dependency on target 'CoreModel-product' in project 'CoreModel'
+        ➜ Explicit dependency on target 'JellyfinKit-product' in project 'JellyfinKit'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'DanmakuKit-product' in project 'DanmakuKit'
+        ➜ Explicit dependency on target 'DanmakuRenderKit-product' in project 'DanmakuRenderKit'
+        ➜ Explicit dependency on target 'AppDesignKit-product' in project 'AppDesignKit'
+        ➜ Explicit dependency on target 'OcPlayerCore-product' in project 'OcPlayerCore'
+    Target 'AppDesignKit-product' in project 'AppDesignKit'
+        ➜ Explicit dependency on target 'AppDesignKit' in project 'AppDesignKit'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+    Target 'AppDesignKit' in project 'AppDesignKit'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+    Target 'DanmakuRenderKit-product' in project 'DanmakuRenderKit'
+        ➜ Explicit dependency on target 'DanmakuRenderKit' in project 'DanmakuRenderKit'
+    Target 'DanmakuRenderKit' in project 'DanmakuRenderKit' (no dependencies)
+    Target 'DanmakuKit-product' in project 'DanmakuKit'
+        ➜ Explicit dependency on target 'DanmakuKit' in project 'DanmakuKit'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+    Target 'DanmakuKit' in project 'DanmakuKit'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+    Target 'ErikaKit-product' in project 'ErikaKit'
+        ➜ Explicit dependency on target 'ErikaKit' in project 'ErikaKit'
+        ➜ Explicit dependency on target 'CErika' in project 'ErikaKit'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'PlaybackKit-product' in project 'PlaybackKit'
+    Target 'ErikaKit' in project 'ErikaKit'
+        ➜ Explicit dependency on target 'CErika' in project 'ErikaKit'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'PlaybackKit-product' in project 'PlaybackKit'
+    Target 'CErika' in project 'ErikaKit' (no dependencies)
+    Target 'MoviePilotKit-product' in project 'MoviePilotKit'
+        ➜ Explicit dependency on target 'MoviePilotKit' in project 'MoviePilotKit'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'OcPlayerCore-product' in project 'OcPlayerCore'
+    Target 'MoviePilotKit' in project 'MoviePilotKit'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'OcPlayerCore-product' in project 'OcPlayerCore'
+    Target 'PlaybackKit-product' in project 'PlaybackKit'
+        ➜ Explicit dependency on target 'PlaybackKit' in project 'PlaybackKit'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+    Target 'PlaybackKit' in project 'PlaybackKit'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+    Target 'MetadataKit-product' in project 'MetadataKit'
+        ➜ Explicit dependency on target 'MetadataKit' in project 'MetadataKit'
+        ➜ Explicit dependency on target 'GRDB-product' in project 'GRDB'
+        ➜ Explicit dependency on target 'CoreModel-product' in project 'CoreModel'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'JellyfinKit-product' in project 'JellyfinKit'
+        ➜ Explicit dependency on target 'OcPlayerCore-product' in project 'OcPlayerCore'
+    Target 'MetadataKit' in project 'MetadataKit'
+        ➜ Explicit dependency on target 'GRDB-product' in project 'GRDB'
+        ➜ Explicit dependency on target 'CoreModel-product' in project 'CoreModel'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'JellyfinKit-product' in project 'JellyfinKit'
+        ➜ Explicit dependency on target 'OcPlayerCore-product' in project 'OcPlayerCore'
+    Target 'JellyfinKit-product' in project 'JellyfinKit'
+        ➜ Explicit dependency on target 'JellyfinKit' in project 'JellyfinKit'
+        ➜ Explicit dependency on target 'JellyfinAPI-product' in project 'JellyfinAPI'
+        ➜ Explicit dependency on target 'CoreModel-product' in project 'CoreModel'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'OcPlayerCore-product' in project 'OcPlayerCore'
+    Target 'JellyfinKit' in project 'JellyfinKit'
+        ➜ Explicit dependency on target 'JellyfinAPI-product' in project 'JellyfinAPI'
+        ➜ Explicit dependency on target 'CoreModel-product' in project 'CoreModel'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'OcPlayerCore-product' in project 'OcPlayerCore'
+    Target 'OcPlayerCore-product' in project 'OcPlayerCore'
+        ➜ Explicit dependency on target 'OcPlayerCore' in project 'OcPlayerCore'
+    Target 'OcPlayerCore' in project 'OcPlayerCore' (no dependencies)
+    Target 'JellyfinAPI-product' in project 'JellyfinAPI'
+        ➜ Explicit dependency on target 'JellyfinAPI' in project 'JellyfinAPI'
+        ➜ Explicit dependency on target 'Get-product' in project 'Get'
+        ➜ Explicit dependency on target 'NIOTransportServices-product' in project 'swift-nio-transport-services'
+    Target 'JellyfinAPI' in project 'JellyfinAPI'
+        ➜ Explicit dependency on target 'Get-product' in project 'Get'
+        ➜ Explicit dependency on target 'NIOTransportServices-product' in project 'swift-nio-transport-services'
+    Target 'NIOTransportServices-product' in project 'swift-nio-transport-services'
+        ➜ Explicit dependency on target 'NIOTransportServices' in project 'swift-nio-transport-services'
+        ➜ Explicit dependency on target 'NIO-product' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOCore-product' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOFoundationCompat-product' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOTLS-product' in project 'swift-nio'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'NIOTransportServices' in project 'swift-nio-transport-services'
+        ➜ Explicit dependency on target 'NIO-product' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOCore-product' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOFoundationCompat-product' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOTLS-product' in project 'swift-nio'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'NIOTLS-product' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOTLS' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOAtomics' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOConcurrencyHelpers' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIOBase64' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOOpenBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOFreeBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIODarwin' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOLinux' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWindows' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWASI' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIODataStructures' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOCore' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOEmbedded' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIO' in project 'swift-nio'
+        ➜ Explicit dependency on target 'DequeModule-product' in project 'swift-collections'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'NIOTLS' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOAtomics' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOConcurrencyHelpers' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIOBase64' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOOpenBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOFreeBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIODarwin' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOLinux' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWindows' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWASI' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIODataStructures' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOCore' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOEmbedded' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIO' in project 'swift-nio'
+        ➜ Explicit dependency on target 'DequeModule-product' in project 'swift-collections'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'NIOFoundationCompat-product' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOFoundationCompat' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOAtomics' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOConcurrencyHelpers' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIOBase64' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOOpenBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOFreeBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIODarwin' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOLinux' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWindows' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWASI' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIODataStructures' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOCore' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOEmbedded' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIO' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOFoundationEssentialsCompat' in project 'swift-nio'
+        ➜ Explicit dependency on target 'DequeModule-product' in project 'swift-collections'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'NIOFoundationCompat' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOAtomics' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOConcurrencyHelpers' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIOBase64' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOOpenBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOFreeBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIODarwin' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOLinux' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWindows' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWASI' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIODataStructures' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOCore' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOEmbedded' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIO' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOFoundationEssentialsCompat' in project 'swift-nio'
+        ➜ Explicit dependency on target 'DequeModule-product' in project 'swift-collections'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'NIOFoundationEssentialsCompat' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOAtomics' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOConcurrencyHelpers' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIOBase64' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOOpenBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOFreeBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIODarwin' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOLinux' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWindows' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWASI' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIODataStructures' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOCore' in project 'swift-nio'
+        ➜ Explicit dependency on target 'DequeModule-product' in project 'swift-collections'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'NIOCore-product' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOCore' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOAtomics' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOConcurrencyHelpers' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIOBase64' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOOpenBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOFreeBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIODarwin' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOLinux' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWindows' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWASI' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIODataStructures' in project 'swift-nio'
+        ➜ Explicit dependency on target 'DequeModule-product' in project 'swift-collections'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'NIO-product' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIO' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOAtomics' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOConcurrencyHelpers' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIOBase64' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOOpenBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOFreeBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIODarwin' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOLinux' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWindows' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWASI' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIODataStructures' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOCore' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOEmbedded' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'DequeModule-product' in project 'swift-collections'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'NIO' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOAtomics' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOConcurrencyHelpers' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIOBase64' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOOpenBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOFreeBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIODarwin' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOLinux' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWindows' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWASI' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIODataStructures' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOCore' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOEmbedded' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'DequeModule-product' in project 'swift-collections'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'NIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'swift-nio_NIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOOpenBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOLinux' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIODarwin' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWindows' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOAtomics' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOConcurrencyHelpers' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIOBase64' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOFreeBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWASI' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIODataStructures' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOCore' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'DequeModule-product' in project 'swift-collections'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'swift-nio_NIOPosix' in project 'swift-nio' (no dependencies)
+    Target 'CNIOPosix' in project 'swift-nio' (no dependencies)
+    Target 'NIOEmbedded' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOAtomics' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOConcurrencyHelpers' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIOBase64' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOOpenBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOFreeBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIODarwin' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOLinux' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWindows' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWASI' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIODataStructures' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOCore' in project 'swift-nio'
+        ➜ Explicit dependency on target 'DequeModule-product' in project 'swift-collections'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'NIOCore' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOAtomics' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOConcurrencyHelpers' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIOBase64' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOOpenBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOFreeBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIODarwin' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOLinux' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWindows' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWASI' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIODataStructures' in project 'swift-nio'
+        ➜ Explicit dependency on target 'DequeModule-product' in project 'swift-collections'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'Atomics-product' in project 'swift-atomics'
+        ➜ Explicit dependency on target 'Atomics' in project 'swift-atomics'
+        ➜ Explicit dependency on target '_AtomicsShims' in project 'swift-atomics'
+    Target 'Atomics' in project 'swift-atomics'
+        ➜ Explicit dependency on target '_AtomicsShims' in project 'swift-atomics'
+    Target '_AtomicsShims' in project 'swift-atomics' (no dependencies)
+    Target 'DequeModule-product' in project 'swift-collections'
+        ➜ Explicit dependency on target 'DequeModule' in project 'swift-collections'
+        ➜ Explicit dependency on target 'InternalCollectionsUtilities' in project 'swift-collections'
+        ➜ Explicit dependency on target 'SpanPreview' in project 'swift-collections'
+    Target 'DequeModule' in project 'swift-collections'
+        ➜ Explicit dependency on target 'InternalCollectionsUtilities' in project 'swift-collections'
+        ➜ Explicit dependency on target 'SpanPreview' in project 'swift-collections'
+    Target 'SpanPreview' in project 'swift-collections'
+        ➜ Explicit dependency on target 'InternalCollectionsUtilities' in project 'swift-collections'
+    Target 'InternalCollectionsUtilities' in project 'swift-collections' (no dependencies)
+    Target '_NIODataStructures' in project 'swift-nio' (no dependencies)
+    Target 'CNIOWASI' in project 'swift-nio' (no dependencies)
+    Target 'CNIOWindows' in project 'swift-nio' (no dependencies)
+    Target 'CNIOLinux' in project 'swift-nio' (no dependencies)
+    Target 'CNIODarwin' in project 'swift-nio' (no dependencies)
+    Target 'CNIOFreeBSD' in project 'swift-nio' (no dependencies)
+    Target 'CNIOOpenBSD' in project 'swift-nio' (no dependencies)
+    Target '_NIOBase64' in project 'swift-nio' (no dependencies)
+    Target 'NIOConcurrencyHelpers' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOAtomics' in project 'swift-nio'
+    Target 'CNIOAtomics' in project 'swift-nio' (no dependencies)
+    Target 'Get-product' in project 'Get'
+        ➜ Explicit dependency on target 'Get' in project 'Get'
+    Target 'Get' in project 'Get' (no dependencies)
+    Target 'CoreModel-product' in project 'CoreModel'
+        ➜ Explicit dependency on target 'CoreModel' in project 'CoreModel'
+    Target 'CoreModel' in project 'CoreModel' (no dependencies)
+    Target 'BangumiKit-product' in project 'BangumiKit'
+        ➜ Explicit dependency on target 'BangumiKit' in project 'BangumiKit'
+        ➜ Explicit dependency on target 'GRDB-product' in project 'GRDB'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+    Target 'BangumiKit' in project 'BangumiKit'
+        ➜ Explicit dependency on target 'GRDB-product' in project 'GRDB'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+    Target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'DiagnosticsKit' in project 'DiagnosticsKit'
+    Target 'DiagnosticsKit' in project 'DiagnosticsKit' (no dependencies)
+    Target 'GRDB-product' in project 'GRDB'
+        ➜ Explicit dependency on target 'GRDB' in project 'GRDB'
+        ➜ Explicit dependency on target 'GRDB_GRDB' in project 'GRDB'
+    Target 'GRDB' in project 'GRDB'
+        ➜ Explicit dependency on target 'GRDB_GRDB' in project 'GRDB'
+        ➜ Explicit dependency on target 'GRDBSQLite' in project 'GRDB'
+    Target 'GRDBSQLite' in project 'GRDB' (no dependencies)
+    Target 'GRDB_GRDB' in project 'GRDB' (no dependencies)
+
+GatherProvisioningInputs
+
+CreateBuildDescription
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -arch arm64 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --version --output-format xml1
+
+ReadFileContents /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/share/docc/features.json
+
+Build description signature: 72cbeaa44d4cc04214adc40c9eaed2fc
+Build description path: /tmp/ocplayer-core-macos/Build/Intermediates.noindex/XCBuildData/72cbeaa44d4cc04214adc40c9eaed2fc.xcbuilddata
+ClangStatCache /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk /tmp/ocplayer-core-macos/SDKStatCaches.noindex/macosx27.0-26A425-7231f6df4def33e022ae2eb8f782df1a.sdkstatcache
+    cd /Users/jumusu/Documents/project/OcPlayer/OcPlayer.xcodeproj
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -o /tmp/ocplayer-core-macos/SDKStatCaches.noindex/macosx27.0-26A425-7231f6df4def33e022ae2eb8f782df1a.sdkstatcache
+
+ProcessInfoPlistFile /tmp/ocplayer-core-macos/Build/Products/Debug/GRDB_GRDB.bundle/Contents/Info.plist /tmp/ocplayer-core-macos/Build/Intermediates.noindex/GRDB.build/Debug/GRDB_GRDB-b.build/empty-GRDB_GRDB.plist (in target 'GRDB_GRDB' from project 'GRDB')
+    cd /tmp/ocplayer-core-macos/SourcePackages/checkouts/GRDB.swift
+    builtin-infoPlistUtility /tmp/ocplayer-core-macos/Build/Intermediates.noindex/GRDB.build/Debug/GRDB_GRDB-b.build/empty-GRDB_GRDB.plist -producttype com.apple.product-type.bundle -expandbuildsettings -platform macosx -o /tmp/ocplayer-core-macos/Build/Products/Debug/GRDB_GRDB.bundle/Contents/Info.plist
+
+ProcessInfoPlistFile /tmp/ocplayer-core-macos/Build/Products/Debug/swift-nio_NIOPosix.bundle/Contents/Info.plist /tmp/ocplayer-core-macos/Build/Intermediates.noindex/swift-nio.build/Debug/swift-nio_NIOPosix-b.build/empty-swift-nio_NIOPosix.plist (in target 'swift-nio_NIOPosix' from project 'swift-nio')
+    cd /tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio
+    builtin-infoPlistUtility /tmp/ocplayer-core-macos/Build/Intermediates.noindex/swift-nio.build/Debug/swift-nio_NIOPosix-b.build/empty-swift-nio_NIOPosix.plist -producttype com.apple.product-type.bundle -expandbuildsettings -platform macosx -o /tmp/ocplayer-core-macos/Build/Products/Debug/swift-nio_NIOPosix.bundle/Contents/Info.plist
+
+note: Disabling hardened runtime with ad-hoc codesigning. (in target 'OcPlayer-macOS' from project 'OcPlayer')
+SwiftDriver OcPlayer-macOS normal arm64 com.apple.xcode.tools.swift.compiler (in target 'OcPlayer-macOS' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name OcPlayer -Onone @/tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer.SwiftFileList -DDEBUG -DOCPLAYER_SELFTEST -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/SourcePackages/checkouts/GRDB.swift/Sources/GRDBSQLite/module.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/Build/Intermediates.noindex/GeneratedModuleMaps/CErika.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOPosix.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOWASI.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIOWindows/include/module.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOLinux.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/Build/Intermediates.noindex/GeneratedModuleMaps/CNIODarwin.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOFreeBSD.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOOpenBSD.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOAtomics.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-atomics/Sources/_AtomicsShims/include/module.modulemap -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -target arm64-apple-macos26.0 -g -module-cache-path /tmp/ocplayer-core-macos/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/ocplayer-core-macos/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I /tmp/ocplayer-core-macos/Build/Products/Debug -F /tmp/ocplayer-core-macos/Build/Products/Debug/PackageFrameworks -F /tmp/ocplayer-core-macos/Build/Products/Debug -emit-localized-strings -emit-localized-strings-path /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64 -c -j8 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/ocplayer-core-macos/SDKStatCaches.noindex/macosx27.0-26A425-7231f6df4def33e022ae2eb8f782df1a.sdkstatcache -output-file-map /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer-macOS-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/ocplayer-core-macos/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/ocplayer-core-macos/ModuleCache.noindex -sdk-module-cache-path /tmp/ocplayer-core-macos/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /tmp/ocplayer-core-macos/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -emit-const-values -const-gather-protocols-list /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer-macOS_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/OcPlayer-generated-files.hmap -Xcc -I/tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/OcPlayer-own-target-headers.hmap -Xcc -I/tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/OcPlayer-all-non-framework-target-headers.hmap -Xcc -ivfsoverlay -Xcc /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-75531478d1d5302e92f9c2ebfa7b032b-VFS/all-product-headers.yaml -Xcc -iquote -Xcc /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/OcPlayer-project-headers.hmap -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/ErikaKit/Sources/CErika/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIOPosix/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIOWASI/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIOWindows/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIOLinux/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIODarwin/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIOFreeBSD/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIOOpenBSD/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIOAtomics/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-atomics/Sources/_AtomicsShims/include -Xcc -I/tmp/ocplayer-core-macos/Build/Products/Debug/include -Xcc -I/tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/DerivedSources-normal/arm64 -Xcc -I/tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/DerivedSources/arm64 -Xcc -I/tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/DerivedSources -emit-objc-header -emit-objc-header-path /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer-Swift.h -working-directory /Users/jumusu/Documents/project/OcPlayer -experimental-emit-module-separately -disable-cmo
+
+SwiftEmitModule normal arm64 Emitting\ module\ for\ OcPlayer (in target 'OcPlayer-macOS' from project 'OcPlayer')
+
+SwiftCompile normal arm64 (in target 'OcPlayer-macOS' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    
+
+/Users/jumusu/Documents/project/OcPlayer/App/Shared/Features/Launch/LaunchExperienceView.swift:63:17: warning: cannot use generic class 'Autoconnect' in a property declaration member of a type not marked '@_implementationOnly'; 'Combine' was not imported by this file
+ 61 |     // 引用、几乎不求值，可以这么写；若日后给它加了会变化的依赖，把 timer 挪进
+ 62 |     // onAppear 里显式管理。
+ 63 |     private let timer = Timer.publish(every: 1.0 / 60.0, on: .main, in: .common).autoconnect()
+    |                 `- warning: cannot use generic class 'Autoconnect' in a property declaration member of a type not marked '@_implementationOnly'; 'Combine' was not imported by this file
+ 64 |     private let timeline = LaunchTimeline()
+ 65 | 
+
+Combine.Publishers.Autoconnect:2:14: note: generic class declared here
+ 1 | enum Publishers {
+ 2 | public class Autoconnect<Upstream> : Publisher where Upstream : ConnectablePublisher {
+   |              `- note: generic class declared here
+ 3 |     public typealias Output = Upstream.Output
+ 4 |     public typealias Failure = Upstream.Failure
+
+/Users/jumusu/Documents/project/OcPlayer/App/Shared/Features/Launch/LaunchExperienceView.swift:63:17: warning: cannot use enum 'Publishers' in a property declaration member of a type not marked '@_implementationOnly'; 'Combine' was not imported by this file
+ 61 |     // 引用、几乎不求值，可以这么写；若日后给它加了会变化的依赖，把 timer 挪进
+ 62 |     // onAppear 里显式管理。
+ 63 |     private let timer = Timer.publish(every: 1.0 / 60.0, on: .main, in: .common).autoconnect()
+    |                 `- warning: cannot use enum 'Publishers' in a property declaration member of a type not marked '@_implementationOnly'; 'Combine' was not imported by this file
+ 64 |     private let timeline = LaunchTimeline()
+ 65 | 
+
+Combine.Publishers:2:13: note: enum declared here
+1 | @available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 6.0, *)
+2 | public enum Publishers {
+  |             `- note: enum declared here
+3 | }
+SwiftCompile normal arm64 Compiling\ LaunchOptions.swift /Users/jumusu/Documents/project/OcPlayer/App/Shared/LaunchOptions.swift (in target 'OcPlayer-macOS' from project 'OcPlayer')
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/App/Shared/LaunchOptions.swift (in target 'OcPlayer-macOS' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile LaunchOptions.swift
+
+SwiftDriverJobDiscovery normal arm64 Compiling LaunchOptions.swift (in target 'OcPlayer-macOS' from project 'OcPlayer')
+
+SwiftDriver\ Compilation OcPlayer-macOS normal arm64 com.apple.xcode.tools.swift.compiler (in target 'OcPlayer-macOS' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-Swift-Compilation -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name OcPlayer -Onone @/tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer.SwiftFileList -DDEBUG -DOCPLAYER_SELFTEST -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/SourcePackages/checkouts/GRDB.swift/Sources/GRDBSQLite/module.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/Build/Intermediates.noindex/GeneratedModuleMaps/CErika.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOPosix.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOWASI.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIOWindows/include/module.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOLinux.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/Build/Intermediates.noindex/GeneratedModuleMaps/CNIODarwin.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOFreeBSD.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOOpenBSD.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOAtomics.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-atomics/Sources/_AtomicsShims/include/module.modulemap -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -target arm64-apple-macos26.0 -g -module-cache-path /tmp/ocplayer-core-macos/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/ocplayer-core-macos/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I /tmp/ocplayer-core-macos/Build/Products/Debug -F /tmp/ocplayer-core-macos/Build/Products/Debug/PackageFrameworks -F /tmp/ocplayer-core-macos/Build/Products/Debug -emit-localized-strings -emit-localized-strings-path /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64 -c -j8 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/ocplayer-core-macos/SDKStatCaches.noindex/macosx27.0-26A425-7231f6df4def33e022ae2eb8f782df1a.sdkstatcache -output-file-map /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer-macOS-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/ocplayer-core-macos/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/ocplayer-core-macos/ModuleCache.noindex -sdk-module-cache-path /tmp/ocplayer-core-macos/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /tmp/ocplayer-core-macos/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -emit-const-values -const-gather-protocols-list /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer-macOS_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/OcPlayer-generated-files.hmap -Xcc -I/tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/OcPlayer-own-target-headers.hmap -Xcc -I/tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/OcPlayer-all-non-framework-target-headers.hmap -Xcc -ivfsoverlay -Xcc /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-75531478d1d5302e92f9c2ebfa7b032b-VFS/all-product-headers.yaml -Xcc -iquote -Xcc /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/OcPlayer-project-headers.hmap -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/ErikaKit/Sources/CErika/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIOPosix/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIOWASI/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIOWindows/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIOLinux/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIODarwin/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIOFreeBSD/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIOOpenBSD/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIOAtomics/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-atomics/Sources/_AtomicsShims/include -Xcc -I/tmp/ocplayer-core-macos/Build/Products/Debug/include -Xcc -I/tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/DerivedSources-normal/arm64 -Xcc -I/tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/DerivedSources/arm64 -Xcc -I/tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/DerivedSources -emit-objc-header -emit-objc-header-path /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer-Swift.h -working-directory /Users/jumusu/Documents/project/OcPlayer -experimental-emit-module-separately -disable-cmo
+
+SwiftDriverJobDiscovery normal arm64 Emitting module for OcPlayer (in target 'OcPlayer-macOS' from project 'OcPlayer')
+
+SwiftDriver\ Compilation\ Requirements OcPlayer-macOS normal arm64 com.apple.xcode.tools.swift.compiler (in target 'OcPlayer-macOS' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-Swift-Compilation-Requirements -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name OcPlayer -Onone @/tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer.SwiftFileList -DDEBUG -DOCPLAYER_SELFTEST -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/SourcePackages/checkouts/GRDB.swift/Sources/GRDBSQLite/module.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/Build/Intermediates.noindex/GeneratedModuleMaps/CErika.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOPosix.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOWASI.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIOWindows/include/module.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOLinux.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/Build/Intermediates.noindex/GeneratedModuleMaps/CNIODarwin.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOFreeBSD.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOOpenBSD.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOAtomics.modulemap -Xcc -fmodule-map-file\=/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-atomics/Sources/_AtomicsShims/include/module.modulemap -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -target arm64-apple-macos26.0 -g -module-cache-path /tmp/ocplayer-core-macos/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/ocplayer-core-macos/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I /tmp/ocplayer-core-macos/Build/Products/Debug -F /tmp/ocplayer-core-macos/Build/Products/Debug/PackageFrameworks -F /tmp/ocplayer-core-macos/Build/Products/Debug -emit-localized-strings -emit-localized-strings-path /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64 -c -j8 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/ocplayer-core-macos/SDKStatCaches.noindex/macosx27.0-26A425-7231f6df4def33e022ae2eb8f782df1a.sdkstatcache -output-file-map /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer-macOS-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/ocplayer-core-macos/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/ocplayer-core-macos/ModuleCache.noindex -sdk-module-cache-path /tmp/ocplayer-core-macos/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /tmp/ocplayer-core-macos/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -emit-const-values -const-gather-protocols-list /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer-macOS_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/OcPlayer-generated-files.hmap -Xcc -I/tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/OcPlayer-own-target-headers.hmap -Xcc -I/tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/OcPlayer-all-non-framework-target-headers.hmap -Xcc -ivfsoverlay -Xcc /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-75531478d1d5302e92f9c2ebfa7b032b-VFS/all-product-headers.yaml -Xcc -iquote -Xcc /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/OcPlayer-project-headers.hmap -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/ErikaKit/Sources/CErika/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIOPosix/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIOWASI/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIOWindows/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIOLinux/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIODarwin/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIOFreeBSD/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIOOpenBSD/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-nio/Sources/CNIOAtomics/include -Xcc -I/tmp/ocplayer-core-macos/SourcePackages/checkouts/swift-atomics/Sources/_AtomicsShims/include -Xcc -I/tmp/ocplayer-core-macos/Build/Products/Debug/include -Xcc -I/tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/DerivedSources-normal/arm64 -Xcc -I/tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/DerivedSources/arm64 -Xcc -I/tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/DerivedSources -emit-objc-header -emit-objc-header-path /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer-Swift.h -working-directory /Users/jumusu/Documents/project/OcPlayer -experimental-emit-module-separately -disable-cmo
+
+Copy /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.swiftmodule/arm64-apple-macos.abi.json /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer.abi.json (in target 'OcPlayer-macOS' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer.abi.json /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.swiftmodule/arm64-apple-macos.abi.json
+
+Copy /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.swiftmodule/Project/arm64-apple-macos.swiftsourceinfo /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer.swiftsourceinfo (in target 'OcPlayer-macOS' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer.swiftsourceinfo /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.swiftmodule/Project/arm64-apple-macos.swiftsourceinfo
+
+Ld /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.app/Contents/MacOS/OcPlayer.debug.dylib normal (in target 'OcPlayer-macOS' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-macos26.0 -dynamiclib -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -O0 -Xlinker -no_warn_duplicate_libraries -L/tmp/ocplayer-core-macos/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -L/tmp/ocplayer-core-macos/Build/Products/Debug -F/tmp/ocplayer-core-macos/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -F/tmp/ocplayer-core-macos/Build/Products/Debug/PackageFrameworks -F/tmp/ocplayer-core-macos/Build/Products/Debug -filelist /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer.LinkFileList -install_name @rpath/OcPlayer.debug.dylib -Xlinker -rpath -Xlinker @loader_path -Xlinker -rpath -Xlinker /tmp/ocplayer-core-macos/Build/Products/Debug/PackageFrameworks -Xlinker -object_path_lto -Xlinker /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -dependency_info -Xlinker /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer.swiftmodule -framework Metal -framework QuartzCore -framework CoreVideo -framework CoreMedia -framework CoreGraphics -framework CoreText -framework VideoToolbox -framework AudioToolbox -framework CoreAudio -framework AVFoundation -framework IOSurface -lc++ -lz -lbz2 -liconv -framework AppKit -Xlinker -alias -Xlinker _main -Xlinker ___debug_main_executable_dylib_entry_point -lerika_capi.macos-only -o /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.app/Contents/MacOS/OcPlayer.debug.dylib
+
+ConstructStubExecutorLinkFileList /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/OcPlayer-ExecutorLinkFileList-normal-arm64.txt (in target 'OcPlayer-macOS' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    construct-stub-executor-link-file-list /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.app/Contents/MacOS/OcPlayer.debug.dylib /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libPreviewsJITStubExecutor_no_swift_entry_point.a /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libPreviewsJITStubExecutor.a --output /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/OcPlayer-ExecutorLinkFileList-normal-arm64.txt
+note: Using stub executor library with Swift entry point. (in target 'OcPlayer-macOS' from project 'OcPlayer')
+
+Ld /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.app/Contents/MacOS/OcPlayer normal (in target 'OcPlayer-macOS' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-macos26.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -O0 -Xlinker -no_warn_duplicate_libraries -L/tmp/ocplayer-core-macos/Build/Products/Debug -F/tmp/ocplayer-core-macos/Build/Products/Debug/PackageFrameworks -F/tmp/ocplayer-core-macos/Build/Products/Debug -Xlinker -rpath -Xlinker @executable_path -Xlinker -rpath -Xlinker @loader_path -Xlinker -rpath -Xlinker /tmp/ocplayer-core-macos/Build/Products/Debug/PackageFrameworks -rdynamic -Xlinker -no_deduplicate -e ___debug_blank_executor_main -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_dylib -Xlinker /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/OcPlayer-DebugDylibPath-normal-arm64.txt -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_instlnm -Xlinker /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/OcPlayer-DebugDylibInstallName-normal-arm64.txt -Xlinker -filelist -Xlinker /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/OcPlayer-ExecutorLinkFileList-normal-arm64.txt /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.app/Contents/MacOS/OcPlayer.debug.dylib -o /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.app/Contents/MacOS/OcPlayer
+
+ExtractAppIntentsMetadata (in target 'OcPlayer-macOS' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --module-name OcPlayer --sdk-root /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk --xcode-version 27A9275 --platform-family macOS --deployment-target 26.0 --bundle-identifier dev.jumusu.OcPlayer --output /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.app/Contents/Resources --target-triple arm64-apple-macos26.0 --binary-file /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.app/Contents/MacOS/OcPlayer --dependency-file /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer_dependency_info.dat --stringsdata-file /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer.SwiftFileList --metadata-file-list /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/OcPlayer.DependencyMetadataFileList --static-metadata-file-list /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/OcPlayer.DependencyStaticMetadataFileList --swift-const-vals-list /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --no-app-shortcuts-localization
+2026-11-13 12:42:12.450 appintentsmetadataprocessor[15366:25408244] Starting appintentsmetadataprocessor export
+2026-11-13 12:42:12.452 appintentsmetadataprocessor[15366:25408244] warning: Metadata extraction skipped, no AppIntents.framework dependency found
+
+CopySwiftLibs /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.app (in target 'OcPlayer-macOS' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-swiftStdLibTool --copy --verbose --scan-executable /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.app/Contents/MacOS/OcPlayer.debug.dylib --scan-folder /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.app/Contents/Frameworks --scan-folder /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.app/Contents/PlugIns --scan-folder /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.app/Contents/Library/SystemExtensions --scan-folder /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.app/Contents/Extensions --platform macosx --toolchain /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.app/Contents/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+Ignoring --strip-bitcode because --sign was not passed
+
+ProcessInfoPlistFile /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.app/Contents/Info.plist /Users/jumusu/Documents/project/OcPlayer/Config/Info.plist (in target 'OcPlayer-macOS' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-infoPlistUtility /Users/jumusu/Documents/project/OcPlayer/Config/Info.plist -producttype com.apple.product-type.application -genpkginfo /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.app/Contents/PkgInfo -expandbuildsettings -platform macosx -additionalcontentfile /tmp/ocplayer-core-macos/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/assetcatalog_generated_info.plist -scanforprivacyfile /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.app/Contents/Resources/GRDB_GRDB.bundle -scanforprivacyfile /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.app/Contents/Resources/swift-nio_NIOPosix.bundle -o /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.app/Contents/Info.plist
+removing value "audio" for "UIBackgroundModes" - not supported on macOS
+
+Validate /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.app (in target 'OcPlayer-macOS' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-validationUtility /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.app -no-validate-extension -infoplist-subpath Contents/Info.plist
+
+RegisterWithLaunchServices /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.app (in target 'OcPlayer-macOS' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-lsregisterurl --record-path /tmp/ocplayer-core-macos/Build/Intermediates.noindex/XCBuildData/registered-launchservices.txt -- /System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister -f -R -trusted /tmp/ocplayer-core-macos/Build/Products/Debug/OcPlayer.app
+
+PruneExplicitPrecompiledModules /tmp/ocplayer-core-macos/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules
+
+PruneExplicitPrecompiledModules /tmp/ocplayer-core-macos/Build/Intermediates.noindex/ExplicitPrecompiledModules
+
+PruneExplicitPrecompiledModules /tmp/ocplayer-core-macos/SDKExplicitPrecompiledModules
+
+** BUILD SUCCEEDED **
+

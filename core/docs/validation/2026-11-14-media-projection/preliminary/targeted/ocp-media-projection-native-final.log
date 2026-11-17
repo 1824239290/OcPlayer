@@ -1,0 +1,38 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Provisioning 24 / 47]
+[3 / 5] JellyfinKit_JellyfinKitTests
+[5 / 13] JellyfinKitTests-product
+[7 / 15] JellyfinKitTests-product
+[12 / 14] JellyfinKitTests-product
+[14 / 14] JellyfinKitTests-product
+Build complete! (2.53秒)
+Test Suite 'Selected tests' started at 2026-11-14 15:33:48.331.
+Test Suite 'JellyfinKitTests.xctest' started at 2026-11-14 15:33:48.332.
+Test Suite 'MediaProjectionHTTPTests' started at 2026-11-14 15:33:48.332.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testCompleteMediaFileInfoRetainsAllTracksAndExactInt64Size]' started.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testCompleteMediaFileInfoRetainsAllTracksAndExactInt64Size]' passed (0.315 seconds).
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testExplicitSelectedSubtitleSourceNeverFallsBack]' started.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testExplicitSelectedSubtitleSourceNeverFallsBack]' passed (0.305 seconds).
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testFrameRateUsesNativeValidRangeAndRealRateFallback]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Sources/JellyfinKit/JellyfinServer.swift:606: error: -[JellyfinKitTests.MediaProjectionHTTPTests testFrameRateUsesNativeValidRangeAndRealRateFallback] : failed: caught error: "JellyfinError(kind: JellyfinKit.JellyfinError.Kind.other("未能读取数据，因为它的格式不正确。"), underlying: Optional(DecodingError.dataCorrupted: Data was corrupted. Debug description: The given data was not valid JSON.. Underlying error: Error Domain=NSCocoaErrorDomain Code=3840 "Number 1e-50 is not representable in Swift." UserInfo={NSDebugDescription=Number 1e-50 is not representable in Swift.}))"
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testFrameRateUsesNativeValidRangeAndRealRateFallback]' failed (1.736 seconds).
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testMalformedNonNullSourceAndTrackScalarsFailAcrossBothServers]' started.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testMalformedNonNullSourceAndTrackScalarsFailAcrossBothServers]' passed (1.862 seconds).
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testMetadataRequestsDoNotFilterSelectedSourceOrCreatePlaybackSession]' started.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testMetadataRequestsDoNotFilterSelectedSourceOrCreatePlaybackSession]' passed (0.281 seconds).
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testMissingSourceIDsAndNullMetadataPreserveNativeDefaults]' started.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testMissingSourceIDsAndNullMetadataPreserveNativeDefaults]' passed (1.703 seconds).
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testPreferredSourceOrdersDirectPlayBeforeDirectStreamAndFirstFallback]' started.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testPreferredSourceOrdersDirectPlayBeforeDirectStreamAndFirstFallback]' passed (1.108 seconds).
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testUnknownStreamAndRangeValuesRetainFlavorSpecificNativeBehavior]' started.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testUnknownStreamAndRangeValuesRetainFlavorSpecificNativeBehavior]' passed (1.100 seconds).
+Test Suite 'MediaProjectionHTTPTests' failed at 2026-11-14 15:33:56.741.
+	 Executed 8 tests, with 1 failure (1 unexpected) in 8.409 (8.410) seconds
+Test Suite 'JellyfinKitTests.xctest' failed at 2026-11-14 15:33:56.741.
+	 Executed 8 tests, with 1 failure (1 unexpected) in 8.409 (8.410) seconds
+Test Suite 'Selected tests' failed at 2026-11-14 15:33:56.742.
+	 Executed 8 tests, with 1 failure (1 unexpected) in 8.409 (8.411) seconds
+Note: Some test targets reported failures:
+  - JellyfinKitTests (XCTest)

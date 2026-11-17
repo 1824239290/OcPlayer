@@ -1,0 +1,16 @@
+test_collection_reads_home_after_members_with_full_signed_episode_title (__main__.PreparationContract.test_collection_reads_home_after_members_with_full_signed_episode_title) ... ok
+test_complete_main_and_alternate_negotiation_keeps_order_and_id_exclusion (__main__.PreparationContract.test_complete_main_and_alternate_negotiation_keeps_order_and_id_exclusion) ... ok
+test_continuation_noops_missing_anchor_and_old_cancellation (__main__.PreparationContract.test_continuation_noops_missing_anchor_and_old_cancellation) ... ok
+test_continuation_window_and_ready_receipts_preserve_server_order (__main__.PreparationContract.test_continuation_window_and_ready_receipts_preserve_server_order) ... ok
+test_empty_resolution_and_capacity_cleanup_do_not_change_current_flows (__main__.PreparationContract.test_empty_resolution_and_capacity_cleanup_do_not_change_current_flows) ... ok
+test_info_and_primary_failures_use_fallback_and_preserve_original_failure (__main__.PreparationContract.test_info_and_primary_failures_use_fallback_and_preserve_original_failure) ... ok
+test_invalid_payloads_receipts_and_late_ready_are_nonconsuming_or_retired (__main__.PreparationContract.test_invalid_payloads_receipts_and_late_ready_are_nonconsuming_or_retired) ... ok
+test_native_episode_endpoint_full_sort_window_order_and_parameters (__main__.PreparationContract.test_native_episode_endpoint_full_sort_window_order_and_parameters) ... ok
+test_preferred_source_retains_first_direct_play_stream_and_default (__main__.PreparationContract.test_preferred_source_retains_first_direct_play_stream_and_default) ... ok
+test_recovery_plan_matrix_and_invalid_argument_types (__main__.PreparationContract.test_recovery_plan_matrix_and_invalid_argument_types) ... ok
+test_series_prefers_nextup_then_resume_and_filters_specials_in_server_order (__main__.PreparationContract.test_series_prefers_nextup_then_resume_and_filters_specials_in_server_order) ... ok
+
+----------------------------------------------------------------------
+Ran 11 tests in 0.176s
+
+OK

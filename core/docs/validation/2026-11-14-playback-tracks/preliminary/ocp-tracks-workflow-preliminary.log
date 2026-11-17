@@ -1,0 +1,34 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Pre-planning 1 / 155]
+[Planning deferred tasks]
+[6 / 15] PlaybackKitTests-product
+[8 / 17] PlaybackKitTests-product
+[12 / 16] PlaybackKitTests-product
+[14 / 16] PlaybackKitTests-product
+Build complete! (1.77秒)
+Test Suite 'Selected tests' started at 2026-11-14 12:11:50.239.
+Test Suite 'PlaybackKitTests.xctest' started at 2026-11-14 12:11:50.240.
+Test Suite 'PlaybackTrackWorkflowTests' started at 2026-11-14 12:11:50.240.
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testBatchRunsOnlyAfterCurrentBatchEndsAndManualChoiceSuppressesPreference]' started.
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testBatchRunsOnlyAfterCurrentBatchEndsAndManualChoiceSuppressesPreference]' passed (0.149 seconds).
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testImportTwoEffectsPreservesNameOnSelectionFailureAndRetiresWorkOnReset]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/Tests/PlaybackKitTests/PlaybackTrackWorkflowTests.swift:44: error: -[PlaybackKitTests.PlaybackTrackWorkflowTests testImportTwoEffectsPreservesNameOnSelectionFailureAndRetiresWorkOnReset] : XCTAssertEqual failed: ("["add:/副本.srt"]") is not equal to ("["add:/副本.srt", "subtitle:9223372036854775807"]")
+/Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/Tests/PlaybackKitTests/PlaybackTrackWorkflowTests.swift:45: error: -[PlaybackKitTests.PlaybackTrackWorkflowTests testImportTwoEffectsPreservesNameOnSelectionFailureAndRetiresWorkOnReset] : XCTAssertEqual failed: ("nil") is not equal to ("Optional("简体")")
+/Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/Tests/PlaybackKitTests/PlaybackTrackWorkflowTests.swift:49: error: -[PlaybackKitTests.PlaybackTrackWorkflowTests testImportTwoEffectsPreservesNameOnSelectionFailureAndRetiresWorkOnReset] : XCTAssertTrue failed
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testImportTwoEffectsPreservesNameOnSelectionFailureAndRetiresWorkOnReset]' failed (0.123 seconds).
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testNestedEngineRefreshDoesNotReenterOrCommitFailedAudioSelection]' started.
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testNestedEngineRefreshDoesNotReenterOrCommitFailedAudioSelection]' passed (0.001 seconds).
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testSelectedRemovalUnlocksOnlyAfterPhysicalSuccess]' started.
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testSelectedRemovalUnlocksOnlyAfterPhysicalSuccess]' passed (0.001 seconds).
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testSelectorMatchesIndependentNativePolicyAcrossUnicodeAndFieldTrustCorpus]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Sources/OcPlayerCore/OcpCoreClient.swift:85: error: -[PlaybackKitTests.PlaybackTrackWorkflowTests testSelectorMatchesIndependentNativePolicyAcrossUnicodeAndFieldTrustCorpus] : failed: caught error: "DecodingError.dataCorrupted: Data was corrupted. Debug description: The given data was not valid JSON.. Underlying error: Error Domain=NSCocoaErrorDomain Code=3840 "Number 9.223372036854776e+18 is not representable in Swift." UserInfo={NSDebugDescription=Number 9.223372036854776e+18 is not representable in Swift.}"
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testSelectorMatchesIndependentNativePolicyAcrossUnicodeAndFieldTrustCorpus]' failed (0.001 seconds).
+Test Suite 'PlaybackTrackWorkflowTests' failed at 2026-11-14 12:11:50.515.
+	 Executed 5 tests, with 4 failures (1 unexpected) in 0.275 (0.275) seconds
+Test Suite 'PlaybackKitTests.xctest' failed at 2026-11-14 12:11:50.515.
+	 Executed 5 tests, with 4 failures (1 unexpected) in 0.275 (0.275) seconds
+Test Suite 'Selected tests' failed at 2026-11-14 12:11:50.516.
+	 Executed 5 tests, with 4 failures (1 unexpected) in 0.275 (0.276) seconds
+Note: Some test targets reported failures:
+  - PlaybackKitTests (XCTest)

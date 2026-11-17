@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Scheme
+   LastUpgradeVersion = "2660"
+   version = "1.7">
+   <BuildAction
+      parallelizeBuildables = "YES"
+      buildImplicitDependencies = "YES">
+      <BuildActionEntries>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "1A0000000000000000000020"
+               BuildableName = "OcPlayer.app"
+               BlueprintName = "OcPlayer-iOS"
+               ReferencedContainer = "container:.OcPlayerReleaseProbe.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+      </BuildActionEntries>
+   </BuildAction>
+   <TestAction
+      buildConfiguration = "Debug"
+      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+      shouldUseLaunchSchemeArgsEnv = "NO">
+      <!-- `shouldUseLaunchSchemeArgsEnv="NO"` 是**必需**的：它原本是 YES，意思是「测试
+           用 Run 动作的参数与环境变量」，于是下面这条只属于测试的隔离变量会被静默忽略
+           （实测过一次：加在 TestAction 里但测试照样写了真实数据）。Run 动作没有任何
+           参数/环境变量，改成 NO 不会丢东西。 -->
+      <!-- 隔离运行：AppTests 跑在 App 宿主进程里，没有这一条就会读写本机的真实数据
+           目录与真实偏好域（见 OcPlayerStorage.isIsolated 的注释）。macOS scheme 同款。 -->
+      <EnvironmentVariables>
+         <EnvironmentVariable
+            key = "OCPLAYER_ISOLATED_STORAGE"
+            value = "1"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+      </EnvironmentVariables>
+      <Testables>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "1A00000000000000000000A0"
+               BuildableName = "OcPlayerTests-iOS.xctest"
+               BlueprintName = "OcPlayerTests-iOS"
+               ReferencedContainer = "container:.OcPlayerReleaseProbe.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+      </Testables>
+   </TestAction>
+   <LaunchAction
+      buildConfiguration = "Debug"
+      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+      launchStyle = "0"
+      useCustomWorkingDirectory = "NO"
+      ignoresPersistentStateOnLaunch = "NO"
+      debugDocumentVersioning = "YES"
+      debugServiceExtension = "internal"
+      allowLocationSimulation = "YES">
+      <BuildableProductRunnable
+         runnableDebuggingMode = "0">
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "1A0000000000000000000020"
+            BuildableName = "OcPlayer.app"
+            BlueprintName = "OcPlayer-iOS"
+            ReferencedContainer = "container:.OcPlayerReleaseProbe.xcodeproj">
+         </BuildableReference>
+      </BuildableProductRunnable>
+   </LaunchAction>
+   <ProfileAction
+      buildConfiguration = "Release"
+      shouldUseLaunchSchemeArgsEnv = "YES"
+      savedToolIdentifier = ""
+      useCustomWorkingDirectory = "NO"
+      debugDocumentVersioning = "YES">
+      <BuildableProductRunnable
+         runnableDebuggingMode = "0">
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "1A0000000000000000000020"
+            BuildableName = "OcPlayer.app"
+            BlueprintName = "OcPlayer-iOS"
+            ReferencedContainer = "container:.OcPlayerReleaseProbe.xcodeproj">
+         </BuildableReference>
+      </BuildableProductRunnable>
+   </ProfileAction>
+   <AnalyzeAction
+      buildConfiguration = "Debug">
+   </AnalyzeAction>
+   <ArchiveAction
+      buildConfiguration = "Release"
+      revealArchiveInOrganizer = "YES">
+   </ArchiveAction>
+</Scheme>

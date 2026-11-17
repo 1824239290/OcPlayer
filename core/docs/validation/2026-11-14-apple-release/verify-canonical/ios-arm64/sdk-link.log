@@ -1,0 +1,1 @@
+clang: warning: using sysroot for 'macOS 27.0' but targeting 'arm64-apple-ios16.0.0' [-Wincompatible-sysroot]

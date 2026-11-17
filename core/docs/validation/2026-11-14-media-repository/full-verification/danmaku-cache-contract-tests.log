@@ -1,0 +1,11 @@
+test_comments_reference_dates_lru_and_boundary_expiry (__main__.CacheContract.test_comments_reference_dates_lru_and_boundary_expiry) ... ok
+test_exact_mapping_legacy_migration_revision_barrier (__main__.CacheContract.test_exact_mapping_legacy_migration_revision_barrier) ... ok
+test_expired_memory_rereads_fresh_disk_and_purge_clears_every_layer (__main__.CacheContract.test_expired_memory_rereads_fresh_disk_and_purge_clears_every_layer) ... ok
+test_intro_legacy_null_source_corruption_and_transient_recovery (__main__.CacheContract.test_intro_legacy_null_source_corruption_and_transient_recovery) ... ok
+test_mapping_read_failure_never_overwrites_and_recovers (__main__.CacheContract.test_mapping_read_failure_never_overwrites_and_recovers) ... ok
+test_zero_capacity_failed_disk_write_memory_and_invalid_arguments (__main__.CacheContract.test_zero_capacity_failed_disk_write_memory_and_invalid_arguments) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.068s
+
+OK

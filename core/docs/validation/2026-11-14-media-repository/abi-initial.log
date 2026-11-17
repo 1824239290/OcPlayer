@@ -1,0 +1,18 @@
+test_all_memory_buckets_keep_exact_payloads_and_touch_lru (__main__.MediaRepositoryContract.test_all_memory_buckets_keep_exact_payloads_and_touch_lru) ... ok
+test_concurrent_claims_keep_one_owner_through_memory_invalidation (__main__.MediaRepositoryContract.test_concurrent_claims_keep_one_owner_through_memory_invalidation) ... ok
+test_database_open_recovery_adoption_size_and_removal (__main__.MediaRepositoryContract.test_database_open_recovery_adoption_size_and_removal) ... ok
+test_database_unrecoverable_path_and_bad_arguments_do_not_touch_other_files (__main__.MediaRepositoryContract.test_database_unrecoverable_path_and_bad_arguments_do_not_touch_other_files) ... ok
+test_freshness_keeps_strict_and_distinct_snapshot_progress_boundaries (__main__.MediaRepositoryContract.test_freshness_keeps_strict_and_distinct_snapshot_progress_boundaries) ... ok
+test_preflight_errors_do_not_drop_existing_entries_or_ownership (__main__.MediaRepositoryContract.test_preflight_errors_do_not_drop_existing_entries_or_ownership) ... ok
+test_cancelled_request_does_not_block_shared_executor_or_other_requests (network_contract.NetworkContract.test_cancelled_request_does_not_block_shared_executor_or_other_requests) ... ok
+test_concurrent_search_events_keep_request_identity_and_account_cookie (network_contract.NetworkContract.test_concurrent_search_events_keep_request_identity_and_account_cookie) ... ok
+test_cookie_cache_is_bounded_and_eviction_never_reuses_old_cookie (network_contract.NetworkContract.test_cookie_cache_is_bounded_and_eviction_never_reuses_old_cookie) ... ok
+test_login_publishes_cookie_only_under_issued_token_and_clear_retires_it (network_contract.NetworkContract.test_login_publishes_cookie_only_under_issued_token_and_clear_retires_it) ... ok
+test_moviepilot_reuses_connections_and_isolates_tokens_hosts_and_domains (network_contract.NetworkContract.test_moviepilot_reuses_connections_and_isolates_tokens_hosts_and_domains) ... ok
+test_sse_heartbeats_keep_search_alive_beyond_normal_request_deadline (network_contract.NetworkContract.test_sse_heartbeats_keep_search_alive_beyond_normal_request_deadline) ... ok
+test_standard_domains_and_probe_share_connection_without_header_leaks (network_contract.NetworkContract.test_standard_domains_and_probe_share_connection_without_header_leaks) ... ok
+
+----------------------------------------------------------------------
+Ran 13 tests in 40.678s
+
+OK

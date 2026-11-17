@@ -1,0 +1,31 @@
+Building for debugging...
+[Computing dependencies]
+[Using on-disk description]
+[1 / 1]
+[2 / 7] DanmakuKitTests-product
+[4 / 9] DanmakuKitTests-product
+[9 / 13] DanmakuKitTests-product
+Build complete! (2.52秒)
+Test Suite 'Selected tests' started at 2026-11-13 22:19:08.298.
+Test Suite 'DanmakuKitTests.xctest' started at 2026-11-13 22:19:08.299.
+Test Suite 'RustIntroProviderTests' started at 2026-11-13 22:19:08.299.
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testActivationAndURLProtocolGateForEveryProvider]' started.
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testActivationAndURLProtocolGateForEveryProvider]' passed (0.081 seconds).
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testAniSkipDecoderUnicodeDuplicatesMalformedAndUnknownTypes]' started.
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testAniSkipDecoderUnicodeDuplicatesMalformedAndUnknownTypes]' passed (0.006 seconds).
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testHintClampAndTimestampSelectionAgainstNative]' started.
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testHintClampAndTimestampSelectionAgainstNative]' passed (0.090 seconds).
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testIntroDBStrictIntegersFirstSegmentAndUnicode]' started.
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testIntroDBStrictIntegersFirstSegmentAndUnicode]' passed (0.002 seconds).
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testPublicProviderRequestsAndAniListFallbackThroughRealHTTP]' started.
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testPublicProviderRequestsAndAniListFallbackThroughRealHTTP]' passed (0.088 seconds).
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testStatusAndDecodeFailuresPreserveTypesWithoutHTTPReplay]' started.
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testStatusAndDecodeFailuresPreserveTypesWithoutHTTPReplay]' passed (0.066 seconds).
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testTransportTimeoutRetriesAndCancellationStopsOneAttempt]' started.
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testTransportTimeoutRetriesAndCancellationStopsOneAttempt]' passed (0.232 seconds).
+Test Suite 'RustIntroProviderTests' passed at 2026-11-13 22:19:08.864.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.565 (0.566) seconds
+Test Suite 'DanmakuKitTests.xctest' passed at 2026-11-13 22:19:08.864.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.565 (0.566) seconds
+Test Suite 'Selected tests' passed at 2026-11-13 22:19:08.864.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.565 (0.567) seconds

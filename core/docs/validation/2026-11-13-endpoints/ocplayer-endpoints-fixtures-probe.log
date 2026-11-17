@@ -1,0 +1,130 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Provisioning 1 / 47]
+[3 / 10] InternalCollectionsUtilities
+[4 / 13] JellyfinKit
+[7 / 16] JellyfinKit
+[9 / 18] JellyfinKit
+[14 / 20] JellyfinKit
+[17 / 20] JellyfinKitTests-product
+[25 / 29] JellyfinKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/ServerProbeTests.swift:12:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+ 10 | 
+ 11 |     func testProbeReadsPublicInfo() async throws {
+ 12 |         try await TestSupport.withMock { request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+ 13 |             XCTAssertEqual(request.url?.path, "/System/Info/Public")
+ 14 |             XCTAssertEqual(request.httpMethod, "GET")
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/ServerProbeTests.swift:32:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+ 30 | 
+ 31 |     func testProbeKeepsEmbyPathPrefix() async throws {
+ 32 |         try await TestSupport.withMock { request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+ 33 |             XCTAssertEqual(request.url?.path, "/emby/System/Info/Public")
+ 34 |             return MockURLProtocol.ok(#"{"Id":"emby-1","ProductName":"Emby Server"}"#, for: request.url!)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/ServerProbeTests.swift:42:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+ 40 | 
+ 41 |     func testProbeRejectsAnotherServersID() async throws {
+ 42 |         try await TestSupport.withMock { request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+ 43 |             MockURLProtocol.ok(#"{"Id":"someone-else","ServerName":"other"}"#, for: request.url!)
+ 44 |         } with: {
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/ServerProbeTests.swift:52:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+ 50 | 
+ 51 |     func testProbePassesWhenServerDoesNotReportID() async throws {
+ 52 |         try await TestSupport.withMock { request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+ 53 |             MockURLProtocol.ok(#"{"ServerName":"home-nas"}"#, for: request.url!)
+ 54 |         } with: {
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/ServerProbeTests.swift:70:13: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+ 68 |     func testProbeRejectsOKResponseThatIsNotAMediaServer() async throws {
+ 69 |         for body in ["<html><body>Welcome to nginx</body></html>", "{}", #"{"foo":"bar"}"#] {
+ 70 |             try await TestSupport.withMock { request in
+    |             `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+ 71 |                 MockURLProtocol.ok(body, for: request.url!)
+ 72 |             } with: {
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/ServerProbeTests.swift:80:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+ 78 | 
+ 79 |     func testProbeTreatsHTTPErrorAsUnreachable() async throws {
+ 80 |         try await TestSupport.withMock { request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+ 81 |             let response = HTTPURLResponse(url: request.url!, statusCode: 503,
+ 82 |                                            httpVersion: nil, headerFields: nil)!
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/ServerProbeTests.swift:91:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+ 89 | 
+ 90 |     func testProbeSendsAuthorizationHeaderWhenProvided() async throws {
+ 91 |         try await TestSupport.withMock { request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+ 92 |             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "MediaBrowser Token=\"tok\"")
+ 93 |             return MockURLProtocol.ok(#"{"Id":"srv-1"}"#, for: request.url!)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/ServerProbeTests.swift:103:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+101 | 
+102 |     func testCheckReportsDifferentServerInsteadOfUnreachable() async throws {
+103 |         try await TestSupport.withMock { request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+104 |             MockURLProtocol.ok(#"{"Id":"someone-else"}"#, for: request.url!)
+105 |         } with: {
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/ServerProbeTests.swift:118:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+116 | 
+117 |     func testCheckReportsReachableForSameServer() async throws {
+118 |         try await TestSupport.withMock { request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+119 |             MockURLProtocol.ok(#"{"Id":"srv-1","ServerName":"home-nas"}"#, for: request.url!)
+120 |         } with: {
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[26 / 29] JellyfinKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/ServerAddressFailoverTests.swift:112:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+110 | 
+111 |         let hosts = Recorder()
+112 |         try await TestSupport.withMock { request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+113 |             hosts.record(request.url?.host ?? "?")
+114 |             let response = HTTPURLResponse(url: request.url!, statusCode: 503,
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/EmbyServerTests.swift:533:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+531 |         defer { NotificationCenter.default.removeObserver(observer) }
+532 | 
+533 |         try await TestSupport.withMock { request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+534 |             let response = HTTPURLResponse(url: request.url!, statusCode: 401,
+535 |                                            httpVersion: nil, headerFields: nil)!
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/EmbyServerTests.swift:812:40: warning: result of call to 'markPlayed(itemID:)' is unused [#NoUsage]
+810 |                 throw URLError(.notConnectedToInternet)
+811 |             } with: {
+812 |                 try await makeServer().markPlayed(itemID: "m1")
+    |                                        `- warning: result of call to 'markPlayed(itemID:)' is unused [#NoUsage]
+813 |             }
+814 |             XCTFail("-1009 应抛错")
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[33 / 35] JellyfinKitTests-product
+[35 / 35] JellyfinKitTests-product
+Build complete! (4.13秒)
+Test Suite 'Selected tests' started at 2026-11-13 16:07:02.810.
+Test Suite 'JellyfinKitTests.xctest' started at 2026-11-13 16:07:02.811.
+Test Suite 'RustEndpointIntegrationTests' started at 2026-11-13 16:07:02.811.
+Test Case '-[JellyfinKitTests.RustEndpointIntegrationTests testCoreProbeRetainsConnectionPoolIdentityValidationTimeoutAndCancellation]' started.
+Test Case '-[JellyfinKitTests.RustEndpointIntegrationTests testCoreProbeRetainsConnectionPoolIdentityValidationTimeoutAndCancellation]' passed (0.814 seconds).
+Test Case '-[JellyfinKitTests.RustEndpointIntegrationTests testEmbyCoreRequestsFollowDynamicEndpoints]' started.
+Test Case '-[JellyfinKitTests.RustEndpointIntegrationTests testEmbyCoreRequestsFollowDynamicEndpoints]' passed (1.809 seconds).
+Test Case '-[JellyfinKitTests.RustEndpointIntegrationTests testJellyfinCoreRequestsFollowDynamicEndpoints]' started.
+Test Case '-[JellyfinKitTests.RustEndpointIntegrationTests testJellyfinCoreRequestsFollowDynamicEndpoints]' passed (1.798 seconds).
+Test Suite 'RustEndpointIntegrationTests' passed at 2026-11-13 16:07:07.232.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 4.420 (4.421) seconds
+Test Suite 'JellyfinKitTests.xctest' passed at 2026-11-13 16:07:07.232.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 4.420 (4.421) seconds
+Test Suite 'Selected tests' passed at 2026-11-13 16:07:07.232.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 4.420 (4.422) seconds

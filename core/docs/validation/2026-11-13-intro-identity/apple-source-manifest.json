@@ -1,0 +1,25 @@
+{
+  "source": "/Users/jumusu/Documents/project/OcPlayer",
+  "files": [
+    {
+      "path": "Packages/DanmakuKit/Sources/DanmakuKit/AniSkipIDResolver.swift",
+      "sha256": "ead4500f56cd6a3118a0d63871fe467d156dc86139c0beb30800210f01d81e7f"
+    },
+    {
+      "path": "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroProvider.swift",
+      "sha256": "8b227862866101099c505bcd453885f6cd96d33aa793de6ad2ae8407957b0be7"
+    },
+    {
+      "path": "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroIdentity.swift",
+      "sha256": "0d28a52f4d306fdf3960823c7db75a2be8b8eed49dba3c0e2901371f8fcb3cc5"
+    },
+    {
+      "path": "Packages/DanmakuKit/Tests/DanmakuKitTests/RustIntroIdentityTests.swift",
+      "sha256": "549beac2fccabb99159c804412f7cb4ebe0cf9108e45a64521df886a04272fd3"
+    },
+    {
+      "path": "Packages/DanmakuKit/Tests/DanmakuKitTests/Fixtures/intro_provider_server.py",
+      "sha256": "006d9700375641e765335a00f365aebce5bcda626fbde98ddd59e4dfdf1386af"
+    }
+  ]
+}

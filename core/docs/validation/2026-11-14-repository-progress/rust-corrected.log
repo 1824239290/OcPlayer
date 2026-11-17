@@ -1,0 +1,13 @@
+   Compiling ocp-store v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-store)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.24s
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_store-6d8610e68ee763ce)
+
+running 5 tests
+test repository::progress::tests::resume_reinserts_missing_pending_items_using_current_metadata_and_record_order ... ok
+test repository::progress::tests::confirmation_and_finished_resume_boundaries_match_native_observation ... ok
+test repository::progress::tests::revisions_survive_invalidation_reject_older_final_and_accept_owned_final_after_shutdown ... ok
+test repository::progress::tests::newer_disk_confirmation_is_adopted_without_reopening_protection_and_preflight_is_atomic ... ok
+test repository::progress::tests::apply_updates_every_projection_first_duplicate_and_preserves_original_unicode_payload ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 19 filtered out; finished in 0.00s
+

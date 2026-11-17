@@ -1,0 +1,13 @@
+test_airing_freshness_and_season_flow_preserve_daily_refresh_and_parent_id (__main__.TmdbEnrichmentContract.test_airing_freshness_and_season_flow_preserve_daily_refresh_and_parent_id) ... ok
+test_batch_pre_cancelled_receipts_stop_refill_and_never_count_unentered_workers (__main__.TmdbEnrichmentContract.test_batch_pre_cancelled_receipts_stop_refill_and_never_count_unentered_workers) ... ok
+test_batch_window_out_of_order_completion_classification_and_progress (__main__.TmdbEnrichmentContract.test_batch_window_out_of_order_completion_classification_and_progress) ... ok
+test_collections_keep_member_filter_budget_and_transient_failure_distinction (__main__.TmdbEnrichmentContract.test_collections_keep_member_filter_budget_and_transient_failure_distinction) ... ok
+test_complete_authoritative_rematch_and_cached_failure_flow (__main__.TmdbEnrichmentContract.test_complete_authoritative_rematch_and_cached_failure_flow) ... ok
+test_concurrent_single_flight_claims_and_completion_retirement (__main__.TmdbEnrichmentContract.test_concurrent_single_flight_claims_and_completion_retirement) ... ok
+test_manual_binding_survives_unconfigured_fetch_and_search_trimming (__main__.TmdbEnrichmentContract.test_manual_binding_survives_unconfigured_fetch_and_search_trimming) ... ok
+test_preflight_step_and_receipt_errors_do_not_consume_live_state (__main__.TmdbEnrichmentContract.test_preflight_step_and_receipt_errors_do_not_consume_live_state) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 4.048s
+
+OK

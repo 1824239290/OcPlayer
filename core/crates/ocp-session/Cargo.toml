@@ -1,0 +1,13 @@
+[package]
+name = "ocp-session"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ocp-model.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+unicode-segmentation.workspace = true
+unicode-normalization.workspace = true

@@ -1,0 +1,492 @@
+[
+  {
+    "expression": "playbackPreparation.invalidate",
+    "resolved": "playbackPreparation.invalidate",
+    "kind": "command",
+    "path": "App/Shared/AppModel+Playback.swift",
+    "covered": true
+  },
+  {
+    "expression": "preferences.resolve",
+    "resolved": "preferences.resolve",
+    "kind": "command",
+    "path": "App/Shared/Features/Player/PlaybackPreferences.swift",
+    "covered": true
+  },
+  {
+    "expression": "danmakuCache.open",
+    "resolved": "danmakuCache.open",
+    "kind": "command",
+    "path": "Packages/DanmakuKit/Sources/DanmakuKit/RustDanmakuCache.swift",
+    "covered": true
+  },
+  {
+    "expression": "danmakuCache.",
+    "resolved": "danmakuCache.",
+    "kind": "family",
+    "path": "Packages/DanmakuKit/Sources/DanmakuKit/RustDanmakuCache.swift",
+    "covered": true
+  },
+  {
+    "expression": "danmakuIntro.",
+    "resolved": "danmakuIntro.",
+    "kind": "family",
+    "path": "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroPolicy.swift",
+    "covered": true
+  },
+  {
+    "expression": "introLearning.open",
+    "resolved": "introLearning.open",
+    "kind": "command",
+    "path": "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroPolicy.swift",
+    "covered": true
+  },
+  {
+    "expression": "introLearning.",
+    "resolved": "introLearning.",
+    "kind": "family",
+    "path": "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroPolicy.swift",
+    "covered": true
+  },
+  {
+    "expression": "danmakuFlow.",
+    "resolved": "danmakuFlow.",
+    "kind": "family",
+    "path": "Packages/DanmakuKit/Sources/DanmakuKit/RustDanmakuFlow.swift",
+    "covered": true
+  },
+  {
+    "expression": "danmaku.renderPayload",
+    "resolved": "danmaku.renderPayload",
+    "kind": "command",
+    "path": "Packages/DanmakuKit/Sources/DanmakuKit/RustDanmakuFlow.swift",
+    "covered": true
+  },
+  {
+    "expression": "introIdentity.",
+    "resolved": "introIdentity.",
+    "kind": "family",
+    "path": "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroIdentity.swift",
+    "covered": true
+  },
+  {
+    "expression": "introIDs.open",
+    "resolved": "introIDs.open",
+    "kind": "command",
+    "path": "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroIdentity.swift",
+    "covered": true
+  },
+  {
+    "expression": "introIDs.",
+    "resolved": "introIDs.",
+    "kind": "family",
+    "path": "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroIdentity.swift",
+    "covered": true
+  },
+  {
+    "expression": "introProvider.resolveIDs",
+    "resolved": "introProvider.resolveIDs",
+    "kind": "command",
+    "path": "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroIdentity.swift",
+    "covered": true
+  },
+  {
+    "expression": "introIDs.resolve",
+    "resolved": "introIDs.resolve",
+    "kind": "command",
+    "path": "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroIdentity.swift",
+    "covered": true
+  },
+  {
+    "expression": "introProvider.request",
+    "resolved": "introProvider.request",
+    "kind": "command",
+    "path": "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroProvider.swift",
+    "covered": true
+  },
+  {
+    "expression": "introProvider.exchange",
+    "resolved": "introProvider.exchange",
+    "kind": "command",
+    "path": "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroProvider.swift",
+    "covered": true
+  },
+  {
+    "expression": "introProvider.",
+    "resolved": "introProvider.",
+    "kind": "family",
+    "path": "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroProvider.swift",
+    "covered": true
+  },
+  {
+    "expression": "danmaku.exchange",
+    "resolved": "danmaku.exchange",
+    "kind": "command",
+    "path": "Packages/DanmakuKit/Sources/DanmakuKit/RustDanmakuTransport.swift",
+    "covered": true
+  },
+  {
+    "expression": "endpoint.probe",
+    "resolved": "endpoint.probe",
+    "kind": "command",
+    "path": "Packages/JellyfinKit/Sources/JellyfinKit/RustEndpointPolicy.swift",
+    "covered": true
+  },
+  {
+    "expression": "moviepilotFlow.",
+    "resolved": "moviepilotFlow.",
+    "kind": "family",
+    "path": "Packages/MoviePilotKit/Sources/MoviePilotKit/RustMoviePilotFlow.swift",
+    "covered": true
+  },
+  {
+    "expression": "moviepilot.clearSessions",
+    "resolved": "moviepilot.clearSessions",
+    "kind": "command",
+    "path": "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift",
+    "covered": true
+  },
+  {
+    "expression": "moviepilot.clearSessions",
+    "resolved": "moviepilot.clearSessions",
+    "kind": "command",
+    "path": "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift",
+    "covered": true
+  },
+  {
+    "expression": "login.begin",
+    "resolved": "moviepilotAccount.login.begin",
+    "kind": "command",
+    "path": "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift",
+    "covered": true
+  },
+  {
+    "expression": "login.authorize",
+    "resolved": "moviepilotAccount.login.authorize",
+    "kind": "command",
+    "path": "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift",
+    "covered": true
+  },
+  {
+    "expression": "login.commit",
+    "resolved": "moviepilotAccount.login.commit",
+    "kind": "command",
+    "path": "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift",
+    "covered": true
+  },
+  {
+    "expression": "request.cancel",
+    "resolved": "request.cancel",
+    "kind": "command",
+    "path": "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift",
+    "covered": true
+  },
+  {
+    "expression": "request.cancel",
+    "resolved": "request.cancel",
+    "kind": "command",
+    "path": "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiAPIClient.swift",
+    "covered": true
+  },
+  {
+    "expression": "refresh.claim",
+    "resolved": "moviepilotAccount.refresh.claim",
+    "kind": "command",
+    "path": "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift",
+    "covered": true
+  },
+  {
+    "expression": "refresh.claim",
+    "resolved": "bangumiAccount.refresh.claim",
+    "kind": "command",
+    "path": "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiAPIClient.swift",
+    "covered": true
+  },
+  {
+    "expression": "refresh.authorize",
+    "resolved": "moviepilotAccount.refresh.authorize",
+    "kind": "command",
+    "path": "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift",
+    "covered": true
+  },
+  {
+    "expression": "refresh.commit",
+    "resolved": "moviepilotAccount.refresh.commit",
+    "kind": "command",
+    "path": "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift",
+    "covered": true
+  },
+  {
+    "expression": "refresh.failure",
+    "resolved": "moviepilotAccount.refresh.failure",
+    "kind": "command",
+    "path": "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift",
+    "covered": true
+  },
+  {
+    "expression": "refresh.failure",
+    "resolved": "bangumiAccount.refresh.failure",
+    "kind": "command",
+    "path": "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiAPIClient.swift",
+    "covered": true
+  },
+  {
+    "expression": "refresh.failure",
+    "resolved": "bangumiAccount.refresh.failure",
+    "kind": "command",
+    "path": "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiAPIClient.swift",
+    "covered": true
+  },
+  {
+    "expression": "moviepilotAccount.",
+    "resolved": "moviepilotAccount.",
+    "kind": "family",
+    "path": "Packages/MoviePilotKit/Sources/MoviePilotKit/RustMoviePilotAccount.swift",
+    "covered": true
+  },
+  {
+    "expression": "playbackTracks.snapshot",
+    "resolved": "playbackTracks.snapshot",
+    "kind": "command",
+    "path": "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpPlaybackTracks.swift",
+    "covered": true
+  },
+  {
+    "expression": "settings.backup.capabilities",
+    "resolved": "settings.backup.capabilities",
+    "kind": "command",
+    "path": "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpSettingsBackup.swift",
+    "covered": true
+  },
+  {
+    "expression": "playbackEvents.begin",
+    "resolved": "playbackEvents.begin",
+    "kind": "command",
+    "path": "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpPlaybackEvents.swift",
+    "covered": true
+  },
+  {
+    "expression": "playbackEvents.begin",
+    "resolved": "playbackEvents.begin",
+    "kind": "command",
+    "path": "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpPlaybackEvents.swift",
+    "covered": true
+  },
+  {
+    "expression": "playbackEvents.apply",
+    "resolved": "playbackEvents.apply",
+    "kind": "command",
+    "path": "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpPlaybackEvents.swift",
+    "covered": true
+  },
+  {
+    "expression": "diag.exportFile.capabilities",
+    "resolved": "diag.exportFile.capabilities",
+    "kind": "command",
+    "path": "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpDiagnosticExport.swift",
+    "covered": true
+  },
+  {
+    "expression": "diag.exportFile",
+    "resolved": "diag.exportFile",
+    "kind": "command",
+    "path": "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpDiagnosticExport.swift",
+    "covered": true
+  },
+  {
+    "expression": "playbackFlow.recoveryPlan",
+    "resolved": "playbackFlow.recoveryPlan",
+    "kind": "command",
+    "path": "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpPlaybackFlow.swift",
+    "covered": true
+  },
+  {
+    "expression": "playbackEvents.foreground",
+    "resolved": "playbackEvents.foreground",
+    "kind": "command",
+    "path": "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpPlaybackFlow.swift",
+    "covered": true
+  },
+  {
+    "expression": "playbackEvents.staleTailIO",
+    "resolved": "playbackEvents.staleTailIO",
+    "kind": "command",
+    "path": "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpPlaybackFlow.swift",
+    "covered": true
+  },
+  {
+    "expression": "playbackFlow.snapshot",
+    "resolved": "playbackFlow.snapshot",
+    "kind": "command",
+    "path": "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpPlaybackFlow.swift",
+    "covered": true
+  },
+  {
+    "expression": "playbackFlow.",
+    "resolved": "playbackFlow.",
+    "kind": "family",
+    "path": "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpPlaybackFlow.swift",
+    "covered": true
+  },
+  {
+    "expression": "playback.open",
+    "resolved": "playback.open",
+    "kind": "command",
+    "path": "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpPlaybackSession.swift",
+    "covered": true
+  },
+  {
+    "expression": "danmaku.load",
+    "resolved": "danmaku.load",
+    "kind": "command",
+    "path": "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpDanmakuLoader.swift",
+    "covered": true
+  },
+  {
+    "expression": "oauth.prepare",
+    "resolved": "bangumiAccount.oauth.prepare",
+    "kind": "command",
+    "path": "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiAPIClient.swift",
+    "covered": true
+  },
+  {
+    "expression": "oauth.consume",
+    "resolved": "bangumiAccount.oauth.consume",
+    "kind": "command",
+    "path": "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiAPIClient.swift",
+    "covered": true
+  },
+  {
+    "expression": "bangumi.request",
+    "resolved": "bangumi.request",
+    "kind": "command",
+    "path": "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiAPIClient.swift",
+    "covered": true
+  },
+  {
+    "expression": "bangumiAuthFlow.",
+    "resolved": "bangumiAuthFlow.",
+    "kind": "family",
+    "path": "Packages/BangumiKit/Sources/BangumiKit/Client/RustBangumiAuthFlow.swift",
+    "covered": true
+  },
+  {
+    "expression": "bangumiSync.",
+    "resolved": "bangumiSync.",
+    "kind": "family",
+    "path": "Packages/BangumiKit/Sources/BangumiKit/Client/RustBangumiSync.swift",
+    "covered": true
+  },
+  {
+    "expression": "bangumiProgress.",
+    "resolved": "bangumiProgress.",
+    "kind": "family",
+    "path": "Packages/BangumiKit/Sources/BangumiKit/Client/RustBangumiProgress.swift",
+    "covered": true
+  },
+  {
+    "expression": "bangumiAccount.",
+    "resolved": "bangumiAccount.",
+    "kind": "family",
+    "path": "Packages/BangumiKit/Sources/BangumiKit/Client/RustBangumiAccount.swift",
+    "covered": true
+  },
+  {
+    "expression": "fetch.claim",
+    "resolved": "tmdbEnrichment.fetch.claim",
+    "kind": "command",
+    "path": "Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift",
+    "covered": true
+  },
+  {
+    "expression": "fetch.record",
+    "resolved": "tmdbEnrichment.fetch.record",
+    "kind": "command",
+    "path": "Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift",
+    "covered": true
+  },
+  {
+    "expression": "fetch.finish",
+    "resolved": "tmdbEnrichment.fetch.finish",
+    "kind": "command",
+    "path": "Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift",
+    "covered": true
+  },
+  {
+    "expression": "tmdbEnrichment.",
+    "resolved": "tmdbEnrichment.",
+    "kind": "family",
+    "path": "Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbEnricher.swift",
+    "covered": true
+  },
+  {
+    "expression": "tmdbEnrichment.close",
+    "resolved": "tmdbEnrichment.close",
+    "kind": "command",
+    "path": "Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbEnricher.swift",
+    "covered": true
+  },
+  {
+    "expression": "tmdbEnrichment.batch.close",
+    "resolved": "tmdbEnrichment.batch.close",
+    "kind": "command",
+    "path": "Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbEnricher.swift",
+    "covered": true
+  },
+  {
+    "expression": "batch.begin",
+    "resolved": "tmdbEnrichment.batch.begin",
+    "kind": "command",
+    "path": "Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbEnricher.swift",
+    "covered": true
+  },
+  {
+    "expression": "batch.complete",
+    "resolved": "tmdbEnrichment.batch.complete",
+    "kind": "command",
+    "path": "Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbEnricher.swift",
+    "covered": true
+  },
+  {
+    "expression": "batch.refill",
+    "resolved": "tmdbEnrichment.batch.refill",
+    "kind": "command",
+    "path": "Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbEnricher.swift",
+    "covered": true
+  },
+  {
+    "expression": "tmdb.matcher",
+    "resolved": "tmdb.matcher",
+    "kind": "command",
+    "path": "Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbMatcher.swift",
+    "covered": true
+  },
+  {
+    "expression": "metadataDatabase.",
+    "resolved": "metadataDatabase.",
+    "kind": "family",
+    "path": "Packages/MetadataKit/Sources/MetadataKit/Store/RustMetadataDatabase.swift",
+    "covered": true
+  },
+  {
+    "expression": "metadataDatabase.remove",
+    "resolved": "metadataDatabase.remove",
+    "kind": "command",
+    "path": "Packages/MetadataKit/Sources/MetadataKit/Store/RustMetadataDatabase.swift",
+    "covered": true
+  },
+  {
+    "expression": "mediaRepository.",
+    "resolved": "mediaRepository.",
+    "kind": "family",
+    "path": "Packages/MetadataKit/Sources/MetadataKit/Media/RustMediaRepository.swift",
+    "covered": true
+  },
+  {
+    "expression": "mediaRepository.freshness",
+    "resolved": "mediaRepository.freshness",
+    "kind": "command",
+    "path": "Packages/MetadataKit/Sources/MetadataKit/Media/RustMediaRepository.swift",
+    "covered": true
+  }
+]

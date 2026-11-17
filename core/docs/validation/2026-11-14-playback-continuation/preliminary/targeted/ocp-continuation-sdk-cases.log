@@ -1,0 +1,185 @@
+Building for debugging...
+[Pre-planning 1 / 125]
+[Planning deferred tasks]
+[39 / 67] OcPlayerCore_OcPlayerCoreTests
+[42 / 67]
+[43 / 68] OcPlayerCore
+[52 / 111]
+[53 / 111]
+[55 / 111]
+[58 / 111]
+[60 / 111]
+[61 / 111]
+[62 / 111]
+[65 / 111]
+[66 / 111]
+[67 / 111]
+[68 / 111]
+[69 / 111]
+[71 / 111]
+[74 / 111]
+[75 / 111]
+[76 / 111]
+[77 / 111]
+[86 / 111] OcPlayerCore
+[87 / 111] OcPlayerCore
+[94 / 111] OcPlayerCore
+[101 / 112] OcPlayerCoreTests-product
+[110 / 155]
+[115 / 155]
+[116 / 155]
+[122 / 155]
+[125 / 155]
+[126 / 155]
+[128 / 155]
+[130 / 155]
+[131 / 155]
+[132 / 155]
+[133 / 155]
+[134 / 155]
+[135 / 155]
+[136 / 155]
+[144 / 155] OcPlayerCoreTests-product
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:255:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+253 |         }
+254 |         let client = try OcpCoreClient(libraryPath: path)
+255 |         try client.call("playback.open", arguments: ["source": "movie.mp4"])
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+256 |         try client.call("playback.play")
+257 |         client.attachSurface(nativeHandle: 1, width: 1920, height: 1080, scale: 2, kind: 0)
+
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:256:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+254 |         let client = try OcpCoreClient(libraryPath: path)
+255 |         try client.call("playback.open", arguments: ["source": "movie.mp4"])
+256 |         try client.call("playback.play")
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+257 |         client.attachSurface(nativeHandle: 1, width: 1920, height: 1080, scale: 2, kind: 0)
+258 |         for frame in 0..<7200 {
+
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:261:28: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+259 |             client.renderTick(timeSeconds: Double(frame) / 60)
+260 |             if frame.isMultiple(of: 60) {
+261 |                 try client.call("playback.position", arguments: ["positionSeconds": Double(frame) / 60])
+    |                            `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+262 |             }
+263 |         }
+
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:264:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+262 |             }
+263 |         }
+264 |         try client.call("playback.pause")
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+265 |         let diagnostics = try client.diagnosticsSnapshot().decode(Diagnostics.self)
+266 |         XCTAssertEqual(diagnostics.core.eventQueueDepth, 7)
+
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:287:24: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+285 |         // A host that never polls controls must still have a fixed upper bound.
+286 |         for position in 0..<1000 {
+287 |             try client.call("playback.seek", arguments: ["positionSeconds": position])
+    |                        `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+288 |         }
+289 |         try client.call("playback.stop")
+
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:289:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+287 |             try client.call("playback.seek", arguments: ["positionSeconds": position])
+288 |         }
+289 |         try client.call("playback.stop")
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+290 |         let overflow = try client.diagnosticsSnapshot().decode(Diagnostics.self)
+291 |         XCTAssertEqual(overflow.core.eventQueue.depth, overflow.core.eventQueue.capacity)
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpPlaybackTracksTests.swift:22:18: warning: result of call to 'complete(operationID:success:trackID:)' is unused [#NoUsage]
+20 |         XCTAssertThrowsError(try flow.complete(operationID: firstID, success: false))
+21 |         XCTAssertEqual(flow.snapshot.pendingOperationId, secondID)
+22 |         try flow.complete(operationID: secondID, success: true)
+   |                  `- warning: result of call to 'complete(operationID:success:trackID:)' is unused [#NoUsage]
+23 |         XCTAssertTrue(flow.snapshot.manualChoice)
+24 |         try flow.reset()
+
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpPlaybackTracksTests.swift:27:18: warning: result of call to 'complete(operationID:success:trackID:)' is unused [#NoUsage]
+25 |         let audio = try flow.begin(["operation": "selectAudio", "id": Int64.min])
+26 |         XCTAssertEqual(audio.effect?.id, .min)
+27 |         try flow.complete(operationID: XCTUnwrap(audio.operationId), success: true)
+   |                  `- warning: result of call to 'complete(operationID:success:trackID:)' is unused [#NoUsage]
+28 |         XCTAssertFalse(flow.snapshot.manualChoice)
+29 |     }
+
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpPlaybackTracksTests.swift:38:18: warning: result of call to 'complete(operationID:success:trackID:)' is unused [#NoUsage]
+36 |         XCTAssertThrowsError(try flow.complete(operationID: XCTUnwrap(new.operationId), success: true))
+37 |         XCTAssertEqual(flow.snapshot.pendingOperationId, new.operationId)
+38 |         try flow.complete(operationID: XCTUnwrap(new.operationId), success: true, trackID: .min)
+   |                  `- warning: result of call to 'complete(operationID:success:trackID:)' is unused [#NoUsage]
+39 |         XCTAssertTrue(flow.snapshot.externalNames.isEmpty)
+40 |         XCTAssertNil(flow.snapshot.pendingOperationId)
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+[149 / 155] OcPlayerCoreTests-product
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:255:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+253 |         }
+254 |         let client = try OcpCoreClient(libraryPath: path)
+255 |         try client.call("playback.open", arguments: ["source": "movie.mp4"])
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+256 |         try client.call("playback.play")
+257 |         client.attachSurface(nativeHandle: 1, width: 1920, height: 1080, scale: 2, kind: 0)
+
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:256:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+254 |         let client = try OcpCoreClient(libraryPath: path)
+255 |         try client.call("playback.open", arguments: ["source": "movie.mp4"])
+256 |         try client.call("playback.play")
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+257 |         client.attachSurface(nativeHandle: 1, width: 1920, height: 1080, scale: 2, kind: 0)
+258 |         for frame in 0..<7200 {
+
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:261:28: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+259 |             client.renderTick(timeSeconds: Double(frame) / 60)
+260 |             if frame.isMultiple(of: 60) {
+261 |                 try client.call("playback.position", arguments: ["positionSeconds": Double(frame) / 60])
+    |                            `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+262 |             }
+263 |         }
+
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:264:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+262 |             }
+263 |         }
+264 |         try client.call("playback.pause")
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+265 |         let diagnostics = try client.diagnosticsSnapshot().decode(Diagnostics.self)
+266 |         XCTAssertEqual(diagnostics.core.eventQueueDepth, 7)
+
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:287:24: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+285 |         // A host that never polls controls must still have a fixed upper bound.
+286 |         for position in 0..<1000 {
+287 |             try client.call("playback.seek", arguments: ["positionSeconds": position])
+    |                        `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+288 |         }
+289 |         try client.call("playback.stop")
+
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:289:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+287 |             try client.call("playback.seek", arguments: ["positionSeconds": position])
+288 |         }
+289 |         try client.call("playback.stop")
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+290 |         let overflow = try client.diagnosticsSnapshot().decode(Diagnostics.self)
+291 |         XCTAssertEqual(overflow.core.eventQueue.depth, overflow.core.eventQueue.capacity)
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+[151 / 155] OcPlayerCoreTests-product
+Build complete! (16.60秒)
+Test Suite 'Selected tests' started at 2026-11-14 13:46:07.897.
+Test Suite 'OcPlayerCoreTests.xctest' started at 2026-11-14 13:46:07.898.
+Test Suite 'OcpPlaybackPreparationTests' started at 2026-11-14 13:46:07.898.
+Test Case '-[OcPlayerCoreTests.OcpPlaybackPreparationTests testOriginalWireDecodingRetainsUnsignedTokensAndPreferredSourceOrder]' started.
+Test Case '-[OcPlayerCoreTests.OcpPlaybackPreparationTests testOriginalWireDecodingRetainsUnsignedTokensAndPreferredSourceOrder]' passed (0.004 seconds).
+Test Case '-[OcPlayerCoreTests.OcpPlaybackPreparationTests testTypedContinuationWindowAndNoopRelease]' started.
+Test Case '-[OcPlayerCoreTests.OcpPlaybackPreparationTests testTypedContinuationWindowAndNoopRelease]' passed (0.001 seconds).
+Test Case '-[OcPlayerCoreTests.OcpPlaybackPreparationTests testTypedEffectsKeepReadyLeaseUntilAcknowledgementAndRejectOldWork]' started.
+Test Case '-[OcPlayerCoreTests.OcpPlaybackPreparationTests testTypedEffectsKeepReadyLeaseUntilAcknowledgementAndRejectOldWork]' passed (0.001 seconds).
+Test Case '-[OcPlayerCoreTests.OcpPlaybackPreparationTests testTypedRecoveryPlansSeparateManualRetryAndBackgroundPosition]' started.
+Test Case '-[OcPlayerCoreTests.OcpPlaybackPreparationTests testTypedRecoveryPlansSeparateManualRetryAndBackgroundPosition]' passed (0.001 seconds).
+Test Suite 'OcpPlaybackPreparationTests' passed at 2026-11-14 13:46:07.905.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.007 (0.007) seconds
+Test Suite 'OcPlayerCoreTests.xctest' passed at 2026-11-14 13:46:07.905.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.007 (0.007) seconds
+Test Suite 'Selected tests' passed at 2026-11-14 13:46:07.905.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.007 (0.008) seconds

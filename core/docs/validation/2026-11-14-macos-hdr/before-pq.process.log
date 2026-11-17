@@ -1,0 +1,83 @@
+[selftest] start file=/Users/jumusu/Documents/project/OcPlayer/.local-build/hdr-fix-20261114/hdr-staircase-pq.mkv
+{"event":"player_frame_output_transition","operation":"open","stage":"quiesce_request"}
+{"active":false,"elapsedMs":0,"event":"player_frame_output_transition","operation":"open","stage":"quiesce_acknowledged"}
+{"activeBackend":"videotoolbox","codec":"hevc","event":"video_decoder_changed","fallbackCount":0,"lineSizes":null,"pixelFormat":null,"previousBackend":null,"reason":null,"requestedBackend":"videotoolbox","stage":"open"}
+ErikaHDR: renderer configure layer output mode=Sdr drawable_format=Bgra8Unorm metal_pixel_format=MTLPixelFormat(80) edr=false colorspace=srgb
+ErikaHDR: renderer configure layer output mode=AppleEdr { headroom: 2.0 } drawable_format=Rgba16Float metal_pixel_format=MTLPixelFormat(115) edr=true colorspace=extended-linear-srgb
+ErikaHDR: automatic output switch requested=Auto { headroom: 2.0 } previous=Sdr active=AppleEdr { headroom: 2.0 }
+ErikaHDR: renderer source colorspace updated source=Bt2020/Pq colorspace=itur-2100-pq
+ErikaHDR: first Metal video frame output_mode=AppleEdr { headroom: 2.0 } drawable_format=Rgba16Float layer_colorspace=itur-2100-pq size=640x360 fourcc=x420 format=P010 full_range=false range=Limited primaries=Bt2020 transfer=Pq matrix=Bt2020NonConstantLuminance hdr_metadata=Some(HdrMetadata { mastering_display: Some(MasteringDisplayMetadata { display_primaries: Some([Chromaticity { x: 0.708, y: 0.292 }, Chromaticity { x: 0.17, y: 0.797 }, Chromaticity { x: 0.131, y: 0.046 }]), white_point: Some(Chromaticity { x: 0.3127, y: 0.329 }), min_luminance_nits: Some(0.0001), max_luminance_nits: Some(1000.0) }), content_light: Some(ContentLightMetadata { max_content_light_level_nits: 1000, max_frame_average_light_level_nits: 1000 }) }) source_peak_nits=1000.0 source_white_nits=203.0 target=TargetColorState { primaries: Bt2020, transfer: Pq, peak_nits: 10000.0, reference_white_nits: 203.0, edr_headroom: 2.0 }
+[selftest] playing pos=0µs dur=6000000µs surface=false | 解码 6 · 渲染 12 · 硬解 6 · 软解 0 · 零拷贝 6 · 音频 0 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 1.4MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 18.3MB · drawables 3 · device 7.8MB
+进程 80.9MB · 峰值RSS 158.4MB · malloc 80.0MB
+[selftest] core=playing pos=0.0s rate=1.0 volume=0.4
+[selftest] playing pos=708000µs dur=6000000µs surface=true | 解码 18 · 渲染 43 · 硬解 18 · 软解 0 · 零拷贝 18 · 音频 0 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 1.4MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 18.3MB · drawables 3 · device 7.8MB
+进程 84.5MB · 峰值RSS 161.6MB · malloc 84.0MB
+[selftest] core=playing pos=0.5s rate=1.0 volume=0.4
+[selftest] playing pos=1208000µs dur=6000000µs surface=true | 解码 30 · 渲染 74 · 硬解 30 · 软解 0 · 零拷贝 30 · 音频 0 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 1.4MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 18.3MB · drawables 3 · device 7.8MB
+进程 84.6MB · 峰值RSS 162.2MB · malloc 84.0MB
+[selftest] core=playing pos=1.0s rate=1.0 volume=0.4
+[selftest] playing pos=1708000µs dur=6000000µs surface=true | 解码 42 · 渲染 104 · 硬解 42 · 软解 0 · 零拷贝 42 · 音频 0 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 1.4MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 18.3MB · drawables 3 · device 7.8MB
+进程 81.4MB · 峰值RSS 162.2MB · malloc 84.0MB
+[selftest] core=playing pos=1.625s rate=1.0 volume=0.4
+[selftest] playing pos=2208000µs dur=6000000µs surface=true | 解码 55 · 渲染 135 · 硬解 55 · 软解 0 · 零拷贝 55 · 音频 0 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 1.4MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 18.3MB · drawables 3 · device 7.8MB
+进程 77.9MB · 峰值RSS 162.4MB · malloc 84.0MB
+[selftest] core=playing pos=2.0s rate=1.0 volume=0.4
+[selftest] playing pos=2708000µs dur=6000000µs surface=true | 解码 67 · 渲染 166 · 硬解 67 · 软解 0 · 零拷贝 67 · 音频 0 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 1.4MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 18.3MB · drawables 3 · device 7.8MB
+进程 77.9MB · 峰值RSS 162.4MB · malloc 84.0MB
+[selftest] core=playing pos=2.5s rate=1.0 volume=0.4
+[selftest] playing pos=3125000µs dur=6000000µs surface=true | 解码 80 · 渲染 197 · 硬解 80 · 软解 0 · 零拷贝 80 · 音频 0 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 1.4MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 18.3MB · drawables 3 · device 7.8MB
+进程 79.3MB · 峰值RSS 162.4MB · malloc 84.0MB
+[selftest] core=playing pos=3.042s rate=1.0 volume=0.4
+[selftest] playing pos=3750000µs dur=6000000µs surface=true | 解码 92 · 渲染 227 · 硬解 92 · 软解 0 · 零拷贝 92 · 音频 0 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 1.4MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 18.3MB · drawables 3 · device 7.8MB
+进程 69.7MB · 峰值RSS 162.4MB · malloc 84.0MB
+[selftest] core=playing pos=3.75s rate=1.0 volume=0.4
+[selftest] playing pos=4250000µs dur=6000000µs surface=true | 解码 104 · 渲染 258 · 硬解 104 · 软解 0 · 零拷贝 104 · 音频 0 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 1.4MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 18.3MB · drawables 3 · device 7.8MB
+进程 69.7MB · 峰值RSS 162.5MB · malloc 84.0MB
+[selftest] core=playing pos=4.125s rate=1.0 volume=0.4
+[selftest] playing pos=4750000µs dur=6000000µs surface=true | 解码 116 · 渲染 289 · 硬解 116 · 软解 0 · 零拷贝 116 · 音频 0 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 1.4MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 18.3MB · drawables 3 · device 7.8MB
+进程 67.9MB · 峰值RSS 162.5MB · malloc 84.0MB
+[selftest] core=playing pos=4.75s rate=1.0 volume=0.4
+[selftest] playing pos=5250000µs dur=6000000µs surface=true | 解码 129 · 渲染 320 · 硬解 129 · 软解 0 · 零拷贝 129 · 音频 0 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 1.4MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 9.3MB · drawables 3 · device 42.3MB
+进程 67.8MB · 峰值RSS 162.5MB · malloc 84.0MB
+[selftest] core=playing pos=5.25s rate=1.0 volume=0.4
+[selftest] playing pos=5667000µs dur=6000000µs surface=true | 解码 141 · 渲染 351 · 硬解 141 · 软解 0 · 零拷贝 141 · 音频 0 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 1.4MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 9.3MB · drawables 3 · device 42.3MB
+进程 67.8MB · 峰值RSS 162.5MB · malloc 84.0MB
+[selftest] core=playing pos=5.667s rate=1.0 volume=0.4
+{"audioComplete":true,"event":"decoder_eof_drain","polls":1,"stage":"complete","videoBackend":"videotoolbox","videoComplete":true}
+[selftest] stopped pos=5875000µs dur=6000000µs surface=true | 解码 144 · 渲染 361 · 硬解 144 · 软解 0 · 零拷贝 144 · 音频 0 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 1.4MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 9.3MB · drawables 3 · device 42.3MB
+进程 73.5MB · 峰值RSS 162.7MB · malloc 84.0MB
+[selftest] core=ended pos=5.875s rate=1.0 volume=0.4
+[selftest] stopped pos=5875000µs dur=6000000µs surface=true | 解码 144 · 渲染 364 · 硬解 144 · 软解 0 · 零拷贝 144 · 音频 0 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 1.4MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 9.3MB · drawables 3 · device 42.3MB
+进程 73.5MB · 峰值RSS 162.7MB · malloc 84.0MB
+[selftest] core=ended pos=5.875s rate=1.0 volume=0.4
+[selftest] stopped pos=5875000µs dur=6000000µs surface=true | 解码 144 · 渲染 366 · 硬解 144 · 软解 0 · 零拷贝 144 · 音频 0 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 1.4MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 9.3MB · drawables 3 · device 42.3MB
+进程 72.4MB · 峰值RSS 162.7MB · malloc 84.0MB
+[selftest] core=ended pos=5.875s rate=1.0 volume=0.4
+[selftest] stopped pos=5875000µs dur=6000000µs surface=true | 解码 144 · 渲染 369 · 硬解 144 · 软解 0 · 零拷贝 144 · 音频 0 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 1.4MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 9.3MB · drawables 3 · device 42.3MB
+进程 72.4MB · 峰值RSS 162.7MB · malloc 84.0MB
+[selftest] core=ended pos=5.875s rate=1.0 volume=0.4
+[selftest] stopped pos=5875000µs dur=6000000µs surface=true | 解码 144 · 渲染 372 · 硬解 144 · 软解 0 · 零拷贝 144 · 音频 0 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 1.4MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 9.3MB · drawables 3 · device 42.3MB
+进程 72.4MB · 峰值RSS 162.7MB · malloc 84.0MB
+[selftest] core=ended pos=5.875s rate=1.0 volume=0.4
+[selftest] stopped pos=5875000µs dur=6000000µs surface=true | 解码 144 · 渲染 374 · 硬解 144 · 软解 0 · 零拷贝 144 · 音频 0 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 1.4MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 9.3MB · drawables 3 · device 42.3MB
+进程 72.4MB · 峰值RSS 162.7MB · malloc 84.0MB
+[selftest] core=ended pos=5.875s rate=1.0 volume=0.4
+[selftest] done

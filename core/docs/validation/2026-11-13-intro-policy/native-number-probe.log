@@ -1,0 +1,18 @@
+1:́23 nil
+1.́23 nil
+1:23‍ Optional("1:23‍")
+一:23 Optional("一:23")
+Ⅳ:23 Optional("Ⅳ:23")
+1️⃣:23 Optional("1️⃣:23")
+0x1p2 Optional(4.0)
+0x1.8p+1 Optional(3.0)
+0x10 Optional(16.0)
+ 1 nil
+1  nil
++1 Optional(1.0)
+1_0 nil
+.5 Optional(0.5)
+1. Optional(1.0)
+-0 Optional(-0.0)
+1e-2 Optional(0.01)
+0

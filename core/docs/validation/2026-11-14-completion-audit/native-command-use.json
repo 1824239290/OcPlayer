@@ -1,0 +1,200 @@
+{
+  "playbackPreparation.invalidate": [
+    "App/Shared/AppModel+Playback.swift"
+  ],
+  "preferences.resolve": [
+    "App/Shared/Features/Player/PlaybackPreferences.swift"
+  ],
+  "danmakuCache.open": [
+    "Packages/DanmakuKit/Sources/DanmakuKit/RustDanmakuCache.swift"
+  ],
+  "danmakuCache.": [
+    "Packages/DanmakuKit/Sources/DanmakuKit/RustDanmakuCache.swift"
+  ],
+  "danmakuIntro.": [
+    "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroPolicy.swift"
+  ],
+  "introLearning.open": [
+    "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroPolicy.swift"
+  ],
+  "introLearning.": [
+    "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroPolicy.swift"
+  ],
+  "danmakuFlow.": [
+    "Packages/DanmakuKit/Sources/DanmakuKit/RustDanmakuFlow.swift"
+  ],
+  "danmaku.renderPayload": [
+    "Packages/DanmakuKit/Sources/DanmakuKit/RustDanmakuFlow.swift"
+  ],
+  "introIdentity.": [
+    "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroIdentity.swift"
+  ],
+  "introIDs.open": [
+    "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroIdentity.swift"
+  ],
+  "introIDs.": [
+    "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroIdentity.swift"
+  ],
+  "introProvider.resolveIDs": [
+    "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroIdentity.swift"
+  ],
+  "introIDs.resolve": [
+    "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroIdentity.swift"
+  ],
+  "introProvider.request": [
+    "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroProvider.swift"
+  ],
+  "introProvider.exchange": [
+    "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroProvider.swift"
+  ],
+  "introProvider.": [
+    "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroProvider.swift"
+  ],
+  "danmaku.exchange": [
+    "Packages/DanmakuKit/Sources/DanmakuKit/RustDanmakuTransport.swift"
+  ],
+  "endpoint.probe": [
+    "Packages/JellyfinKit/Sources/JellyfinKit/RustEndpointPolicy.swift"
+  ],
+  "moviepilotFlow.": [
+    "Packages/MoviePilotKit/Sources/MoviePilotKit/RustMoviePilotFlow.swift"
+  ],
+  "moviepilot.clearSessions": [
+    "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift",
+    "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift"
+  ],
+  "login.begin": [
+    "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift"
+  ],
+  "login.authorize": [
+    "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift"
+  ],
+  "login.commit": [
+    "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift"
+  ],
+  "request.cancel": [
+    "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift",
+    "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiAPIClient.swift"
+  ],
+  "refresh.claim": [
+    "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift",
+    "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiAPIClient.swift"
+  ],
+  "refresh.authorize": [
+    "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift"
+  ],
+  "refresh.commit": [
+    "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift"
+  ],
+  "refresh.failure": [
+    "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift",
+    "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiAPIClient.swift",
+    "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiAPIClient.swift"
+  ],
+  "moviepilotAccount.": [
+    "Packages/MoviePilotKit/Sources/MoviePilotKit/RustMoviePilotAccount.swift"
+  ],
+  "playbackTracks.snapshot": [
+    "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpPlaybackTracks.swift"
+  ],
+  "settings.backup.capabilities": [
+    "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpSettingsBackup.swift"
+  ],
+  "playbackEvents.begin": [
+    "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpPlaybackEvents.swift",
+    "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpPlaybackEvents.swift"
+  ],
+  "playbackEvents.apply": [
+    "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpPlaybackEvents.swift"
+  ],
+  "diag.exportFile.capabilities": [
+    "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpDiagnosticExport.swift"
+  ],
+  "diag.exportFile": [
+    "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpDiagnosticExport.swift"
+  ],
+  "playbackFlow.recoveryPlan": [
+    "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpPlaybackFlow.swift"
+  ],
+  "playbackEvents.foreground": [
+    "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpPlaybackFlow.swift"
+  ],
+  "playbackEvents.staleTailIO": [
+    "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpPlaybackFlow.swift"
+  ],
+  "playbackFlow.snapshot": [
+    "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpPlaybackFlow.swift"
+  ],
+  "playbackFlow.": [
+    "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpPlaybackFlow.swift"
+  ],
+  "playback.open": [
+    "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpPlaybackSession.swift"
+  ],
+  "danmaku.load": [
+    "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpDanmakuLoader.swift"
+  ],
+  "oauth.prepare": [
+    "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiAPIClient.swift"
+  ],
+  "oauth.consume": [
+    "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiAPIClient.swift"
+  ],
+  "bangumi.request": [
+    "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiAPIClient.swift"
+  ],
+  "bangumiAuthFlow.": [
+    "Packages/BangumiKit/Sources/BangumiKit/Client/RustBangumiAuthFlow.swift"
+  ],
+  "bangumiSync.": [
+    "Packages/BangumiKit/Sources/BangumiKit/Client/RustBangumiSync.swift"
+  ],
+  "bangumiProgress.": [
+    "Packages/BangumiKit/Sources/BangumiKit/Client/RustBangumiProgress.swift"
+  ],
+  "bangumiAccount.": [
+    "Packages/BangumiKit/Sources/BangumiKit/Client/RustBangumiAccount.swift"
+  ],
+  "fetch.claim": [
+    "Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift"
+  ],
+  "fetch.record": [
+    "Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift"
+  ],
+  "fetch.finish": [
+    "Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift"
+  ],
+  "tmdbEnrichment.": [
+    "Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbEnricher.swift"
+  ],
+  "tmdbEnrichment.close": [
+    "Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbEnricher.swift"
+  ],
+  "tmdbEnrichment.batch.close": [
+    "Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbEnricher.swift"
+  ],
+  "batch.begin": [
+    "Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbEnricher.swift"
+  ],
+  "batch.complete": [
+    "Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbEnricher.swift"
+  ],
+  "batch.refill": [
+    "Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbEnricher.swift"
+  ],
+  "tmdb.matcher": [
+    "Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbMatcher.swift"
+  ],
+  "metadataDatabase.": [
+    "Packages/MetadataKit/Sources/MetadataKit/Store/RustMetadataDatabase.swift"
+  ],
+  "metadataDatabase.remove": [
+    "Packages/MetadataKit/Sources/MetadataKit/Store/RustMetadataDatabase.swift"
+  ],
+  "mediaRepository.": [
+    "Packages/MetadataKit/Sources/MetadataKit/Media/RustMediaRepository.swift"
+  ],
+  "mediaRepository.freshness": [
+    "Packages/MetadataKit/Sources/MetadataKit/Media/RustMediaRepository.swift"
+  ]
+}

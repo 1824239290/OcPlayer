@@ -1,0 +1,44 @@
+   Compiling ocp-store v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-store)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.14s
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_store-6d8610e68ee763ce)
+
+running 30 tests
+test bangumi::tests::failed_full_episode_replacement_rolls_back_metadata_progress_and_sync_time ... ok
+test bangumi::tests::sync_targets_use_complete_snapshot_and_deduplicate_overlapping_candidates ... ok
+test bangumi::tests::fractional_batch_includes_selected_episode_and_local_derived_count_is_monotonic ... ok
+test cache::tests::batch_failure_rolls_back_items_rail_and_progress_confirmation ... ok
+test cache::tests::malformed_payload_and_future_versions_are_misses_and_do_not_break_updates ... ok
+test repository::composition::tests::composition_observes_progress_and_rejects_overflow_without_mutation ... ok
+test repository::composition::tests::home_restore_and_detail_decisions_keep_native_boundaries ... ok
+test database::tests::unrecoverable_parent_failure_is_returned_and_sizes_cover_sidecars ... ok
+test repository::composition::tests::page_recovery_keeps_contiguity_duplicate_rules_and_signed_counts ... ok
+test database::tests::corrupt_database_and_sidecars_rebuild_once ... ok
+test repository::flow::tests::home_partial_effects_and_all_failure_source_match_native ... ok
+test repository::flow::tests::page_rechecks_progress_after_persist_and_receipts_do_not_replay ... ok
+test repository::progress::tests::confirmation_and_finished_resume_boundaries_match_native_observation ... ok
+test repository::flow::tests::series_retry_fallback_and_collection_nil_total_are_retained ... ok
+test repository::progress::tests::resume_reinserts_missing_pending_items_using_current_metadata_and_record_order ... ok
+test repository::progress::tests::newer_disk_confirmation_is_adopted_without_reopening_protection_and_preflight_is_atomic ... ok
+test repository::progress::tests::revisions_survive_invalidation_reject_older_final_and_accept_owned_final_after_shutdown ... ok
+test repository::tests::canonical_string_identity_matches_native_without_normalizing_payloads ... ok
+test repository::tests::complete_freshness_boundaries_and_invalid_receipts_leave_entries_intact ... ok
+test repository::tests::refresh_ownership_retirement_and_invalidation_match_native ... ok
+test repository::tests::complete_lru_touch_delete_all_and_minimum_limits ... ok
+test repository::tests::structured_keys_and_wide_nested_payloads_are_retained ... ok
+test repository::progress::tests::apply_updates_every_projection_first_duplicate_and_preserves_original_unicode_payload ... ok
+test database::tests::misplaced_directory_is_rebuilt_and_unrelated_files_survive ... ok
+test database::tests::new_cache_has_native_ledger_wal_and_journal_limit ... ok
+test database::tests::failed_migration_discards_partial_cache_but_valid_cache_is_preserved ... ok
+test tests::library_rail_page_and_tmdb_cache_round_trip_with_tenant_scope ... ok
+test tests::migration_names_and_progress_are_persistent ... ok
+test bangumi::tests::pruning_more_than_one_parameter_batch_preserves_all_retained_ids ... ok
+test cache::tests::large_item_and_snapshot_reads_chunk_parameters_and_preserve_requested_order ... ok
+
+test result: ok. 30 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+
+   Doc-tests ocp_store
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

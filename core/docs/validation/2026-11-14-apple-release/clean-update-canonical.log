@@ -1,0 +1,6 @@
+From /Volumes/Backup/软件/OcPlayer-Core
+   bc879a5..e705d2e  main       -> origin/main
+Updating bc879a5..e705d2e
+Fast-forward
+ Scripts/apple-release-manifest.py | 6 ++++++
+ 1 file changed, 6 insertions(+)

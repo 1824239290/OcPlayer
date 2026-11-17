@@ -1,0 +1,95 @@
+Building for debugging...
+[Pre-planning 1 / 185]
+[Planning deferred tasks]
+[6 / 25] DanmakuKit
+[8 / 27] DanmakuKit
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Sources/DanmakuKit/DanmakuLoadOrchestrator.swift:140:26: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 138 |             try Task.checkCancellation()
+ 139 |             if forceRematch {
+ 140 |                 _ = try? await playback.clearDanmaku(uuid: matchContext.uuid)
+     |                          `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 141 |             }
+ 142 |             // 先无条件 claim（幂等，取 max）：isCurrent 依赖 claim 已存在。
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Sources/DanmakuKit/DanmakuLoadOrchestrator.swift:608:32: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 606 |             let accepted: Bool
+ 607 |             if payload.entries != nil || payload.json != nil {
+ 608 |                 accepted = try await playback.replaceDanmaku(
+     |                                `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 609 |                     uuid: uuid,
+ 610 |                     entries: payload.entries ?? [],
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Sources/DanmakuKit/DanmakuLoadOrchestrator.swift:616:32: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 614 |                 )
+ 615 |             } else {
+ 616 |                 accepted = try await playback.clearDanmaku(uuid: uuid)
+     |                                `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 617 |             }
+ 618 |             guard accepted else {
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[11 / 26] DanmakuKit
+[16 / 27] DanmakuKitTests-product
+error: SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/RustDanmakuFlowTests.swift failed with a nonzero exit code. Command line:     cd /Users/jumusu/Documents/project/OcPlayer/Packages
+    builtin-SwiftPerFileCompile RustDanmakuFlowTests.swift
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/RustDanmakuFlowTests.swift:71:117: error: missing argument for parameter 'userAgent' in call
+ 69 |         let comment = DanmakuComment(cid: nil, p: "1,1,16777215", m: "hello")
+ 70 |         let match = DanmakuEpisodeMatch(episodeID: 1, shiftSeconds: 4, animeTitle: " Show ", episodeTitle: " 01 ")
+ 71 |         let configuration = DandanplayConfiguration(baseURL: URL(string: "https://unused.local")!, apiKey: "fixture")
+    |                                                                                                                     `- error: missing argument for parameter 'userAgent' in call
+ 72 |         let host = Host(); let originalHost = Host(); let uuid = UUID()
+ 73 |         for service in [shared.service, native.service] { await service.persistComments([comment], for: 1) }
+
+DanmakuKit.DandanplayConfiguration.init:2:8: note: 'init(baseURL:apiKey:userAgent:)' declared here
+1 | struct DandanplayConfiguration {
+2 | public init(baseURL: URL, apiKey: String, userAgent: String)}
+  |        `- note: 'init(baseURL:apiKey:userAgent:)' declared here
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/RustDanmakuFlowTests.swift:95:116: error: missing argument for parameter 'userAgent' in call
+ 93 |         host.onReady = { await service.claimMatchRevision(cacheKey: "key", revision: 2) }
+ 94 |         let result = await orchestrator.runManual(match: DanmakuEpisodeMatch(episodeID: 1), uuid: UUID(), cacheKey: "key",
+ 95 |             configuration: DandanplayConfiguration(baseURL: URL(string: "https://unused.local")!, apiKey: "fixture"), playback: host, revision: 1)
+    |                                                                                                                    `- error: missing argument for parameter 'userAgent' in call
+ 96 |         XCTAssertEqual(result, .failed(message: "播放已切换"))
+ 97 |         XCTAssertEqual(host.injected, 0)
+
+DanmakuKit.DandanplayConfiguration.init:2:8: note: 'init(baseURL:apiKey:userAgent:)' declared here
+1 | struct DandanplayConfiguration {
+2 | public init(baseURL: URL, apiKey: String, userAgent: String)}
+  |        `- note: 'init(baseURL:apiKey:userAgent:)' declared here
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/RustDanmakuFlowTests.swift:96:33: error: type 'Equatable' has no member 'failed'
+ 94 |         let result = await orchestrator.runManual(match: DanmakuEpisodeMatch(episodeID: 1), uuid: UUID(), cacheKey: "key",
+ 95 |             configuration: DandanplayConfiguration(baseURL: URL(string: "https://unused.local")!, apiKey: "fixture"), playback: host, revision: 1)
+ 96 |         XCTAssertEqual(result, .failed(message: "播放已切换"))
+    |                                 `- error: type 'Equatable' has no member 'failed'
+ 97 |         XCTAssertEqual(host.injected, 0)
+ 98 |     }
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/RustDanmakuFlowTests.swift:119:145: error: missing argument for parameter 'userAgent' in call
+117 |         let context = DanmakuMatchContext(uuid: uuid, cacheKey: "key", allowsCachedMatchReuse: false, fileName: "Show", episodeNumber: 3, malID: 42)
+118 |         let task = Task { await orchestrator.runManual(match: DanmakuEpisodeMatch(episodeID: 84190003, animeTitle: "Show"),
+119 |             uuid: uuid, cacheKey: "key", configuration: DandanplayConfiguration(baseURL: URL(string: "https://unused.local")!, apiKey: "fixture"),
+    |                                                                                                                                                 `- error: missing argument for parameter 'userAgent' in call
+120 |             playback: host, revision: 1, matchContext: context) }
+121 |         let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+
+DanmakuKit.DandanplayConfiguration.init:2:8: note: 'init(baseURL:apiKey:userAgent:)' declared here
+1 | struct DandanplayConfiguration {
+2 | public init(baseURL: URL, apiKey: String, userAgent: String)}
+  |        `- note: 'init(baseURL:apiKey:userAgent:)' declared here
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/RustDanmakuFlowTests.swift:127:43: error: type 'Equatable' has no member 'failed'
+125 |         XCTAssertEqual(host.injected, 1)
+126 |         task.cancel(); await aliases.release()
+127 |         XCTAssertEqual(await task.value, .failed(message: "已取消"))
+    |                                           `- error: type 'Equatable' has no member 'failed'
+128 |         let hint = await service.cachedIntroHint(for: 84190003)
+129 |         XCTAssertNil(hint)
+Failed frontend command:
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-frontend -frontend -c /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/.build/out/Intermediates.noindex/DanmakuKit.build/Debug/DanmakuKitTests-p.build/DerivedSources/resource_bundle_accessor.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/.build/out/Intermediates.noindex/DanmakuKit.build/Debug/DanmakuKitTests-p.build/DerivedSources/test_entry_point.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/AniSkipTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DandanplaySettingsStoreTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuCacheTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuCandidateScorerTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuEpisodeTokenTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuFieldsParseTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuFilenameParserTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuIntroDetectorTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuIntroFastPathTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuIntroHintFlowTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuJSONConverterTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuJSONParserTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuLoadOrchestratorTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuServiceTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuTitleAliasResolverTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/FileHashRangePolicyTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/FileHashTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/GatewayClientTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/MultiSourceIntroTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/RustDanmakuCacheTests.swift -primary-file /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/RustDanmakuFlowTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/RustDanmakuIntegrationTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/RustDanmakuPolicyTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/RustIntroIdentityTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/RustIntroPolicyTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/RustIntroProviderTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/TestSupport.swift -emit-dependencies-path /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/.build/out/Intermediates.noindex/DanmakuKit.build/Debug/DanmakuKitTests-p.build/Objects-normal/arm64/RustDanmakuFlowTests.d -emit-const-values-path /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/.build/out/Intermediates.noindex/DanmakuKit.build/Debug/DanmakuKitTests-p.build/Objects-normal/arm64/RustDanmakuFlowTests.swiftconstvalues -emit-reference-dependencies-path /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/.build/out/Intermediates.noindex/DanmakuKit.build/Debug/DanmakuKitTests-p.build/Objects-normal/arm64/RustDanmakuFlowTests.swiftdeps -serialize-diagnostics-path /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/.build/out/Intermediates.noindex/DanmakuKit.build/Debug/DanmakuKitTests-p.build/Objects-normal/arm64/RustDanmakuFlowTests.dia -target arm64-apple-macos14.0 -module-can-import-version Testing 2084 0 -module-can-import-version XCTest 25229 0 -disable-cross-import-overlay-search -swift-module-cross-import Testing /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework/Modules/Testing.swiftcrossimport/AppKit.swiftoverlay -swift-module-cross-import Testing /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework/Modules/Testing.swiftcrossimport/CoreGraphics.swiftoverlay -swift-module-cross-import Testing /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework/Modules/Testing.swiftcrossimport/CoreImage.swiftoverlay -swift-module-cross-import Testing /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework/Modules/Testing.swiftcrossimport/CoreTransferable.swiftoverlay -swift-module-cross-import Testing /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework/Modules/Testing.swiftcrossimport/Foundation.swiftoverlay -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins/libFoundationMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/bin/swift-plugin-server\#FoundationMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins/libObservationMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/bin/swift-plugin-server\#ObservationMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins/libPreviewsMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/bin/swift-plugin-server\#PreviewsMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins/libSwiftMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/bin/swift-plugin-server\#SwiftMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins/libSwiftUIMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/bin/swift-plugin-server\#SwiftUIMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing/libTestingMacros.dylib\#\#TestingMacros -disable-implicit-swift-modules -Xcc -fno-implicit-modules -Xcc -fno-implicit-module-maps -explicit-swift-module-map-file /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/.build/out/Intermediates.noindex/DanmakuKit.build/Debug/DanmakuKitTests-p.build/Objects-normal/arm64/DanmakuKitTests-dependencies-1.json -Xllvm -aarch64-use-tbi -enable-objc-interop -stack-check -sdk /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -I /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/.build/out/Products/Debug -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib -F /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/.build/out/Products/Debug/PackageFrameworks -F /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/.build/out/Products/Debug -F /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks -module-cache-path /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/.build/out/Intermediates.noindex/SwiftExplicitPrecompiledModules -no-color-diagnostics -Xcc -fno-color-diagnostics -enable-testing -g -debug-info-format\=dwarf -dwarf-version\=4 -swift-version 6 -Onone -D SWIFT_PACKAGE -D DEBUG -D SWIFT_MODULE_RESOURCE_BUNDLE_AVAILABLE -D Xcode -serialize-debugging-options -enable-experimental-feature DebugDescriptionMacro -empty-abi-descriptor -validate-clang-modules-once -clang-build-session-file /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/.build/out/ModuleCache.noindex/Session.modulevalidation -Xcc -working-directory -Xcc /Users/jumusu/Documents/project/OcPlayer/Packages -enable-anonymous-context-mangled-names -file-compilation-dir /Users/jumusu/Documents/project/OcPlayer/Packages -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -Xcc -ivfsstatcache -Xcc /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/.build/out/SDKStatCaches.noindex/macosx27.0-26A425-a0facfad118c1a7a18f0aad9463f65497231f6df4def33e022ae2eb8f782df1a.sdkstatcache -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/.build/out/Products/Debug/include -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/.build/out/Intermediates.noindex/DanmakuKit.build/Debug/DanmakuKitTests-p.build/DerivedSources-normal/arm64 -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/.build/out/Intermediates.noindex/DanmakuKit.build/Debug/DanmakuKitTests-p.build/DerivedSources/arm64 -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/.build/out/Intermediates.noindex/DanmakuKit.build/Debug/DanmakuKitTests-p.build/DerivedSources -Xcc -DSWIFT_PACKAGE -Xcc -DDEBUG\=1 -no-auto-bridging-header-chaining -module-name DanmakuKitTests -package-name danmakukit -const-gather-protocols-file /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/.build/out/Intermediates.noindex/DanmakuKit.build/Debug/DanmakuKitTests-p.build/Objects-normal/arm64/DanmakuKitTests_const_extract_protocols.json -disable-clang-spi -clang-target arm64-apple-macos27.0 -target-sdk-version 27.0 -target-sdk-name macosx27.0 -in-process-plugin-server-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/libSwiftInProcPluginServer.dylib -parse-as-library -o /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/.build/out/Intermediates.noindex/DanmakuKit.build/Debug/DanmakuKitTests-p.build/Objects-normal/arm64/RustDanmakuFlowTests.o -debug-module-path /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/.build/out/Intermediates.noindex/DanmakuKit.build/Debug/DanmakuKitTests-p.build/Objects-normal/arm64/DanmakuKitTests.swiftmodule -index-unit-output-path /DanmakuKit.build/Debug/DanmakuKitTests-p.build/Objects-normal/arm64/RustDanmakuFlowTests.o -index-store-path /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/.build/out -index-system-modules
+error: Build failed
+error: fatalError

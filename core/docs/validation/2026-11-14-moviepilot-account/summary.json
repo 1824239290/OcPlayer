@@ -1,0 +1,124 @@
+{
+  "rust": 147,
+  "independentRust": 147,
+  "abi": 133,
+  "abiSuites": {
+    "moviepilot-contract-tests.log": 10,
+    "danmaku-contract-tests.log": 4,
+    "intro-contract-tests.log": 9,
+    "intro-provider-contract-tests.log": 6,
+    "moviepilot-account-contract-tests.log": 5,
+    "danmaku-cache-contract-tests.log": 6,
+    "network-contract-tests.log": 7,
+    "tmdb-matcher-contract-tests.log": 4,
+    "tmdb-enrichment-contract-tests.log": 8,
+    "intro-identity-contract-tests.log": 6,
+    "bangumi-contract-tests.log": 4,
+    "repository-progress-contract-tests.log": 4,
+    "bangumi-account-contract-tests.log": 5,
+    "media-repository-contract-tests.log": 6,
+    "danmaku-policy-contract-tests.log": 4,
+    "repository-composition-contract-tests.log": 3,
+    "media-login-contract-tests.log": 10,
+    "tmdb-wire-contract-tests.log": 5,
+    "standalone-contract-tests.log": 10,
+    "bangumi-sync-contract-tests.log": 6,
+    "repository-flow-contract-tests.log": 5,
+    "danmaku-flow-contract-tests.log": 6
+  },
+  "exportedSDK": {
+    "executed": 19,
+    "passed": 19,
+    "skipped": 0,
+    "failures": 0
+  },
+  "nativePackages": {
+    "OcPlayerCore": {
+      "executed": 19,
+      "passed": 19,
+      "skipped": 0,
+      "failures": 0
+    },
+    "JellyfinKit": {
+      "executed": 255,
+      "passed": 255,
+      "skipped": 0,
+      "failures": 0
+    },
+    "MetadataKit": {
+      "executed": 337,
+      "passed": 337,
+      "skipped": 0,
+      "failures": 0
+    },
+    "MoviePilotKit": {
+      "executed": 129,
+      "passed": 129,
+      "skipped": 0,
+      "failures": 0
+    },
+    "BangumiKit": {
+      "executed": 108,
+      "passed": 108,
+      "skipped": 0,
+      "failures": 0
+    },
+    "PlaybackKit": {
+      "executed": 96,
+      "passed": 96,
+      "skipped": 0,
+      "failures": 0
+    },
+    "DanmakuKit": {
+      "executed": 272,
+      "passed": 272,
+      "skipped": 0,
+      "failures": 0
+    }
+  },
+  "nativeTotal": 1216,
+  "app": {
+    "executed": 1008,
+    "passed": 989,
+    "skipped": 19,
+    "failures": 0
+  },
+  "disabledMoviePilot": {
+    "executed": 129,
+    "passed": 104,
+    "skipped": 25,
+    "failures": 0
+  },
+  "sourceFiles": 65,
+  "sourceCopy": "/var/folders/07/f4r9g1zd0jbg1c2sh6b4vsg80000gn/T/ocp-moviepilot-account-source-069fxewc",
+  "sourceAndNativeInputsUnchanged": true,
+  "sourceLibrarySHA256": "8ed2c1953008a784b8dcdad4a8c9cfd3b31931a6856cf5f46f16a3ad1e3a3b3c",
+  "embeddedLibrarySHA256": "a26804ef30d7442764d99174fae913ed165a69be7510c71471835c231990579b",
+  "runtimeSections": {
+    "__TEXT/__text": "20cce361915f0f218780186ca2d311957d352cfcca5cf2e8db9d8f7af343668e",
+    "__TEXT/__stubs": "85e31d397041e6b8ce1289c18866a37e8bf6419454407419ece56ba7712c0c52",
+    "__TEXT/__stub_helper": "dd1108887d9cecc19b8e335d872b0850d83635aa07026befc2e8dedaa1375e98",
+    "__TEXT/__gcc_except_tab": "61eb49751bfec80fcbc416cefd8db2827fef85b76dfe534e1ce7a57efb267420",
+    "__TEXT/__cstring": "2b913ffd8a4cecc7a9453a1b3d530a2584a677f209aafdd16c3437916de92f19",
+    "__TEXT/__const": "4c295160192c15af489f803af1fc166990930b43073c950dbcd0727c788e02d6",
+    "__TEXT/__unwind_info": "939d547758dc781c393da87fa20b6c2498d35a84f08c4e4243b1dff6d57cd9ca",
+    "__TEXT/__eh_frame": "b64645b880b16cdd06cff9bd61487ddc61f5b5e584365c7c709322a79f1501d5",
+    "__DATA_CONST/__const": "0a467594c0bcd0c5dd08c438b054e737d6ebeee169e10bb9503bcda669e55401",
+    "__DATA_CONST/__got": "07192be2310881ccacd7b29e373dbbb1a151c77344ccfa27ceba9c8a34cf3403",
+    "__DATA/__la_symbol_ptr": "acedb1b5fdbf1f7dca5b06cce1adf02b0b2b7585cafa995e92d39652a50dcfca",
+    "__DATA/__data": "756093016481645236c6d4bb6a46ca1bbfd70ef1985fa1e7cc8ebb8b072da6cf",
+    "__DATA/__thread_vars": "3f5660fae9508d5fa4289b7c14b950e641c9a5646f06b3f0251060e7f03adebc",
+    "__DATA/__thread_data": "9ae65cf32e8d10cfc6d077df31c5a82287d7ea9108a1e39d4f10a82ea393d883"
+  },
+  "runtimeSectionCount": 14,
+  "runtimeSectionsMatch": true,
+  "derivedDataReuse": "/tmp/ocp-bangumi-sync-macos/DerivedData",
+  "appPath": "/tmp/ocp-moviepilot-account-macos/DerivedData/Build/Products/Debug/OcPlayer.app",
+  "fullVerificationExitCode": 0,
+  "signatureVerified": true,
+  "playbackExitCode": 0,
+  "eofExitCode": 0,
+  "playbackRenderAudioFailures": 0,
+  "eofRenderAudioFailures": 0,
+  "bundledOnlyPlayback": true
+}

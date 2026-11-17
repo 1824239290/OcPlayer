@@ -1,0 +1,10 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Pre-planning 1 / 155]
+[Planning deferred tasks]
+[5 / 22]
+[6 / 15] MoviePilotKit
+[9 / 18] MoviePilotKit
+[14 / 17] MoviePilotKit
+[15 / 18] MoviePilotKit
+Build complete! (2.33秒)

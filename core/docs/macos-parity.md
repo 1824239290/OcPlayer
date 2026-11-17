@@ -1,0 +1,1235 @@
+# macOS parity acceptance
+
+The goal is the complete platform-neutral OcPlayer core with the macOS client
+at the current OcPlayer feature level. Passing the checks below is evidence
+for the covered behavior, not completion of that goal. Windows execution is
+explicitly deferred by the user; Windows implementation/delivery is still in
+scope. Native decoding, rendering, windows, audio sessions and credential storage
+remain platform adapters.
+
+Reference Apple checkout during this migration:
+`/Users/jumusu/Documents/project/OcPlayer`.
+
+## Acceptance scope and current evidence
+
+| Area | Required behavior | Evidence and remaining work |
+| --- | --- | --- |
+| C ABI | JSON envelopes, owned strings, concurrent calls, events, cancellation, snapshots, surface lifecycle | Rust and Swift native-library tests pass. Event delivery now has count/byte bounds, per-request telemetry coalescing and control priority, verified under concurrent pressure and native C ABI polling. The source-backed 370-command boundary/ownership audit is complete; stateful valid workflows remain covered by the domain/native suites. See completion-audit.md. |
+| Jellyfin / Emby | Login/probe, address selection, libraries and all home rails, filtering, pagination, detail, seasons/episodes, images, subtitles, resource selection, reports, watched state | Public-info probes, anonymous password login, Quick Connect polling and endpoint selection/cache/generation policy now run in Core. Login retains native device identity, response tolerance, Emby/reverse-proxy prefixes and cancellation. The media facade resolves before dispatch, reads current addresses and native identity/preferences, switches reads after transport failure and forwards 401 reauthentication notifications. Both server flavors pass real HTTP failover/status/mutation fixtures, and probe connection reuse/timeout/cancellation are verified. The current endpoint/data mapping and native transport audit is recorded in completion-audit.md, including compressed responses and saved-account reads. |
+| Playback | Existing native engine and surface quality, pause/resume/seek/rate/volume, track selection, progress, resource failover, end-of-playback, next episode and background behavior | macOS app builds; bundled Core passes local H.264/AAC playback and controls with synchronized Rust snapshots. Session rate/volume/tracks now survive timeline and lifecycle callbacks; revised duration, null track clearing and paused-open behavior are verified across the native ABI. Source recovery now runs in a shared request chain retained across engine replacement; report heartbeat/pause/terminal/natural-end decisions also run in Core. Native fixtures assert shared activation and cancellation/adoption guards. Engine event folding/EOF and stale-generation validation now run in Core, along with foreground resume decisions and mute/volume state. Actual native EOF and controller event integration pass. Automatic/manual track preference, import/sidecar effects, removal and batch/name ownership now run in retained Core workflows with original-byte typed receipts and native Observation. Leaf resolution, source negotiation, resume/title and direct fallback now run in retained preparation workflows with final presentation leases. Broad decoder/media, recovery integration and transport acceptance remain. |
+| Metadata / persistence | Existing Media.sqlite schema, tenant isolation, cached metadata/home rails/pages, offline reads, local-progress conflict handling | The complete MetadataStore path now delegates SQL, transactional progress reconciliation, offline snapshots, TMDB cache and maintenance to Core. Bidirectional GRDB/Core fixtures and shared storage integration tests pass with Core activated. Retained memory projections, freshness comparisons, five refresh ownership maps and complete native cache opening/recovery now run in Core. Session-local progress reconciliation, confirmation/revision barriers, projection updates and shutdown state now run in Core. Home/detail/page pagination, home deduplication/restoration and detail/progress composition policy now run in Core. All ten cached/refresh operations plus prefetch, full effect sequencing, failure/fallback assembly and page/disk query identity now run in Core; hosts execute yielded effects. Broader metadata acceptance remains. |
+| TMDB | Mirror changes without restart, v3/v4 auth, searches, movie/TV/collection detail, per-field language fallback, whole seasons, mapping and cache policy | Rust-backed TMDbClient fixture verifies requests, fallback, fields, malformed optional entries, auth, status categories and no Swift replay. Entity/season cache, links, expiry and clearing now run in Core and retain GRDB compatibility. Native TMDbMatcher now delegates provider/parent identity, search fallback, ranking and Unicode character policies to Core, with independent native/C ABI differential coverage. Network DTOs now preserve exact signed integer fields through original-byte typed decoding and match native optional-array/numeric/encoding behavior in complete model comparisons. Refresh/collection/season/manual-bind flows, single-flight ownership and the complete four-worker batch now run in Core with real HTTP/native differential coverage, callback cancellation and exact typed cache reads. Repository scheduling and broader metadata acceptance remain. |
+| Danmaku | Match/search/comments, hashes, filename/episode/alias matching, multi-source/cache/manual selection, cancellation, intro hints, overlay behavior | All four production gateway HTTP paths now run through Core with raw response and header fidelity. The macOS client uses the complete native automatic/manual/cache/intro flow, replacing the incomplete Rust shortcut. Native DanmakuKit 232 and direct C ABI 4 cases pass. Core now owns filename/canonical/episode/special parsing, Unicode comparable titles, candidate identity scoring and batch selection; differential and C ABI strategy fixtures cover these policies. Core also owns mapping/comment/saved-intro persistence, TTL, LRU and revision barriers with native file compatibility. Core now also owns intro detection, cross-episode learning persistence/consensus, manual-seek decisions and community/sibling interval aggregation. AniSkip/AnimeSkip/TheIntroDB request and response policies plus all four intro-provider HTTP transports now run in Core. AniList ordered identity resolution, negative-cache policy and native-compatible ID persistence also run in Core. Automatic/manual resolver scheduling, cache branches, payload conversion and intro precedence now run in a resumable Core flow. Manual-seek confirmation, event recording, consensus promotion and source-protected cross-episode propagation now run in one shared cache/learning Core operation. The standalone data loader now executes that same complete flow, including cache/ID stores, provider reads and production payload conversion. Broader end-to-end acceptance remains. |
+| Bangumi | Public/authorized API, mirrors, OAuth refresh/generation safety, collections, episodes/progress, search/calendar, sync and persistence | Native BangumiAPIClient now dispatches all public, authorized and gateway OAuth requests through Core; complete raw responses, p1 routes, PATCH mutations, pagination, generation cancellation and single-flight refresh are covered by real Rust/Swift and C ABI fixtures. All BangumiDatabaseOperator entry points now dispatch to shared SQLite, merge, progress-window and sync-target policy; complete chapter sync uses one transactional replacement. Credential generations, OAuth state consumption, refresh claims/timeout classification, expiration/session-reuse policy and login/profile/logout revision barriers now run in retained Core account state. Native persistence/task/session/notification effects remain adapters. Collection pagination, complete episode replacement, sliding concurrent reconciliation and full incremental collection/episode refresh now run in retained Core flows. SQL receipts and directory retirement share the database Core state lock; native timestamp adoption uses account-operation barriers. Subject loading, tri-state collection reconciliation, full chapter loading, single/batch progress and rating/type writes, watching preparation and season completion now use retained SQL/effect flows. Failed watching/batch reads preserve explicit intent and optimistic progress; completion requires nonempty all-watched mains plus confirmed remote doing. Native effect/notification barriers and locked fallback SQL revisions reject stale work. The complete authorization/profile/logout/passive-invalidation service sequences now use retained account effects with operation/identity barriers, exact-generation rollback and atomic physical credential/DB clear guards. Retired identity receipts release immediately; redundant invalidation at the observer bound returns safely while explicit account operations remain available. Broader live-account, configuration/transport and full platform acceptance remain open. |
+| MoviePilot | Login, silent relogin, raw media/torrent fields, SSE progress, downloads and subscriptions, cancellation/session retirement | All native HTTP paths dispatch through Core, including first/token-only login and raw byte-preserving exchanges. Retained account policy now owns login/refresh receipts, generations, single-flight/fuse and retirement decisions, including post-commit race guards. Physical credentials/revisions, tasks and notifications remain effects. Real C ABI/native fixtures cover cookies, concurrent expiry, rejection, mutation routes, raw fields and non-replay. Complete raw/named retry/auth replay now runs in retained request flows with account/configuration retirement, method idempotence and retry/jitter policy. Typed login/current-user replies preserve large integer IDs and optional native user fields. Broader account and live deployment acceptance remains. |
+| Configuration / diagnostics | Existing settings/export/import compatibility, redaction, bounded events, actionable errors and native diagnostics | Core schema/diagnostic commands and redaction tests pass. Bounded event count/bytes and lifetime coalescing/drop counters are available in diagnostics. File-backed aggregate diagnostic export now preserves archive budgets/order, trace tails/redaction and the native sink queue boundary, with complete-byte comparisons and disabled-mode coverage. The complete current format-v1 backup now uses Core snapshot/schema/summary/restore policy with native getter, codec and store adapters; broader settings ownership remains subject to the full-goal audit. |
+| Apple delivery | Reproducible library + adapter + embedded/signed app; clean-checkout build; macOS native regression | Verified from clean locked offline source: all five architectures in three XCFramework slices, twelve ABI exports per architecture, direct static Swift linkage and universal macOS dylib. All 33 delivery files match independent builds byte-for-byte. Release static contracts pass 35; all five SDK/architecture links and both stripped macOS probes pass. The ordinary universal Release app ZIP omits selftest code and passes strict deep signature verification after extraction. A separately instrumented optimized Release passes actual controls/EOF with zero render/audio failures and matching runtime bytes in both architectures. Prior complete macOS regression remains 1026 (1007 passed, 19 platform skips). See the Apple release report; this delivery item is closed. |
+| Windows | Stable DLL/C# binding and equivalent business API with native adapter | Binding exists; native adapter remains unfinished. Runtime testing can wait per user instruction. |
+
+## Verified run: 2026-11-13
+
+The anonymous media-login run is retained in
+`validation/2026-11-13-media-login/`. Production Jellyfin/Emby login now keeps
+one Core handle from public-info probe through authentication, preserving the
+platform's stable device identity, live user-agent preference, reverse-proxy
+prefix and Emby API prefix. Required token/user ID validation and tolerant
+optional name/avatar parsing match native LoginResult.parse. Public-info probes
+retain transient retries; password exchange and Quick Connect issuance never
+replay. Shared polling owns its consecutive-failure reset/budget, timeout and
+cancellation. Dedicated pairing errors 2401/2402 remain distinct from HTTP
+410/411. Native credential/profile commit, UI session identity and injected
+URLProtocol transport remain intact. See [media-login-contract.md](media-login-contract.md).
+
+The final run passed Rust 79; OcPlayerCore 14, JellyfinKit 255, MetadataKit 306,
+MoviePilotKit 124, BangumiKit 99 and PlaybackKit 96. The exported binding passes
+14; direct C ABI fixtures pass Bangumi 4, network 7, MoviePilot 10 and media
+login 10. macOS AppTests execute 1008: 989 passed, 19 platform skips, zero
+failures. Core-disabled JellyfinKit executes 255: 242 passed and 13 explicit
+library-only fixture skips. An independent 41-file Rust/source/schema copy
+passes all 79 locked offline tests. The embedded/signed application passes
+its playback controls and natural EOF with zero render/audio failures; this
+run reaches ended at the clip's complete 5.066667-second duration. All 14
+runtime Mach-O sections match the built library. Earlier failures, the initial
+complete passing run and final verification are preserved. This closes the
+stated anonymous login/pairing scope; the remaining acceptance rows stay open.
+
+Complete raw output and machine-readable counts are in `validation/2026-11-13/`.
+The Swift counts include XCTest and Swift Testing, with no skipped tests:
+OcPlayerCore 4, JellyfinKit 240, MetadataKit 304, MoviePilotKit 108.
+Rust workspace: 42 passed. Native macOS Debug application: build successful,
+core embedded with architecture/export checks and ad-hoc signature verification.
+
+The ten-second application selftest uses a generated twenty-second H.264/AAC
+file and exercises pause, resume, seek, 2x/1x speed, and window resize. The log
+shows the Rust session loaded from the application bundle, synchronized state
+and position, hardware decode/zero-copy frames, and zero render/audio failures.
+This verifies only that format and control path; it does not certify HDR,
+subtitles, remote servers, every native engine, or the complete acceptance scope.
+
+`Scripts/verify-macos.sh` automates the Rust checks, dylib build, six Swift
+package checks and native AppTests, native app build and embedding. It preserves full raw output.
+
+Shared network lifetime, connection pools, MoviePilot cookie isolation and stream
+timeouts are specified and tested in [network-contract.md](network-contract.md).
+
+The network ownership run is retained in `validation/2026-11-13-network/`:
+Rust 77; native packages OcPlayerCore 14, JellyfinKit 245, MetadataKit 306,
+MoviePilotKit 111, BangumiKit 99 and PlaybackKit 96, all passed. Seven direct
+network C ABI cases and four Bangumi C ABI cases passed. The complete native
+macOS run executed 1008 tests: 989 passed, 19 platform skips, zero failures.
+MoviePilot's Core-disabled run passed 102 cases with nine library-only fixture
+skips. An independent source copy including SQL schemas passed 77 locked offline
+Rust tests; all 14 runtime Mach-O sections matched the embedded library. The newly
+embedded application passed both playback controls and natural EOF with zero
+render/audio failures. These checks close the stated network ownership paths;
+the broader acceptance items above remain open.
+
+The subsequent MoviePilot authentication run is retained in
+`validation/2026-11-13-moviepilot-auth/`. First login, token-only silent issuance
+and all low-level HTTP exchanges now dispatch through the same retained Core.
+Thirteen new native fixtures prove default production activation, atomic
+credential commit, login cancellation/retirement, Cookie retention, raw binary
+fidelity, sole retry ownership, typed errors and concurrent refresh/fuse behavior.
+Ten direct MoviePilot C ABI cases cover the raw/auth protocol and every named
+download/subscription mutation route. A malformed-token fixture found and fixed
+an old parser category that could retain expired credentials and resubmit a
+password on a later call; both the failure and passing rerun are preserved.
+
+The complete run passed Rust 77; OcPlayerCore 14, JellyfinKit 245, MetadataKit
+306, MoviePilotKit 124, BangumiKit 99 and PlaybackKit 96. The exported binding
+passes 14; Bangumi C ABI 4 and shared network C ABI 7 also pass. macOS AppTests
+again executed 1008: 989 passed, 19 platform skips, zero failures. Core-disabled
+MoviePilot passed 102 with 22 explicitly native-library fixture skips. The
+independent Rust source/schema copy remains hash-identical and passes 77 locked
+offline tests. Final embedded Mach-O runtime sections match the built Core;
+both control playback and actual natural EOF pass with zero render/audio
+failures. Native credential persistence, generation/refresh coordination and
+notifications remain platform-owned; these tests do not close the broader shared
+account/sync orchestration or other open acceptance rows.
+
+## Bangumi migration verification
+
+Bangumi now uses Core for the complete HTTP path, including gateway OAuth,
+with credential persistence and refresh-generation ownership retained in the
+platform layer. The Core preserves arbitrary domain fields and complete error
+bodies. Named commands now use the same p1 subject/search and PATCH episode
+routes as the current Apple client. Four direct C ABI fixture tests verify wire
+routing, request shape, username escaping, empty 204 mutation responses, and
+argument overflow rejection. Five native Swift fixture tests plus the existing
+89 Bangumi package cases verify response parity, OAuth and single-flight refresh,
+permission envelopes, mutation non-replay, task cancellation and sign-out.
+
+Application regression discovered and fixed an unrelated integration boundary:
+Core must not replace injected in-memory servers or custom/fixed native HTTP
+transports. The full macOS AppTests run then executed 999 cases with 980 passed,
+19 skipped and zero failed. Two subsequently added Core activation tests passed
+with zero skips, proving that the test host loaded the requested Rust library
+and retained injected server implementations. These counts are from XCTest
+summary lines; they describe distinct checks, not a claim of release completion.
+
+The production transport gate also checks Foundation's default protocol list.
+macOS supplies built-in protocol classes on default/ephemeral configurations;
+these must permit Core. Only a caller-injected protocol or fixed SDK client
+retains the native transport. The same gate is shared by TMDB, MoviePilot and
+the Jellyfin/Emby facade, and production configuration activation is asserted
+in the native-library fixture checks.
+
+The final unified verification runs the five domain packages with
+`OCP_CORE_ENABLED=1`, direct C ABI fixtures, and the full native macOS AppTests.
+The final application run executes 1001 tests: 982 passed, 19 platform skips,
+zero failures. Its two Core activation tests do not skip. The standalone Apple
+binding is source-identical to the application's adapter and passes the same
+five native-library tests. Full final outputs are retained in
+`validation/2026-11-13-bangumi/`.
+
+## Shared media cache verification
+
+All media-store operations now dispatch through Core when enabled, including
+transactional item/rail merging, standalone progress, snapshot projection,
+filtered pages, technical info, offline genealogy, tenant-scoped clearing,
+TMDB entities/seasons/links and expiry maintenance. Read and write payloads use
+the unchanged four-migration Media.sqlite schema. New native fixtures explicitly
+prove production-factory activation, bidirectional GRDB/Core reads and atomic
+batch rollback. Existing metadata/warehouse tests run against this path.
+
+The complete unified run passed: Rust 47, OcPlayerCore 5, JellyfinKit 240,
+MetadataKit 306, MoviePilotKit 108, BangumiKit 94; direct Bangumi C ABI 4 and
+source-equivalent exported Apple binding 5. macOS AppTests executed 1001 with
+982 passed, 19 platform skips and zero failures. The newly embedded/signed
+application passed the ten-second H.264/AAC control selftest with Core loaded
+from its bundle and zero render/audio failures. Original and final raw output
+are retained in `validation/2026-11-13-media-cache/`. This does not close the
+remaining acceptance items in the table above.
+
+## Bangumi repository verification
+
+Every BangumiDatabaseOperator persistence/query entry point now dispatches to
+Core when enabled. The unchanged Bangumi.sqlite migration ledger and BLOB DTO
+format remain bidirectionally readable with GRDB. Shared policy includes full
+and slim metadata merges, authoritative collection clears, episode updates,
+progress windows and sorting, counts/pagination, retry/cooldown selection and
+single-snapshot synchronization targets. Chapter sync uses atomic replacement
+and checks cancellation before committing remote results.
+
+Both implementations now prune against the complete keep set, fixing deletion
+of retained chapters when more than 900 IDs were split into NOT IN batches.
+The five native-library repository fixtures cover automatic activation, both
+database directions, 1905 chapters, fractional batch thresholds, watched-count
+monotonicity, slim defaults and malformed JSON BLOB fallbacks. Four Rust store
+cases additionally exercise replacement rollback and overlapping sync targets.
+
+The final unified run passed Rust 51, OcPlayerCore 5, JellyfinKit 240,
+MetadataKit 306, MoviePilotKit 108 and BangumiKit 99, plus direct Bangumi C ABI
+4 and source-equivalent Apple binding 5. macOS AppTests executed 1001: 982
+passed, 19 platform skips, zero failures. The embedded/signed application
+passed the ten-second playback/control selftest from its bundled Core with
+zero render/audio failures. All final output and retained earlier outputs are
+in `validation/2026-11-13-bangumi-store/`. Full shared account/sync lifecycle,
+playback authority and the other acceptance rows remain open.
+
+## Event backpressure and session verification
+
+Notifications now retain at most 256 events and 1 MiB of serialized JSON.
+Render ticks, playback position and per-request MoviePilot search projections
+coalesce to their latest unconsumed value. Overflow preserves control/error
+events before telemetry; diagnostics expose depth/bytes, limits and lifetime
+coalescing/drop counters. Polling releases queued bytes. Concurrent Rust stress
+produced 50000 ticks across four threads and 1000 position updates, retaining
+seven events with ordered sequences, complete controls and the latest position.
+Byte overflow, oversized projections and separate search requests are covered.
+The native Swift adapter also exercises coalescing and control overflow through
+the exported C ABI.
+
+Rate, volume and track changes now update the session reducer itself instead of
+only its temporary projection. This fixes settings reverting on a position or
+lifecycle callback. Duration telemetry is honored and validated, seek clamps
+to revised duration, null clears tracks, and a ready source may pause before
+play. Invalid duration/track arguments do not change playback state.
+
+The complete run passed Rust 57, OcPlayerCore 7, JellyfinKit 240, MetadataKit
+306, MoviePilotKit 108 and BangumiKit 99. Exported Apple binding 7 is the same
+source/cases as the application's adapter; direct Bangumi C ABI 4 also passed.
+macOS AppTests executed 1001: 982 passed, 19 platform skips, zero failures.
+The embedded/signed application passed its ten-second real playback/control
+selftest with zero render/audio failures. Complete output is preserved in
+`validation/2026-11-13-events/`. Shared playback authority, media endpoint
+switching and the remaining acceptance rows are still open.
+
+## Shared endpoint verification
+
+Address stickiness, pinning, unreachable/failure cooldowns, cache freshness and
+generation checks now run in Rust. The existing native directory fixtures run
+with shared policy explicitly asserted. New concurrency and profile-deletion
+cases prove one probe round is shared and a removed address cannot return via
+an in-flight result. The native fallback also receives the deletion-generation
+fix and passes its own regression.
+
+Production public-info probes run through Core with a persistent connection
+pool and an executor owned by the Core handle. Shutdown completes before a
+host can unload the library. The probe fixture observes five sequential calls
+on the same TCP connection, checks identity/malformed payloads, and verifies
+timeout/cancellation without URLSession fallback. Custom URLProtocol transports
+and injected probe scripts retain their test transport.
+
+The media facade now reads live profiles and resolves before async dispatch.
+Jellyfin and Emby fixtures verify failure of the first address, selection of
+the alternate and a successful Rust read there, preserved base prefixes and
+native authentication identity, immediate user-agent changes, a single failed
+mutation POST, HTTP status classification, 401 account notifications, and no
+address reprobe on 503. Other network clients' connection ownership and full
+payload/transport fidelity remain acceptance work.
+
+`Cargo.lock` is now included in source delivery. An independent Rust source
+copy with the schemas and locked manifest passes offline workspace tests,
+proving compilation does not depend on the original workspace path or an
+unshipped generated lockfile. Full final evidence is recorded in
+`validation/2026-11-13-endpoints/`.
+
+Final counts: Rust 63, OcPlayerCore 7, JellyfinKit 245, MetadataKit 306,
+MoviePilotKit 108 and BangumiKit 99, all with zero failures/skips. Exported
+Apple binding 7 repeats the same adapter cases; direct Bangumi C ABI 4 passes.
+The native fallback run executes 245 with 241 passed and four library-dependent
+skips. The independent locked/offline Rust source copy passes 63 tests.
+macOS AppTests execute 1001: 982 passed, 19 platform skips, zero failures.
+The embedded/signed application also passes its ten-second playback/control
+selftest with zero render/audio failures. These checks cover this migration;
+the outstanding acceptance rows remain part of the active goal.
+
+## Shared request recovery and report verification
+
+The application now uses Core for its source failover chain, text error
+classification/capabilities, and report heartbeat/pause/terminal/natural-end
+policy. The shared chain survives engine replacement, retains the ordered
+failed-source history, limits replacements to three, and requires a fresh
+request with the alternate's own session context. A pending replacement must
+be acknowledged for the same Core generation; cancellation or a new play
+invalidates it. Core-enabled native failure projections use recordOnly and
+cannot request a second independent retry. Exhausting a short candidate chain
+now produces its full failure summary; single-source errors remain unchanged.
+
+The reporting coordinator executes shared decisions while preserving native
+Start/Progress/Stopped ordering, timeouts and terminal callback guards. A
+failed open retaining a tail position cannot trigger autoplay. Tests explicitly
+assert shared activation, verify history across replacement and reject malformed
+flow commands without mutation. See [the command contract](playback-contract.md).
+
+The complete run passed Rust 70, OcPlayerCore 10, JellyfinKit 245, MetadataKit
+306, MoviePilotKit 108 and BangumiKit 99, all without failures or skips. The
+exported binding repeats the same ten adapter cases and direct Bangumi C ABI
+four cases pass. macOS AppTests executed 1006: 987 passed, 19 platform skips,
+zero failures. Forty-five focused native playback compatibility tests also pass
+with Core disabled. An independent locked/offline Rust source copy passes all
+70 tests. The bundled application passes its ten-second playback/control test
+with zero render/audio failures. All raw output and counts are preserved in
+`validation/2026-11-13-playback-flow/`.
+
+Engine event folding/EOF, foreground rebuild/resume, mute/track preferences and
+the other open acceptance rows remain required work in the active goal.
+
+## Shared engine event verification
+
+Core now owns native engine event generation, state/failure folding and error
+identity. The existing PlaybackKit event fixtures explicitly assert shared
+activation. A controller fixture proves its event reducer, request flow and
+playback session share the same Core handle; actual cached state enters ended
+or failed immediately and retains rate, volume/mute and track choices. Old
+engine generations cannot mutate state, acquire a new generation or publish
+notifications. Native event cancellation, track refresh, Observation publishing,
+elapsed playing/buffering statistics, rendering and actual suspension remain
+platform execution operations.
+
+The current tail-EIO rule is preserved, including localized av_read_frame (-5)
+matching, one-time folding and paired state-error suppression; a previously
+visible real failure remains an error. Nil and empty error messages share the
+reference client's deduplication key. Unknown-duration streams retain their
+position and clearing a duration removes the old clamp. Telemetry cannot
+replay an older engine phase over a newer pause control. Mute is stored
+separately from the user's volume. Foreground intent/error/state decisions also
+run in Core. A late request failure cannot republish old history after a new
+play resets the native projection.
+
+The final full run passed Rust 76, OcPlayerCore 14, JellyfinKit 245,
+MetadataKit 306, MoviePilotKit 108, BangumiKit 99 and PlaybackKit 96,
+without failures/skips. The exported binding repeats the same 14 adapter
+cases; direct Bangumi C ABI four cases also pass. Final macOS AppTests
+executed 1008: 989 passed, 19 platform skips, zero failures. An independent
+locked/offline source copy passes all 76 Rust tests. Core-disabled playback
+compatibility checks pass; exact executed/pass/skip counts are in summary.json.
+
+The final embedded/signed application passes its control selftest and actual
+natural EOF. The five-second H.264/AAC clip stops at approximately 4.933 seconds
+and Core reports ended, with zero render/audio failures. Runtime Mach-O sections
+of the embedded library match the built library; its install name and signature
+account for whole-file hash changes. All raw output, earlier build/test runs,
+code equivalence and machine-readable evidence are preserved in
+`validation/2026-11-13-engine/`. The full goal remains active; remaining rows in
+the acceptance table are not certified by these playback checks.
+
+## Danmaku gateway and flow verification
+
+The production client now retains Core across match, anime/episode search and
+comments. Core returns complete bytes/status/headers with one network attempt;
+the existing typed decoder and configured retry loop keep their semantics.
+Native fixtures verify activation, injected-session isolation, complete comment
+IDs/modes and match shift, cache headers, TCP reuse, typed business/HTTP errors,
+exact retry counts and prompt cancellation. The macOS coordinator now always
+uses its complete cache/search/manual/intro orchestration; the old Core fast
+path that bypassed those policies has been replaced at the transport boundary.
+
+DanmakuKit executes 232 tests with no failures or skips, including four native
+Core fixtures. Four real HTTP C ABI checks pass. Full outputs, earlier compile
+errors and final verification are retained in `validation/2026-11-13-danmaku/`.
+See [danmaku-contract.md](danmaku-contract.md). Shared orchestration/persistence
+for Windows and the other acceptance rows remain open.
+
+The complete Danmaku verification passes Rust 79; OcPlayerCore 14, JellyfinKit
+255, MetadataKit 306, MoviePilotKit 124, BangumiKit 99, PlaybackKit 96 and
+DanmakuKit 232. Exported Apple binding 14 and C ABI Bangumi 4, network 7,
+MoviePilot 10, media login 10 and danmaku 4 pass. macOS AppTests execute 1008:
+989 passed, 19 platform skips, zero failures. The Core-disabled DanmakuKit run
+passes 228 with four explicit native-library fixture skips. The newly embedded
+and signed application passes pause/play/seek/speed/resize with zero render or
+audio failures. Natural EOF reaches Core ended with the same native timeline;
+at persisted 2x speed both end at 4.966666s for metadata duration 5.066667s.
+That 100ms difference is recorded as an open rate/EOF acceptance issue, rather
+than claiming exact complete-duration playback. Summary and all raw logs are
+retained with this run. Build scripts also retain executable Git modes so
+clean-checkout command invocations work.
+
+## Shared danmaku matching verification
+
+Filename parsing, canonical names, episode and special tokens, special keyword
+classification, Unicode comparable titles, candidate identity scoring and batch
+selection now run in Core in the production Apple client. Native policy bodies
+remain independent for disabled-Core and differential comparison. Matching
+retains the gateway's original candidate DTO by index, preserving IDs larger
+than 2^53 and shifts larger than 32 bits. Global search order, threshold/ties,
+final/season conflicts, special namespace preferences, OVA fallback and hard
+movie-vs-episode identity gates match the existing native policy.
+
+Native differential fixtures compare 960 filenames, 3840 scores, 270 keyword
+boundary combinations, Unicode/episode/canonical edge cases and 1500 candidates.
+Four additional direct C ABI policy cases cover ranking, identity gates, exact
+large episode strings, validation and a 2000-candidate tie. Two failures involving
+canonical trailing dots were found and fixed; the initial and first unified
+outputs are retained. Final focused and complete package checks pass.
+
+The complete run passes Rust 79; OcPlayerCore 14, JellyfinKit 255, MetadataKit
+306, MoviePilotKit 124, BangumiKit 99, PlaybackKit 96 and DanmakuKit 237. Exported
+Apple binding 14 passes; C ABI Bangumi 4, network 7, MoviePilot 10, media login
+10, danmaku gateway 4 and matching policy 4 pass. macOS AppTests execute 1008:
+989 passed, 19 platform skips, zero failures. Core-disabled DanmakuKit passes
+228 with nine explicit native-library fixture skips. A hash-verified independent
+44-file source/lock/schema/fixture copy passes all 79 locked offline Rust tests.
+Raw output and source hashes are retained in `validation/2026-11-13-danmaku-policy/`.
+Shared resolver scheduling, cache persistence and complete intro/load policies
+remain open; see [danmaku-contract.md](danmaku-contract.md).
+
+The newly embedded/signed application also passes pause/play/seek/speed/resize
+from its bundled Core, with zero render/audio failures. Natural EOF reaches
+Core ended at the same native position (5.033333s for metadata duration
+5.066667s at 1x in this run). This 33ms gap and the earlier 100ms gap at 2x
+remain open exact-duration engine/EOF acceptance items.
+
+## Shared danmaku cache verification
+
+Mapping/comment/saved-intro persistence, revision barriers, TTL and bounded LRU
+memory now run in Core through each native DanmakuCache actor's retained handle.
+Native JSON filenames, Swift reference-date timestamps and legacy mappings/hint
+sources remain compatible. Corrupt mappings are preserved and retried; expired
+memory rechecks disk freshness before removing a file. Six C ABI cases cover
+these behaviors, disk failure, purge and exact 64-bit values. Three native
+fixtures require Core activation and prove bidirectional files and UInt64.max
+revision protection against stale writes.
+
+The complete run passes Rust 79; OcPlayerCore 14, JellyfinKit 255, MetadataKit
+306, MoviePilotKit 124, BangumiKit 99, PlaybackKit 96 and DanmakuKit 240.
+Exported binding 14 and all 45 C ABI cases pass. macOS AppTests execute 1008:
+989 passed, 19 platform skips, zero failures. Core-disabled DanmakuKit executes
+240: 228 passed and 12 explicit library-only fixture skips. A hash-verified
+independent 45-file source/lock/schema/fixture copy passes all 79 locked offline
+Rust tests. The macOS app builds and Core embedding/signature checks pass. The
+newly embedded/signed app also passes pause/play/seek/speed/resize controls with
+zero render/audio failures.
+
+Summary, source hashes and full raw output, including the initial inaccessible
+Swift error-initializer compilation failure and its verified repair, are retained
+in `validation/2026-11-13-danmaku-cache/`. See
+[danmaku-cache-contract.md](danmaku-cache-contract.md). Shared resolver scheduling,
+intro detection/learning/provider policies and the other acceptance rows remain
+open; this cohort does not certify completion of the goal.
+
+## Shared intro policy and learning verification
+
+DanmakuIntroDetector, cross-episode learning/confirmation, learning persistence,
+community interval selection and sibling aggregation now execute in Core on the
+production macOS path. The native seek coordinator delegates eligibility and
+confirmation decisions while retaining platform actions and async generation
+handling. Native implementations remain independent comparison oracles.
+
+Seven native cases compare 676 timestamp combinations and numeric/UID edges,
+700 detector corpora, 3000 consensus decisions, 600 source/sibling comparisons,
+seek/source boundaries, learning file interoperability and a 10000-comment batch.
+Six direct ABI cases cover exact signed-64-bit IDs/reference dates, bounded 200
+events, corrupt-file cached-empty recovery, write-through memory on disk failure,
+source/cluster ties and validation. The representative batch measures about
+141ms in native Debug Swift and 30ms including JSON/ABI with release Rust; this
+records that configuration, not a general release-performance certification.
+
+The complete run passes Rust 79; OcPlayerCore 14, JellyfinKit 255, MetadataKit
+306, MoviePilotKit 124, BangumiKit 99, PlaybackKit 96 and DanmakuKit 247.
+Exported binding 14 and all 51 direct ABI cases pass. macOS AppTests execute
+1008: 989 passed, 19 platform skips, zero failures. Core-disabled DanmakuKit
+executes 247: 228 passed, 19 explicit library-only fixture skips. A verified
+independent 47-file final-source/lock/schema/fixture copy passes 79 locked offline
+Rust tests.
+
+An additional hex-float tail probe found a one-ULP parsing difference. The final
+repair uses correctly rounded CRT conversion with an immutable C numeric locale.
+Full app verification precedes that isolated repair; the final code then passes
+locked Rust, all ABI, exported binding and complete DanmakuKit checks. The rebuilt
+Core is embedded and signed in the same verified native app. Initial failures,
+successful runs, precision evidence and final code hashes are preserved in
+`validation/2026-11-13-intro-policy/`.
+
+See [intro-contract.md](intro-contract.md). Intro provider transport/identity
+resolution, complete shared async load/manual/promotion orchestration and the
+remaining acceptance rows stay open. Windows runtime testing remains deferred.
+
+The first bundled control probe's seek labels assumed a five-second clip,
+although its actual calls seek to fractions 0.7 and 0.2. Source inspection
+resolved the apparent seconds mismatch: for the 20-second file the expected
+positions are 14 and 4 seconds. Labels now state 70% and 20%. The rebuilt and
+re-signed app's final probe verifies both expected Core positions, pause/play,
+rate changes and resize with zero render/audio failures. Original logs and the
+initial summary remain preserved alongside the corrected verification.
+
+## Shared intro provider verification
+
+AniSkip, AnimeSkip, TheIntroDB and AniList production HTTP exchanges now use
+retained Core clients. The first three also share request assembly, decoding and
+interval policies. Seven native cases include 600 hint/clamp/timestamp corpora
+and real HTTP calls for all four providers; six new exported ABI cases verify
+request/response fidelity, Int64 variables, validation, pooling and cancellation.
+Their native retry/error rules, lazy JSON string decoding and timestamp ties are
+documented in [intro-provider-contract.md](intro-provider-contract.md).
+
+The complete final verification passes Rust 83, exported Apple binding 14 and
+all 57 ABI cases. Swift packages pass OcPlayerCore 14, JellyfinKit 255,
+MetadataKit 306, MoviePilotKit 124, BangumiKit 99, PlaybackKit 96 and
+DanmakuKit 254. AppTests execute 1008: 989 pass, 19 platform skips, zero failures.
+Core-disabled DanmakuKit executes 254: 228 pass and 26 Core-only skips. A
+hash-verified independent copy of 50 source/lock/schema/fixture files passes 83
+locked offline Rust tests.
+
+The signed app containing the final Core passes a ten-second control probe with
+the twenty-second media file: pause/play, 70% seek to 14 seconds, 20% seek to
+4 seconds and window resize. Its saved initial rate is 2.0 and the scripted
+final rate is 1.0; render/audio failures remain zero. Complete raw results,
+source hashes, initial failures and the final summary are retained in
+`validation/2026-11-13-intro-providers/`.
+
+The first full run used the Backup volume for Swift caches and failed on index
+file renames. Local `/tmp` build output resolves that environment issue. An
+existing source-scanning AppTest briefly stalled inside a system directory-open
+call, then resumed and passed; its sample and full test log remain available.
+Neither event is reported as a passing initial run.
+
+Complete shared async loading/manual
+selection/promotion, native idle/resource deadline and broader transport fidelity,
+and the other acceptance rows remain open. Windows runtime testing is deferred.
+
+## AniList identity and ID persistence follow-up
+
+AniList lookup/search orchestration, title deduplication, candidate matching,
+SHA-256 cache keys, positive/negative-cache plans and `aniskip-ids.json` now run
+in Core. The macOS resolver and store share one handle and cached record map.
+Injected transport fixtures retain Swift requests with shared policy; native
+resolver/matching/storage paths remain independent comparison oracles. A
+cancelled miss does not write a negative record. Native file compatibility,
+legacy partial IDs, seven-day expiration, forced refresh, ordered fallbacks,
+post-request clock sampling and failed atomic-write memory behavior are covered.
+
+Eight new Swift cases include 900 Unicode title/key and 900 matching corpora.
+They exposed a Greek final-sigma lowercase difference, now fixed to preserve
+Swift behavior. Initial failures are retained alongside the passing rerun. Six
+new C ABI cases independently exercise resolution, persistence and cancellation.
+
+The complete verification passes Rust 87, exported Apple binding 14 and direct
+ABI 63. Native packages pass OcPlayerCore 14, JellyfinKit 255, MetadataKit 306,
+MoviePilotKit 124, BangumiKit 99, PlaybackKit 96 and DanmakuKit 262. Application
+tests pass 1008 total: 989 passed, 19 skipped, zero failures. Core-disabled
+DanmakuKit passes 262 total: 228 passed, 34 skipped, zero failures. A 52-file
+hash-verified source copy independently passes all 87 locked/offline Rust tests.
+
+The rebuilt signed application with embedded Core passes a ten-second playback
+control smoke on a twenty-second clip: pause/play, 70% seek to fourteen seconds,
+window resize, rate changes and 20% seek to four seconds. Rendering/audio
+failure counters remain zero. Exact raw output and the saved initial rate are
+recorded in `validation/2026-11-13-intro-identity/`. The application source scan
+paused in system directory enumeration and resumed; its diagnostic sample and
+complete passing run are preserved.
+
+See [intro-identity-contract.md](intro-identity-contract.md). Complete shared
+Danmaku async load/manual/promotion orchestration, transport deadline/TLS/redirect/
+streaming fidelity and the broader parity rows remain active. Windows runtime
+testing remains deferred as requested; this cohort does not complete the goal.
+
+## Shared automatic/manual Danmaku loading follow-up
+
+Production loading now drives a resumable Core flow for all four matching tiers,
+per-query budgets, candidate ranking, mapping/comment-cache branches, rendering,
+readiness/injection ordering and complete intro-source precedence. The host
+executes requested file/network/cache/player effects; Core retains continuation
+state and decisions. Only renderer payloads remain in the adapter between effects.
+Native retry/typed HTTP wrappers retain injected-session behavior on the shared
+network pool. Manual mode itself guarantees forced intro resolution, and Core's
+omitted matching budget defaults to the native thirty seconds.
+
+Core now also generates production overlay and Erika payloads with the native
+numeric/Unicode field rules. Overlay time ordering is stable, Erika JSON retains
+source ordering without synthesized IDs, and the count remains the raw comment
+count. A revision change while awaiting readiness prevents injection into the
+same UUID; cancellation after injection prevents later ID resolution or intro
+cache persistence. Original control-flow/rendering implementations remain test
+oracles, and all initial failures/discovery outputs are retained.
+
+Six additional Rust and six C ABI cases cover complete eight-request waterfalls,
+budgets, first/ranked matches, exact Int64 IDs, cache/source plans, cancellation,
+stale replies, default semantics and bounded continuation admission. All 29
+existing loading cases pass. Four new Swift cases compare 1200 numeric/Unicode
+corpora across three formats, manual/cached control flow and the post-await races.
+
+The unified run passes Rust 93, direct ABI 69 and exported Apple binding 14.
+Native packages pass OcPlayerCore 14, JellyfinKit 255, MetadataKit 306, MoviePilotKit
+124, BangumiKit 99, PlaybackKit 96 and DanmakuKit 266. After the portable-default
+fixes, final Rust, flow ABI, DanmakuKit, exported binding and application regressions
+also pass. Both application runs execute 1008 tests: 989 passed, 19 skipped and
+zero failures. Core-disabled DanmakuKit passes 266 total: 228 passed, 38 shared-only
+skips and zero failures. A 55-file hash-verified source copy independently passes
+all 93 locked/offline Rust tests. Final source hashes and all raw logs are retained
+in `validation/2026-11-13-danmaku-flow/`.
+
+See [danmaku-flow-contract.md](danmaku-flow-contract.md). App learning-promotion
+propagation and replacement of the legacy standalone loader remain open, alongside
+metadata/account scheduling, transport fidelity, configuration/diagnostics,
+Apple release delivery and Windows adapter implementation. The full goal remains
+active; Windows runtime testing remains deferred as requested.
+
+The final library is embedded and ad-hoc signed in the rebuilt application.
+Its ten-second control smoke on a twenty-second clip verifies pause/play, seek
+at 70% (fourteen seconds), resizing, rate changes and seek at 20% (four seconds),
+with zero rendering/audio failures. Raw output, the saved initial rate and final
+bundle hash are retained in the flow validation summary.
+
+## Manual-seek learning verification: 2026-11-14
+
+Confirmation, event recording, consensus promotion and cross-episode propagation
+now execute in one Core operation sharing the service's live mapping/hint cache.
+The app retains its diagnostic messages, playback request ID and source-ranking
+boundary. Six new native workflow fixtures compare the independent fallback and
+cover interval retention, exact Int64 identities/dates, protected sources,
+duplicate/explicit anime mappings, same-episode evidence limits, one-time
+concurrent confirmation and pre-entry cancellation. Three new C ABI cases cover
+the complete path, preflight validation and failed-write memory retention.
+See [intro-contract.md](intro-contract.md).
+
+The affected regression passes Rust 93; direct C ABI intro 9, cache 6 and loading
+flow 6; DanmakuKit 272 with zero skips/failures. The Core-disabled package executes
+272: 228 passed, 44 explicit Core-fixture skips, zero failures. The rebuilt macOS
+application executes 1008: 989 passed, 19 platform skips, zero failures. Binding
+source equivalence, library embedding and deep signature verification pass.
+The signed application passes the ten-second playback control selftest on the
+twenty-second clip with zero render/audio failures. Complete raw output, source
+hashes and failed preliminary checks are retained in
+`validation/2026-11-14-intro-learning/`.
+
+This closes the manual-seek learning coordinator scope. The legacy standalone
+loader, metadata/account scheduling, transport fidelity, configuration/diagnostics,
+Apple release delivery and Windows adapter implementation remain open. Windows
+runtime testing remains deferred as requested.
+
+## Standalone Danmaku loading verification: 2026-11-14
+
+The exported `danmaku.load` command now drives the same retained flow used by
+native automatic/manual loading. Its data delivery completes the full matching
+waterfall, one-candidate selection, cache and intro-source decisions without
+player readiness or injection effects. Shared typed gateway decoding, retry
+ownership, payload conversion, exact 64-bit identifiers and cancellation/revision
+checks replace the former standalone shortcut. The Apple loader exposes the
+complete options and directly decodes the textual payload. See
+[standalone-danmaku-contract.md](standalone-danmaku-contract.md).
+
+Two new Rust flow cases, ten direct C ABI cases and three public Apple loader
+cases cover cached/manual delivery, the eight-query waterfall, retry/fallback,
+aliases and community consensus, learning/sibling precedence, exact identifiers,
+native numeric decoding, budget outcomes and cancellation/stale writes. The
+complete matrix passes Rust 95, direct ABI 82 and exported Apple binding 17.
+Native packages pass OcPlayerCore 17, JellyfinKit 255, MetadataKit 306,
+MoviePilotKit 124, BangumiKit 99, PlaybackKit 96 and DanmakuKit 272, with zero
+failures. The macOS application executes 1008 tests: 989 passed, 19 platform
+skips, zero failures. Core-disabled DanmakuKit executes 272: 228 passed, 44
+explicit Core-fixture skips, zero failures. A 52-file hash-verified independent
+source copy passes all 95 locked/offline Rust tests.
+
+The rebuilt application embeds the new library and passes deep signature
+verification. Its ten-second control selftest on a twenty-second clip confirms
+pause/play, seek to fourteen seconds, window resize, rate changes and seek to
+four seconds. The saved initial rate is 2.0 and final rate is 1.0; rendering and
+audio failure counters remain zero. The application build reuses existing Xcode
+DerivedData. Raw preliminary and final logs, source hashes and the bundled
+library hash are retained in `validation/2026-11-14-standalone-load/`.
+
+This closes the legacy standalone-loader scope. Metadata/account scheduling,
+playback orchestration, native deadline/TLS/redirect/streaming fidelity,
+configuration/diagnostics, Apple release delivery and Windows adapter
+implementation remain active. Windows runtime testing remains deferred as
+requested; this cohort does not complete the full goal.
+
+## Shared TMDB matcher verification: 2026-11-14
+
+Native matching now delegates provider/parent identity, search planning, original
+title fallback, scoring and stable manual alternatives to `tmdb.matcher`.
+The host retains its injected search effect. The original implementation remains
+an independent oracle/fallback, and typed request/textual-result decoding
+preserves exact Int identifiers at this boundary. See
+[tmdb-matcher-contract.md](tmdb-matcher-contract.md).
+
+Three Rust cases, four direct C ABI cases and four native differential cases
+verify complete identity/query/ranking behavior. The native corpus includes
+numeric, case, width, punctuation, whitespace and combining-mark scalars,
+900 nine-candidate score/ranking sets, 90 complete injected-search flows and
+provider/parent/disabled-search boundaries. It exposed and fixed numeric
+grapheme suffix/year handling and character-boundary containment differences.
+The preliminary ID-field and test-helper failures are also retained separately.
+
+The final unified run passes Rust 98, direct C ABI 86 and exported Apple binding
+17. Native packages pass OcPlayerCore 17, JellyfinKit 255, MetadataKit 310,
+MoviePilotKit 124, BangumiKit 99, PlaybackKit 96 and DanmakuKit 272, with zero
+failures. macOS AppTests execute 1008: 989 passed, 19 platform skips and zero
+failures. Core-disabled MetadataKit executes 310: 301 passed, nine explicit
+shared-fixture skips, zero failures. A hash-verified 54-file independent source
+copy passes all 98 locked/offline Rust tests.
+
+The rebuilt application embeds the current library and passes deep signature
+verification. Its ten-second control selftest on the twenty-second H.264/AAC
+clip confirms pause/play, seeks to fourteen and four seconds, resizing and rate
+changes from the saved 2.0 to 1.0, with zero rendering/audio failures. Xcode
+DerivedData is reused. Complete preliminary/final logs, source hashes and the
+bundle hash are retained in `validation/2026-11-14-tmdb-matcher/`.
+
+An independent run of the actual SDK JSON decoder confirms that TMDB's existing
+network DTO adapter can round integers above 2^53 or fail near Int.max. This is
+separate from the exact matcher boundary and is recorded in `network-id-audit.log`
+as required follow-up. Enricher/batch scheduling, repository memory/freshness,
+account orchestration, playback orchestration, transport fidelity,
+configuration/diagnostics, Apple release delivery and Windows adapter work
+remain active. Windows runtime testing remains deferred; the full goal remains
+incomplete.
+
+## Shared TMDB response verification: 2026-11-14
+
+The network DTO exact-ID audit is now closed. The Apple SDK retains original
+ABI response bytes and exposes typed `decodeData`; all shared TMDB DTOs use that
+path. IDs, season/episode numbers, counts, runtimes and request years retain the
+native signed Int range. Request year suppression for episode/season searches
+and short-date parsing also match the native client. Core response projection
+now follows native JSONObject optional-array, numeric, cast-prefix and content
+rating behavior, plus its UTF-8/UTF-16/UTF-32 encoding/BOM rules. Corrupt numeric
+overflows are discarded safely. See [tmdb-wire-contract.md](tmdb-wire-contract.md).
+
+Two Rust cases, five direct C ABI cases and two public SDK cases verify exact
+nested integers, signed requests, response encoding, malformed fields and
+preflight rejection. Three native cases compare complete entity, season and
+search models across 14 HTTP scenarios (42 full model comparisons), then check
+malformed-wire errors and actual request paths. The shared fixture copies are
+verified before native tests.
+
+The final unified run passes Rust 100, direct C ABI 91 and exported Apple
+binding 19. Native packages pass OcPlayerCore 19, JellyfinKit 255, MetadataKit
+313, MoviePilotKit 124, BangumiKit 99, PlaybackKit 96 and DanmakuKit 272, with
+zero failures. macOS AppTests execute 1008: 989 passed, 19 platform skips and
+zero failures. Core-disabled MetadataKit executes 313: 301 passed, 12 explicit
+shared-fixture skips and zero failures. A hash-verified 55-file independent
+source copy passes all 100 locked/offline Rust tests.
+
+The Debug application builds with reused Xcode DerivedData and embeds/signs
+the current Core. Its ten-second selftest on a twenty-second clip confirms
+pause/play, seeks to fourteen and four seconds, resizing and rate changes from
+the saved 2.0 to 1.0, with zero rendering/audio failures. Full initial/final
+logs, source hashes and library hashes are
+retained in `validation/2026-11-14-tmdb-wire/`. Enricher/batch scheduling,
+collection/repository orchestration, account and playback coordination,
+transport fidelity, configuration/diagnostics, Apple release delivery and
+Windows adapter work remain active. Windows runtime testing remains deferred;
+this cohort does not complete the full goal.
+
+## Shared TMDB enrichment verification: 2026-11-14
+
+Refresh authority, collection member resolution, direct/manual binding, airing
+freshness, series season iteration, single-flight completion/retirement and the
+complete four-worker batch now execute in retained Core continuations. The host
+executes database, injected HTTP and Swift task effects. Callback cancellation
+stops refill while already-entered workers drain, and completion error records
+remain independent of fetch retirement. Typed cache reads retain full Int ranges
+across all nested snapshots; TMDB retries rate limits/transport while keeping
+other HTTP failures final. See [tmdb-enrichment-contract.md](tmdb-enrichment-contract.md).
+
+The unified run passes Rust 111, direct C ABI 99 and exported SDK 19. Seven native
+packages pass 1185 cases, including MetadataKit 320. The final complete MetadataKit
+rerun after test-only skip/fixture-teardown fixes also passes all 320. macOS
+AppTests execute 1008: 989 passed, 19 platform skips, zero failures. Core-disabled
+MetadataKit executes 320: 301 passed, 19 explicit Core-fixture skips, zero failures.
+An independent 56-file hash-verified source/schema copy passes all 111 locked/
+offline Rust tests. Complete initial failures, corrected runs and source hashes
+are retained in `validation/2026-11-14-tmdb-enrichment/`.
+
+The Debug app builds with reused DerivedData, embeds the current Core and passes
+deep signature verification. Its ten-second control selftest on the twenty-second
+H.264/AAC clip verifies pause/play, seeks to fourteen and four seconds, resizing
+and rate changes from the saved 2.0 to 1.0, with zero render/audio failures.
+Repository memory/freshness, account/playback orchestration, native transport
+fidelity, configuration/diagnostics, Apple release delivery and Windows adapter
+implementation remain active. Windows runtime testing remains deferred; this
+cohort does not complete the full goal.
+
+## Retained repository progress and composition: 2026-11-14
+
+Session-local progress, confirmation/revision barriers, all projection updates
+and shutdown now run in the retained repository Core. This includes explicit
+owned final writes after shutdown and foreign disk confirmation. Pagination
+recovery/append/replace, home restoration/deduplication, default-season/detail
+planning and protected progress composition also run in that same handle.
+Native hosts retain asynchronous effects and section failure/fallback assembly.
+See [media-repository-progress.md](media-repository-progress.md) and
+[media-repository-composition.md](media-repository-composition.md).
+
+The final unified run passes Rust 129, actual C ABI 112 and exported SDK 19.
+Seven native packages pass 1197 cases, including MetadataKit 332. AppTests execute
+1008: 989 passed, 19 platform skips and zero failures. Core-disabled MetadataKit
+executes 332: 301 passed, 31 explicit Core-only skips, zero failures. The
+hash-verified independent source/schema copy passes all 129 locked/offline Rust
+tests. Complete raw output, initial assertion/skip-helper failures and corrected
+runs are retained in `validation/2026-11-14-repository-composition/`. The prior
+progress cohort's full raw verification is retained separately in its original
+validation directory.
+
+The rebuilt Debug app embeds/signs the current Core, passes deep signature
+verification and matches all fourteen runtime library sections. Without any
+library or feature override, its ten-second H.264/AAC control selftest verifies
+pause/play, seeks, resizing and rate changes with zero render/audio failures.
+Full repository effect sequencing and failure/fallback assembly, account/sync,
+playback preferences/recovery, transport fidelity, settings/diagnostics, Apple
+release delivery and Windows adapter implementation remain active. Windows
+runtime testing remains deferred; this run does not complete the full goal.
+
+## Complete retained repository workflows: 2026-11-14
+
+Every cached/refresh home/item/detail/episodes/page operation plus prefetch now
+uses retained Core continuations. Core owns effect sequencing, parallel plans,
+complete failure/fallback assembly, disk restoration, query identity and post-
+await progress reconciliation. Native tasks execute typed yielded effects;
+independent native algorithms remain available. Primary failure and completion
+retire all retained continuations. See
+[media-repository-flow.md](media-repository-flow.md).
+
+The unified run passes Rust 134, actual C ABI 117 and exported Apple SDK 19.
+Seven native packages pass 1202 cases, including MetadataKit 337 with zero skips.
+AppTests execute 1008: 989 pass, 19 platform skips, zero failures. Core-disabled
+MetadataKit executes 337: 301 pass, 36 explicit Core-only skips, zero failures.
+A hash-verified independent source/schema copy passes all 134 locked/offline Rust
+tests. Full preliminary/corrected/final output and source hashes are retained in
+`validation/2026-11-14-repository-flow/`.
+
+The rebuilt Debug application embeds/signs the current Core, passes deep
+signature verification and matches all fourteen runtime library sections. Its
+bundled ten-second playback/control test and separate natural EOF run have zero
+render/audio failures, with no library or feature override. This closes the
+repository workflow migration scope; broader account/sync, playback preferences
+and recovery, native transport fidelity, settings/diagnostics, Apple release and
+Windows adapter delivery remain active. Windows runtime testing remains deferred;
+the complete project goal is not yet achieved.
+
+## Retained Bangumi account verification — 2026-11-14
+
+Credential/OAuth/refresh generations, single-flight claim ownership,
+expiration/session reuse, cancellation/timeout classification and account-service
+revision barriers now run through `bangumiAccount.*` on the retained HTTP Core.
+The independent native implementation also consumes OAuth state before the
+network await and clears pending state on logout, closing callback replay and
+later-authorization cleanup races. Physical credentials, tasks, sessions,
+localized errors and UI notifications remain adapters.
+
+The final run passes Rust 138, C ABI 122, exported Apple SDK 19 and seven native
+packages totaling 1206. BangumiKit passes 103; its Core-disabled regression
+executes 103 with 89 passed and 14 library-only skips. The full macOS application
+executes 1008 with 989 passed, 19 platform skips and zero failures. A hash-verified
+63-file independent source/schema copy passes all 138 locked/offline Rust tests.
+The embedded library's fourteen runtime Mach-O sections match the build, deep
+signature verification passes, and bundled playback controls/natural EOF finish
+with zero render/audio failures. Raw failures and corrected/final output are in
+`validation/2026-11-14-bangumi-account/`. Complete profile/account effect flows,
+collection scheduling/sync and the other acceptance rows remain open.
+
+## Retained Bangumi synchronization verification — 2026-11-14
+
+Collection pagination, complete episode paging/replacement, sliding bounded
+reconciliation and full incremental refresh now use retained Core flows. SQL
+receipts, database application and account-directory retirement share one state
+lock. Native login/profile/logout begin immediately retires the database sync
+directory, with captured account-operation/identity guards around host effects
+and native timestamp adoption. The independent native path also guards late
+collection/episode writes by its database revision. Typed account/store/sync
+replies preserve exact integer fields through original-byte decoding.
+
+The final run passes Rust 143, C ABI 128, exported Apple SDK 19 and seven native
+packages totaling 1211. BangumiKit passes 108; its Core-disabled run executes 108
+with 89 passed and 19 explicit library-only skips. Full macOS AppTests execute
+1008 with 989 passed, 19 platform skips and zero failures. An independent
+hash-verified 64-file source/schema copy passes all 143 locked/offline Rust tests.
+Fourteen embedded runtime Mach-O sections match, deep signature verification
+passes, and bundled playback controls plus natural EOF have zero render/audio
+failures. Complete raw output and the corrected protocol-fixture failure are in
+`validation/2026-11-14-bangumi-sync/`. Detailed subject/progress mutation chaining,
+complete account/profile effect orchestration and the other acceptance rows
+remain open.
+
+## Retained MoviePilot account verification — 2026-11-14
+
+Login/authentication generations, configuration receipts, single-flight refresh
+ownership, the 15-second watchdog policy, refresh fuse and logout/conditional
+clear decisions now run through `moviepilotAccount.*` on the retained HTTP Core.
+Core validates initial login before and after the asynchronous platform credential
+commit. Sign-out or a newer login during that handoff prevents old success from
+publishing a user or advancing the replacement generation. The independent
+native path has the same post-commit guard. Credentials, physical revision locks,
+tasks, cookie-pool retirement and notifications remain platform effects.
+
+The final unified run passes Rust 147, C ABI 133, exported Apple SDK 19 and seven
+native packages totaling 1216. MoviePilotKit passes 129; its Core-disabled run
+executes 129 with 104 passed, 25 explicit library-only skips and zero failures.
+macOS AppTests execute 1008 with 989 passed, 19 platform skips and zero failures.
+A hash-verified independent 65-file source/schema copy passes all 147
+locked/offline Rust tests. Fourteen embedded runtime Mach-O sections match and
+deep signature verification passes. Bundled playback controls and natural EOF
+finish with zero render/audio failures. Full output and preliminary test-fixture
+failures are preserved in `validation/2026-11-14-moviepilot-account/`.
+
+The outer raw-request retry/auth replay and named-command replay coordinator
+still remain for the next retained-flow migration. Detailed Bangumi subject and
+progress operations, account/profile effects, broader playback/transport/settings
+acceptance and Apple release/Windows adapter delivery remain open. Windows
+runtime testing remains deferred; the complete project goal remains active.
+
+## Retained MoviePilot request verification — 2026-11-14
+
+Raw and named request retry/auth replay now run through `moviepilotFlow.*` on
+the retained account/HTTP Core. Core owns method idempotence, transient retry
+budgets, backoff/jitter bounds, latest-token reuse, shared refresh, one auth replay
+per attempt and failure termination. Account begin/logout retires all flows;
+accepted configuration commits retire older revisions while transparent token
+refresh preserves the current revision. Hosts retain bytes/errors and execute
+network, account, token-read, jitter-sampling and wait effects. Initial login and
+current-user fields decode from original ABI bytes, preserving large integer
+identities, email/avatar and false optional flags.
+
+The unified run passes Rust 151, C ABI 140, exported Apple SDK 19 and seven native
+packages totaling 1221. MoviePilotKit passes 134; its Core-disabled regression
+executes 134 with 104 passed, 30 explicit library-only skips and zero failures.
+macOS AppTests execute 1008 with 989 passed, 19 platform skips and zero failures.
+An independent hash-verified 66-file source/schema copy passes all 151
+locked/offline Rust tests. Source/native input hashes remain unchanged; fourteen
+embedded runtime Mach-O sections match and deep signature verification passes.
+Full output, preliminary failures and provenance are retained in
+`validation/2026-11-14-moviepilot-flow/`.
+
+The request/account sequencing migration is complete for the existing MoviePilot
+actor paths. Broader live deployment/account acceptance, detailed Bangumi subject
+and progress operation chaining, account/profile effects, complete playback and
+transport/settings acceptance, Apple release slices and Windows adapter delivery
+remain active. Windows runtime testing remains deferred; the full goal is active.
+
+The subject/progress run is retained in
+[validation/2026-11-14-bangumi-progress/](validation/2026-11-14-bangumi-progress/README.md).
+Core now owns the complete existing subject/progress effect sequences and their
+failure/notification ordering. Real HTTP/native differential fixtures verify
+paging, signed IDs, watching and batch read failures, season completion, stale
+remote callbacks and cancellation; a disabled-Core fixture validates all fallback
+SQL retirement guards. The unified run passes Rust 155, C ABI 149, exported SDK 19
+and native packages 1227, including BangumiKit 114 without skips. macOS AppTests
+execute 1008 with 989 passed, 19 platform skips and zero failures. Disabled Bangumi
+executes 114 with 90 passed, 24 explicit library-only skips and zero failures.
+An independent 67-file source/schema copy passes all 155 locked/offline Rust tests.
+The 67 Core, 755 native and 49 gate inputs retain their hashes. Deep signature
+verification and all 14 embedded runtime sections pass; bundled controls and EOF
+have zero render/audio failures, reaching the full 5.133333-second duration.
+Full raw logs, preliminary failures, manifests and provenance checks are retained.
+Complete account/profile effects and the remaining playback, transport, settings,
+release and Windows implementation rows remain active; Windows runtime testing
+is deferred and the full goal is active.
+
+The account/profile service run is retained in
+[validation/2026-11-14-bangumi-auth-flow/](validation/2026-11-14-bangumi-auth-flow/README.md).
+Core now owns the complete four service effect sequences. Real HTTP in Core and
+native modes verifies full profile fields, large IDs, failure/cancellation
+rollback, replacement credentials during failure, late profile fetch/commit,
+delayed logout DB cleanup, physical operation/credential rejection and passive
+invalidation. The observer bound remains safe for the nonthrowing native API.
+The unified run passes Rust 161, C ABI 157, exported SDK 19 and native packages
+1235, including BangumiKit 122 without skips. AppTests execute 1008 with 989 passed,
+19 platform skips and zero failures; disabled Bangumi executes 122 with 98 passed,
+24 explicit library-only skips and zero failures. An independent 68-file
+source/schema copy passes all 161 locked/offline Rust tests. The 68 Core, 760
+native and 50 gate input hashes remain unchanged. Deep strict signing and all
+14 embedded runtime sections pass; bundled controls/EOF have zero render/audio
+failures, with ended observed at 5.1 seconds for the 5.133333-second clip.
+Full raw logs, preceding unified runs, the retirement probe, manifests and
+provenance are retained. Complete playback/source/track/recovery, transport,
+settings/diagnostics, release and Windows implementation acceptance remain active;
+Windows runtime testing remains deferred and the full project goal is active.
+
+
+## Retained playback track verification — 2026-11-14
+
+The controller now delegates its complete existing automatic/manual track workflow
+to Core, including import add→select effects, sidecar names, selected removal,
+manual protection and identified batches. Host decoder/file/source-generation/UI
+adapters remain native. Each effect has a non-reused receipt, including the second
+import step. Native and Core-disabled paths preserve existing preference behavior;
+3,600 differential field/Unicode/current-choice cases agree. Failed audio selection
+no longer advances the session mirror, and external names publish menu observation.
+
+[The consolidated report](validation/2026-11-14-playback-tracks/README.md) passes
+Rust 168, C ABI 164 in 26 suites, exported SDK 21 and native packages 1243, including
+PlaybackKit 102. AppTests execute 1008: 989 passed, 19 platform skips, zero failures.
+Disabled PlaybackKit executes 102: 100 passed and two explicit Core-only skips;
+18 disabled preference/removal AppTests pass with explicit xctestrun environment.
+An independent 69-file copy passes 168 locked/offline Rust cases. All 69 Core, 765
+native and 53 final gate/binding inputs pass frozen hash verification. The corrected
+ABI runner excludes five accidentally imported account tests; its seven dedicated
+cases are rerun under the final frozen runner against the same binary. Original
+mixed-suite and earlier outputs remain in the report.
+
+Deep strict signing and all 14 embedded runtime sections pass. Bundled controls
+and EOF exit zero with zero render/audio failures; ended is observed at 5.1 seconds
+for the 5.133333-second clip. Full source preparation/recovery orchestration, broad
+native decoder/media/transport/settings/diagnostics, Apple release and Windows
+adapter implementation acceptance remain active. Windows runtime tests remain
+deferred and the full project goal remains active.
+
+
+## Complete retained playback preparation — 2026-11-14
+
+macOS delegates collection/series leaf choice, fresh home and episode resolution,
+source preference, primary/alternate URLs, resume/title, original-error direct
+fallback and final presentation to retained Core preparations. Full native objects
+stay under opaque keys. Typed UInt64 receipts are decoded from original bytes;
+malformed receipts do not consume work and invalidated late HTTP cannot present.
+Native policy remains independently usable with Core disabled.
+
+[The report](validation/2026-11-14-playback-preparation/README.md) passes Rust 176
+and an independent locked/offline 70-file copy, C ABI 172 in 27 suites, exported
+SDK 23 and native packages 1256. AppTests execute 1008: 989 passed and 19 platform
+skips, no failures. Disabled JellyfinKit executes 266: 252 passed and 14 explicit
+Core-only skips; disabled collection/source-failover AppTests execute 18: 17 passed
+and one Core-only skip. Episode endpoint/window semantics, exact source size and
+first-video HDR mapping are verified over both real HTTP protocols.
+
+All final 70 Core, 773 native and 57 gate/binding inputs pass hash verification.
+Two test-only fixture/serialization assumptions were corrected after the original
+full gate; affected full package and ABI suites were rerun under the final frozen
+inputs against the same binary. Original inputs and failures remain preserved.
+Deep strict signature and all 14 runtime sections pass. Bundled controls and
+natural EOF exit zero with zero render/audio failures. Broad decoder/media and
+recovery acceptance, remaining endpoint/transport fidelity, settings/diagnostics,
+Apple release delivery and Windows adapter implementation remain active; Windows
+runtime testing remains deferred. The full project goal remains active.
+
+
+## Retained continuation and retry/rebuild intent — 2026-11-14
+
+Core owns the six-item server continuation window, current-item anchoring and
+special skipping under exact preparation leases. Full native successor metadata
+and App identity guards remain intact. Retry/rebuild plans preserve manual 30s
+resume threshold, loaded-source background position including zero and local
+same-request reopen. A manual media retry obtains a fresh source/session/request
+through complete preparation. All direct typed SDK envelope decoding now reads
+original bytes; initializer and engine-event paths preserve UInt64 generation.
+
+[The report](validation/2026-11-14-playback-continuation/README.md) passes Rust 182
+and an independent locked/offline 71-file copy, C ABI 175 in 27 suites, exported
+SDK 26 and native packages 1265. AppTests execute 1013: 994 passed and 19 platform
+skips. Disabled JellyfinKit executes 272: 257 passed and 15 Core-only skips;
+disabled continuation/collection/source-failover AppTests execute 23: 22 passed
+and one Core-only skip. ABI and App independently check a 768-case recovery table;
+both real HTTP server flavors verify bounded continuation and complete metadata.
+
+After initial gate success, remaining direct SDK wire decoders were corrected
+and the whole gate rerun under final frozen code. All final 71 Core, 775 native
+and 57 gate/binding hashes verify; original inputs and logs remain preserved.
+Deep strict signature and all 14 runtime sections pass. Bundled controls and
+natural EOF exit zero with no render/audio failures. Broad decoder/media and
+recovery, remaining transport/endpoint and binding ownership/argument coverage,
+settings/diagnostics, Apple release and Windows adapter delivery remain active.
+Windows runtime testing remains deferred; the full goal remains active.
+The continuation report retained a read-only probe where MediaStreams []
+succeeded while null failed for both flavors. The subsequent media-nullability
+change closes that specific defect; the original probe remains historical
+failure evidence, and broader media-schema parity remains in scope.
+
+## 2026-11-14 media nullability and projection parity
+
+The [media nullability contract](media-nullability-contract.md) and
+[complete validation report](validation/2026-11-14-media-nullability/README.md)
+cover missing/null list/source/stream/chapter containers, stable missing item
+identity, nullable user data, partial cast and full native item image/season
+projection. MAL no longer reads TVDB. Similar uses typed media normalization.
+Libraries retain native filtering, case handling and missing identity behavior.
+Emby segments use chapter markers and native legacy user detail paths; detail
+requests explicitly include People and the native detail field set. The fixture
+now rejects modern Emby detail routes and missing People, closing a permissive
+fixture blind spot rather than merely matching payloads.
+
+Final locked Rust and independent offline copy both pass 188 tests, public C ABI
+passes 179 in 28 suites, exported Apple SDK passes 26, and native packages pass
+1273 (JellyfinKit 280 includes eight new native/Core HTTP cases). AppTests execute
+1013: 994 pass, 19 platform skips, zero failures. Disabled JellyfinKit executes
+280: 265 pass, 15 Core-only skips. Disabled app preparation/continuation/failover
+executes 23: 22 pass, one Core-only skip. All 71 Core, 778 native and 59 gate
+inputs verify unchanged; original targeted failures and the intentionally
+stopped preliminary gate are preserved. Deep strict signature, 14 matching
+runtime sections, bundled controls and natural EOF pass with zero process,
+rendering or audio failures.
+
+The previous continuation report's null-stream probe remains historical failure
+evidence; that specific defect is closed. Broader media-schema and transport
+coverage still needs auditing, including explicit selected subtitle-source
+isolation in the Core facade (the current native mock tests exercise native
+servers). Full public argument/ownership coverage, settings/aggregate diagnostics,
+Apple release and all framework slices, and Windows adapter implementation remain
+active. Windows runtime testing remains deferred; the complete goal remains active.
+
+## 2026-11-14 Core file/subtitle metadata projection
+
+The [media projection contract](media-projection-contract.md) and
+[complete validation report](validation/2026-11-14-media-projection/README.md)
+move source priority/isolation, file metadata and external subtitle projection
+into Core. The native adapter consumes canonical results and retains namespace,
+identity, cache/download and other physical effects. Existing raw query result
+and plugin properties remain in replies. Explicit missing source IDs no longer
+fall back; direct-play priority precedes direct-stream priority. File track titles
+and external subtitle DisplayTitle fallback retain their distinct native rules.
+Jellyfin Float32 rounding/representability and Emby Double frame-rate bounds,
+full HDR/track/file fields, exact Int64 size, nullable defaults and flavor enum
+handling pass native/Core HTTP comparison. Selected source IDs are chosen locally,
+never forwarded as server filters; metadata requests never create playback sessions.
+
+Final Rust and independent locked/offline copy both pass 196 tests. Public C ABI
+passes 185 in 29 suites, exported Apple SDK passes 26, native packages pass 1281
+(JellyfinKit 288), and AppTests execute 1013: 994 pass, 19 platform skips, zero
+failures. Disabled JellyfinKit executes 288: 273 pass, 15 Core-only skips. Disabled
+app preparation/continuation/failover executes 23: 22 pass, one Core-only skip.
+All 72 Core, 781 native and 61 gate inputs and three recorded SDK entity files
+verify unchanged. Original target failures include the safe 79-assertion baseline,
+four Float32 projection differences and nonzero-underflow rejection. The first
+complete gate passed tests but lost its older reused DerivedData target before
+embedding; its logs are retained. Final acceptance uses a dedicated non-symlink
+DerivedData directory and a complete rerun. Deep strict signature, 14 matching
+runtime sections, bundled controls and natural EOF pass with zero process,
+rendering or audio failures.
+
+The previous selected subtitle-source isolation and metadata projection gaps are
+closed for the covered behavior. Broader unused SDK schema/transport and public
+argument/ownership coverage, native settings mapping and aggregate diagnostics
+export (closed below), Apple release/framework slices, and Windows adapter implementation remain
+active. Windows runtime testing remains deferred; the complete goal stays active.
+
+## Verified run: 2026-11-14 — native diagnostic file export
+
+Core `diag.exportFile` now joins native diagnostic archives and ordered kernel
+trace tails into an exclusively created file; the existing `diag.export` JSON
+snapshot alias stays compatible. macOS flushes suppression summaries and holds
+its existing sink queue during Core export, then loads final Data off the main
+thread and removes the temporary file. Core-disabled export keeps the original
+native path. Headers/platform facts and the file-export UI remain native. See
+[diagnostic-export-contract.md](diagnostic-export-contract.md) and
+[the full report](validation/2026-11-14-diagnostic-export/README.md).
+
+Five app cases compare complete bytes against the original native export,
+covering archive modification-date/name ordering and aliases, actual-byte budget
+reclamation, zero/negative/unlimited budgets, partial/no-newline log versus trace
+tails, missing traces, UTF-8 repair across files/chunks and more than 64 KiB of
+invalid patterns. The sanitizer corpus includes home versus server Users paths,
+container paths, URL/auth/assignment/JWT handling, punctuation and Unicode case
+folding. Queue visibility and temporary-file cleanup are tested, with two new
+DiagnosticsKit queue boundary/recovery cases. Nine public ABI cases include
+legacy JSON compatibility, strict file arguments, concurrent ownership and
+failed-export cleanup. Four typed SDK cases run in both copies of the binding.
+
+Rust and an independent locked/offline source copy pass 204 each. Public C ABI
+passes 194 in 30 suites; exported SDK passes 30. Eight native packages pass 1382,
+including DiagnosticsKit 97. AppTests execute 1018: 999 pass, 19 platform skips,
+zero failures. Core-disabled JellyfinKit executes 288: 273 pass, 15 Core-only
+skips. Disabled app preparation/continuation/failover plus diagnostics executes
+33: 32 pass, one Core-only skip. All 73 Core source, 786 native and 64 gate inputs
+verify unchanged, with a recorded documentation-only hash clarification. The
+three SDK reference entity files/commit remain unchanged. Strict deep signature
+and 14 matching runtime sections pass; bundled controls and natural EOF exit zero
+with no rendering/audio failures.
+
+A 64 KiB output buffer prevents one file write per invalid UTF-8 byte. An 8 MiB
+all-invalid-byte local fixture retains exactly the same 25,165,833-byte output and
+SHA256: 16.473 seconds before buffering, 0.0468 seconds in the targeted buffered
+run and 0.0502 seconds with the final library. These are single local stress
+observations; no general performance or peak RSS certification is claimed. Both
+preliminary complete gates and their original logs are preserved. Final acceptance
+reruns the complete gate after buffering and preserving the legacy command.
+
+Aggregate diagnostic export is closed for the covered native behavior. Native
+settings mapping, remaining SDK schema/transport and public ownership coverage,
+Apple release/framework slices and Windows adapter implementation remain active.
+Windows runtime testing remains deferred. The complete goal stays active.
+
+## Verified run: 2026-11-14 — native settings backup policy
+
+Core's additive `settings.backup.*` API now owns format-v1 backup schema,
+preference snapshot defaults/options, Unicode-masked summary and ordered restore
+plan. All 38 module fields are mapped: 31 native preference getter/cast facts,
+six TMDB coordinator values and one raw customized gateway. The existing Core
+configuration and JSON diagnostic aliases remain unchanged. Native model/Date
+codecs, sorted/pretty output, locale/device facts, security-scoped file access,
+confirmation/file panels and preference/coordinator effects remain adapters. See
+[settings-backup-contract.md](settings-backup-contract.md) and
+[the complete report](validation/2026-11-14-settings-backup/README.md).
+
+Eight app cases explicitly require Core activation and compare full snapshots,
+encoded files, restored preference domains, summaries and localized errors with
+the retained original native implementation. All 18 existing backup tests pass.
+Coverage includes missing versus explicit false/default, Foundation coercions,
+nullable subtitle style, exact Int64/UInt32 values and integral floating/exponent
+forms, first duplicate keys, ignored unknown fields, legacy mirror switches,
+complete mirror clearing, empty credentials/gateway/home sections, UTF-16/UTF-32,
+covered native ISO date forms and extended-grapheme key masking. The host validates
+all effects before writes and preserves native effect order. No server/session
+credential or Dandanplay API Key is collected/overwritten; the existing TMDB Key
+backup exception remains.
+
+Rust workspace and independent locked/offline source copy pass 212 each. Public
+C ABI passes 203 in 31 suites; exported and native Core SDK pass 35. Eight native
+packages pass 1387. AppTests execute 1026: 1007 pass, 19 platform skips, zero
+failures. Disabled JellyfinKit executes 288: 273 pass, 15 Core-only skips. Disabled
+app flows, diagnostics and configuration execute 59: 58 pass, one Core-only skip.
+All 74 Core source, 790 native and 67 gate inputs verify unchanged, along with the
+three recorded SDK entity files/commit. Strict deep signature and 14 runtime
+sections match; bundled controls/natural EOF exit zero with no rendering/audio
+failures. The earlier diagnostic stress fixture retains exact output/hash.
+
+Initial compilation and adapter failures are retained. Native probes established
+integer/duplicate/date/encoding behavior; the enabled comparison caught encoding
+that accidentally reused import's future-version gate. The typed model codec was
+separated from file import, preserving native future-version encoding/summary.
+Final acceptance uses a dedicated real DerivedData directory and complete gate.
+
+The current native backup's settings/export/import compatibility gap is closed
+for the covered behavior. Remaining broad SDK schema/transport and public ownership
+coverage, Apple release/framework slices, Windows adapter implementation and the
+whole native-settings ownership audit stay active. Windows runtime testing remains
+deferred. The full goal remains active pending requirement-by-requirement proof.
+
+## Apple release delivery verification
+
+See [validation/2026-11-14-apple-release/README.md](validation/2026-11-14-apple-release/README.md).
+Core source `e705d2e`, native adapter `69207ad`: complete static package, universal
+dylib and ordinary universal Release app ZIP are retained in
+`artifacts/apple-2026-11-14/`. An independent clean clone in a path containing a
+space and the original clean checkout build offline with separate target caches;
+all 143 inputs and all 33 delivery files match. Three slices contain five
+architectures, each with all twelve C exports. Release static Swift contracts
+pass 35 without a dynamic path, with five native SDK links and stripped arm64/
+Intel macOS executable probes. Both dynamic binding copies also pass 35.
+
+The ordinary production executable omits the existing selftest entry. A temporary
+project adds only the documented Release selftest condition for optimized native
+controls/EOF verification, then is preserved in the report and removed from the
+source checkout. Both playback processes exit zero, with no render/audio failure;
+the unsigned and embedded libraries match twelve runtime sections per architecture.
+The final ordinary Release is restored from the original untouched project,
+archived and extracted with byte-identical executable and strict deep ad-hoc
+signature acceptance. The 687 native build inputs remain unchanged.
+
+These are new delivery/optimized playback checks. The complete earlier behavioral
+regression (Rust 212, ABI 203, native packages 1387, AppTests 1026) is retained in
+the settings-backup report; it is not relabeled as a new 1026-case release run.
+Windows execution remains deferred. The next full-goal work is the finite public
+command/ownership, platform transport and Windows adapter audit.
+
+
+## Current requested macOS/Core completion audit
+
+The source-backed command/ownership audit and its discovered compatibility fixes
+are described in [completion-audit.md](completion-audit.md), with complete evidence
+in [validation/2026-11-14-completion-audit/README.md](validation/2026-11-14-completion-audit/README.md).
+This later audit supersedes the historical “broader acceptance remains” notes for
+the current exposed macOS/Core surface. Windows implementation/testing is now
+handed back to the user. Native decoder/UI/system effects remain adapters; finite
+live reads, fixture workflows and media samples retain their stated boundaries.

@@ -1,0 +1,134 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Using on-disk description]
+[1 / 86] GRDB
+[2 / 13] MetadataKit
+[5 / 16] MetadataKit
+[12 / 24] MetadataKit
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbEnricher.swift:283:40: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+281 |         "batch.begin",
+282 |         [
+283 |           "batchID": id, "configured": await client.isConfigured,
+    |                                        `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+284 |           "items": rust.object(items.map(RustTMDbMatcher.Item.init)),
+285 |         ])
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[15 / 24] MetadataKit
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/Media/MediaRepository+Detail.swift:45:49: warning: immutable value 'store' was never used; consider replacing with '_' or removing it [#NoUsage]
+ 43 |         var members: [MediaItem] = []
+ 44 |         var memberTotal: Int?
+ 45 |         if cachedItem.item.kind == .series, let store {
+    |                                                 `- warning: immutable value 'store' was never used; consider replacing with '_' or removing it [#NoUsage]
+ 46 |             seasons = (await read { try await $0.seasons(seriesID: itemID, tenant: tenant) }) ?? []
+ 47 |             if let seasonID = Self.defaultSeasonID(in: seasons) {
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+[17 / 27] MetadataKit
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbEnricher.swift:163:37: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+161 |     do {
+162 |       var config: [String: Any] = [
+163 |         "mode": mode, "configured": await client.isConfigured,
+    |                                     `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+164 |         "members": try rust.object(members.map(RustTMDbMatcher.Item.init)),
+165 |         "cancelled": Task.isCancelled,
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbEnricher.swift:283:40: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+281 |         "batch.begin",
+282 |         [
+283 |           "batchID": id, "configured": await client.isConfigured,
+    |                                        `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+284 |           "items": rust.object(items.map(RustTMDbMatcher.Item.init)),
+285 |         ])
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbBatch.swift:134:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+132 |                                      enriched: 0, unmatched: 0, failed: 0, seasons: 0,
+133 |                                      wasCancelled: false)
+134 |         guard await client.isConfigured, !items.isEmpty else { return result }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+135 | 
+136 |         await onProgress(result.progress)
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[19 / 29] MetadataKit
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:54:21: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 52 |     /// 是否已配置 key（未配置时全部方法都是无操作，调用方不必自己判断）。
+ 53 |     public var isEnabled: Bool {
+ 54 |         get async { await client.isConfigured }
+    |                     `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 55 |     }
+ 56 | 
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:64:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 62 |     /// 没建立对应关系、对应上了但数据没拉过、拉过但语言对不上。
+ 63 |     public func overlay(for item: MediaItem, tenant: TenantID) async -> TMDbOverlay? {
+ 64 |         guard await client.isConfigured else { return nil }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 65 |         let language = preferences.language
+ 66 |         guard let link = try? await store.tmdbLink(itemID: item.id, tenant: tenant) else { return nil }
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:88:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 86 |     /// 剧集页拿它做两件事：切换季时更新简介、给分集卡片提供每集的标题与简介。
+ 87 |     public func seasonOverlay(seriesLink: TMDbLink, seasonNumber: Int) async -> TMDbOverlay? {
+ 88 |         guard await client.isConfigured else { return nil }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 89 |         guard case .tv(let tvID) = seriesLink.entityKey else { return nil }
+ 90 |         let key = TMDbEntityKey.season(tvID: tvID, number: seasonNumber)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:107:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+105 |             return await sharedFlow("season",seriesLink:seriesLink,seasonNumber:seasonNumber)?.didFetch ?? false
+106 |         }
+107 |         guard await client.isConfigured else { return false }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+108 |         guard case .tv(let tvID) = seriesLink.entityKey else { return false }
+109 |         let key = TMDbEntityKey.season(tvID: tvID, number: seasonNumber)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:205:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+203 |             return await sharedFlow("collection",item:item,tenant:tenant,members:members)?.refresh ?? .failed
+204 |         }
+205 |         guard await client.isConfigured else { return .noMatch }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+206 |         let language = preferences.language
+207 | 
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:364:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+362 |             return await sharedFlow("refresh",item:item,tenant:tenant,seriesLink:seriesLink)?.refresh ?? .failed
+363 |         }
+364 |         guard await client.isConfigured else { return .noMatch }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+365 |         let language = preferences.language
+366 | 
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:421:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+419 |     @discardableResult
+420 |     public func fetchAndStore(key: TMDbEntityKey, language: String? = nil) async -> Bool {
+421 |         guard await client.isConfigured else { return false }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+422 |         let language = language ?? preferences.language
+423 |         if let rust {
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[23 / 28] MetadataKit-product
+[23 / 28] MetadataKitTests-product
+error: SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustCacheIntegrationTests.swift failed with a nonzero exit code. Command line:     cd /Users/jumusu/Documents/project/OcPlayer/Packages
+    builtin-SwiftPerFileCompile RustCacheIntegrationTests.swift
+[32 / 37] MetadataKitTests-product/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustCacheIntegrationTests.swift:143:31: error: missing argument for parameter 'startIndex' in call
+141 |       try await writer.saveRail([episode], rail: "resume", tenant: tenant)
+142 |       try await writer.savePage(
+143 |         .init(items: [episode], totalRecordCount: Int.max - 6), key: key, tenant: tenant)
+    |                               `- error: missing argument for parameter 'startIndex' in call
+144 |       try await writer.saveMediaFileInfo(info, itemID: episode.id, tenant: tenant)
+145 |       for reader in [native, shared] {
+
+JellyfinKit.MediaItemsPage.init:2:8: note: 'init(items:startIndex:totalRecordCount:)' declared here
+1 | struct MediaItemsPage {
+2 | public init(items: [CoreModel.MediaItem], startIndex: Int, totalRecordCount: Int?)}
+  |        `- note: 'init(items:startIndex:totalRecordCount:)' declared here
+3 | 
+Failed frontend command:
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-frontend -frontend -c /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/Intermediates.noindex/MetadataKit.build/Debug/MetadataKitTests-p.build/DerivedSources/resource_bundle_accessor.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/Intermediates.noindex/MetadataKit.build/Debug/MetadataKitTests-p.build/DerivedSources/test_entry_point.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/EpisodeChunkTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/EpisodeSlotTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/LocalProgressConflictTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/MediaRepositoryTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/MetadataDatabaseTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/MetadataSnapshotTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/MetadataStoreTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/PlaybackProgressPersistenceTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/PlaybackStateRecoveryTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/PosterCandidatesTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/ProgressEvictionTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/ProgressOperationBoundaryTests.swift -primary-file /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/QueuedPlaybackProgressTests.swift -primary-file /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustCacheIntegrationTests.swift -primary-file /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustProgressCompatibilityTests.swift -primary-file /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbEnrichmentTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbIntegrationTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbWireTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/StubMediaServer.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbBatchConcurrencyTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbBatchTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbClientTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbCollectionTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbEndpointSettingsTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbEnricherTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbMatcherTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbOverlayTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbStoreTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TestSupport.swift -supplementary-output-file-map /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/Intermediates.noindex/MetadataKit.build/Debug/MetadataKitTests-p.build/Objects-normal/arm64/supplementaryOutputs-4 -target arm64-apple-macos14.0 -module-can-import-version Testing 2084 0 -module-can-import-version XCTest 25229 0 -disable-cross-import-overlay-search -swift-module-cross-import Testing /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework/Modules/Testing.swiftcrossimport/AppKit.swiftoverlay -swift-module-cross-import Testing /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework/Modules/Testing.swiftcrossimport/CoreGraphics.swiftoverlay -swift-module-cross-import Testing /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework/Modules/Testing.swiftcrossimport/CoreImage.swiftoverlay -swift-module-cross-import Testing /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework/Modules/Testing.swiftcrossimport/CoreTransferable.swiftoverlay -swift-module-cross-import Testing /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework/Modules/Testing.swiftcrossimport/Foundation.swiftoverlay -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins/libFoundationMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/bin/swift-plugin-server\#FoundationMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins/libObservationMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/bin/swift-plugin-server\#ObservationMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins/libPreviewsMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/bin/swift-plugin-server\#PreviewsMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins/libSwiftMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/bin/swift-plugin-server\#SwiftMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins/libSwiftUIMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/bin/swift-plugin-server\#SwiftUIMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing/libTestingMacros.dylib\#\#TestingMacros -disable-implicit-swift-modules -Xcc -fno-implicit-modules -Xcc -fno-implicit-module-maps -explicit-swift-module-map-file /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/Intermediates.noindex/MetadataKit.build/Debug/MetadataKitTests-p.build/Objects-normal/arm64/MetadataKitTests-dependencies-1.json -Xllvm -aarch64-use-tbi -enable-objc-interop -stack-check -sdk /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -I /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/Products/Debug -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib -F /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/Products/Debug/PackageFrameworks -F /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/Products/Debug -F /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks -module-cache-path /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/Intermediates.noindex/SwiftExplicitPrecompiledModules -no-color-diagnostics -Xcc -fno-color-diagnostics -enable-testing -g -debug-info-format\=dwarf -dwarf-version\=4 -swift-version 6 -Onone -D SWIFT_PACKAGE -D DEBUG -D SWIFT_MODULE_RESOURCE_BUNDLE_AVAILABLE -D Xcode -serialize-debugging-options -enable-experimental-feature DebugDescriptionMacro -empty-abi-descriptor -validate-clang-modules-once -clang-build-session-file /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/ModuleCache.noindex/Session.modulevalidation -Xcc -working-directory -Xcc /Users/jumusu/Documents/project/OcPlayer/Packages -enable-anonymous-context-mangled-names -file-compilation-dir /Users/jumusu/Documents/project/OcPlayer/Packages -Xcc -fmodule-map-file\=/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/checkouts/GRDB.swift/Sources/GRDBSQLite/module.modulemap -Xcc -fmodule-map-file\=/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/Intermediates.noindex/GeneratedModuleMaps/CNIOPosix.modulemap -Xcc -fmodule-map-file\=/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/Intermediates.noindex/GeneratedModuleMaps/CNIOWASI.modulemap -Xcc -fmodule-map-file\=/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/checkouts/swift-nio/Sources/CNIOWindows/include/module.modulemap -Xcc -fmodule-map-file\=/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/Intermediates.noindex/GeneratedModuleMaps/CNIOLinux.modulemap -Xcc -fmodule-map-file\=/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/Intermediates.noindex/GeneratedModuleMaps/CNIODarwin.modulemap -Xcc -fmodule-map-file\=/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/Intermediates.noindex/GeneratedModuleMaps/CNIOFreeBSD.modulemap -Xcc -fmodule-map-file\=/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/Intermediates.noindex/GeneratedModuleMaps/CNIOOpenBSD.modulemap -Xcc -fmodule-map-file\=/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/Intermediates.noindex/GeneratedModuleMaps/CNIOAtomics.modulemap -Xcc -fmodule-map-file\=/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/checkouts/swift-atomics/Sources/_AtomicsShims/include/module.modulemap -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -Xcc -ivfsstatcache -Xcc /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/SDKStatCaches.noindex/macosx27.0-26A425-a0facfad118c1a7a18f0aad9463f65497231f6df4def33e022ae2eb8f782df1a.sdkstatcache -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/checkouts/swift-nio/Sources/CNIOPosix/include -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/checkouts/swift-nio/Sources/CNIOWASI/include -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/checkouts/swift-nio/Sources/CNIOWindows/include -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/checkouts/swift-nio/Sources/CNIOLinux/include -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/checkouts/swift-nio/Sources/CNIODarwin/include -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/checkouts/swift-nio/Sources/CNIOFreeBSD/include -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/checkouts/swift-nio/Sources/CNIOOpenBSD/include -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/checkouts/swift-nio/Sources/CNIOAtomics/include -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/checkouts/swift-atomics/Sources/_AtomicsShims/include -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/Products/Debug/include -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/Intermediates.noindex/MetadataKit.build/Debug/MetadataKitTests-p.build/DerivedSources-normal/arm64 -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/Intermediates.noindex/MetadataKit.build/Debug/MetadataKitTests-p.build/DerivedSources/arm64 -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/Intermediates.noindex/MetadataKit.build/Debug/MetadataKitTests-p.build/DerivedSources -Xcc -DSWIFT_PACKAGE -Xcc -DDEBUG\=1 -no-auto-bridging-header-chaining -module-name MetadataKitTests -package-name metadatakit -const-gather-protocols-file /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/Intermediates.noindex/MetadataKit.build/Debug/MetadataKitTests-p.build/Objects-normal/arm64/MetadataKitTests_const_extract_protocols.json -disable-clang-spi -clang-target arm64-apple-macos27.0 -target-sdk-version 27.0 -target-sdk-name macosx27.0 -in-process-plugin-server-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/libSwiftInProcPluginServer.dylib -parse-as-library -o /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/Intermediates.noindex/MetadataKit.build/Debug/MetadataKitTests-p.build/Objects-normal/arm64/QueuedPlaybackProgressTests.o -o /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/Intermediates.noindex/MetadataKit.build/Debug/MetadataKitTests-p.build/Objects-normal/arm64/RustCacheIntegrationTests.o -o /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/Intermediates.noindex/MetadataKit.build/Debug/MetadataKitTests-p.build/Objects-normal/arm64/RustProgressCompatibilityTests.o -o /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/Intermediates.noindex/MetadataKit.build/Debug/MetadataKitTests-p.build/Objects-normal/arm64/RustTMDbEnrichmentTests.o -debug-module-path /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out/Intermediates.noindex/MetadataKit.build/Debug/MetadataKitTests-p.build/Objects-normal/arm64/MetadataKitTests.swiftmodule -index-unit-output-path /MetadataKit.build/Debug/MetadataKitTests-p.build/Objects-normal/arm64/QueuedPlaybackProgressTests.o -index-unit-output-path /MetadataKit.build/Debug/MetadataKitTests-p.build/Objects-normal/arm64/RustCacheIntegrationTests.o -index-unit-output-path /MetadataKit.build/Debug/MetadataKitTests-p.build/Objects-normal/arm64/RustProgressCompatibilityTests.o -index-unit-output-path /MetadataKit.build/Debug/MetadataKitTests-p.build/Objects-normal/arm64/RustTMDbEnrichmentTests.o -index-store-path /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/.build/out -index-system-modules
+
+error: Build failed
+error: fatalError

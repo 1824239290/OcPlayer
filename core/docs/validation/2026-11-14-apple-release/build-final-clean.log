@@ -1,0 +1,8 @@
+cbindgen is unavailable; using the checked-in ABI header
+    Finished `release` profile [optimized] target(s) in 0.18s
+    Finished `release` profile [optimized] target(s) in 0.10s
+    Finished `release` profile [optimized] target(s) in 0.10s
+    Finished `release` profile [optimized] target(s) in 0.09s
+    Finished `release` profile [optimized] target(s) in 0.09s
+xcframework successfully written out to: /Volumes/Backup/软件/OcPlayer-Core/artifacts/apple-2026-11-14/OcPlayerCore/OcPlayerCore.xcframework
+{"slices": 3, "architectures": 5, "abiExportsPerArchitecture": 12, "deliveryFiles": 33}

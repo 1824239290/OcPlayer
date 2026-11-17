@@ -1,0 +1,8 @@
+{
+  "window": {
+    "app": "process:D:\\DevCache\\cargo-target\\erika-dolby\\x86_64-pc-windows-msvc\\debug\\windows_native_demo.exe",
+    "id": 1051590,
+    "title": "Erika Windows Native Demo  t=109.34s  sw=0 hw=2478 zero=2478 direct=2478 shared=0 cpu=0 hdr10=1 hdr_src=2478 sdr_tm=0 audio_q=5846 underflow=0"
+  },
+  "observedAt": "2026-11-14T14:14:01.317Z"
+}

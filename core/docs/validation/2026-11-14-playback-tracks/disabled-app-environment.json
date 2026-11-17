@@ -1,0 +1,10 @@
+{
+  "originalXctestrun": "/tmp/ocp-tracks-macos/DerivedData/Build/Products/OcPlayer-macOS_macosx27.0-arm64.xctestrun",
+  "disabledXctestrun": "/tmp/ocp-tracks-macos/DerivedData/Build/Products/OcPlayer-tracks-disabled.xctestrun",
+  "targets": [
+    {
+      "target": "OcPlayerTests",
+      "OCP_CORE_ENABLED": "0"
+    }
+  ]
+}

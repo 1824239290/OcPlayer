@@ -1,0 +1,26 @@
+https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/create-locale-wcreate-locale?view=msvc-170
+_locale_t _create_locale(
+   int category,
+   const char *locale
+);
+_locale_t _wcreate_locale(
+   int category,
+    locale = _create_locale(LC_ALL, "de-CH");
+    time (&ltime);
+    _gmtime64_s(&thetime, &ltime);
+
+    // %#x is the long date representation, appropriate to
+    // the current locale
+    locale = _create_locale(LC_ALL, "C");
+    time(&ltime);
+    _gmtime64_s(&thetime, &ltime);
+
+    if (!_strftime_l((char *)str, 100, "%#x",
+                     (const struct tm *)&thetime, locale))
+https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/strtod-strtod-l-wcstod-wcstod-l?view=msvc-170
+double _strtod_l(
+   const char *strSource,
+   char **endptr,
+   _locale_t locale
+);
+double wcstod(

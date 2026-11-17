@@ -1,0 +1,130 @@
+    Checking ocp-core v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-core)
+error[E0433]: cannot find `Text` in `string`
+   --> crates/ocp-core/src/settings_backup.rs:244:26
+    |
+244 |             std::string::Text::from_utf16(&units).map_err(|_| invalid("invalid UTF-16 backup"))
+    |                          ^^^^ could not find `Text` in `string`
+    |
+help: there is an enum variant `crate::settings_backup::Kind::Text`; try using the variant's enum
+    |
+244 -             std::string::Text::from_utf16(&units).map_err(|_| invalid("invalid UTF-16 backup"))
+244 +             crate::settings_backup::Kind::from_utf16(&units).map_err(|_| invalid("invalid UTF-16 backup"))
+    |
+
+error[E0425]: cannot find type `Text` in module `std::string`
+   --> crates/ocp-core/src/settings_backup.rs:123:53
+    |
+123 |         Text => serde_json::from_str::<std::string::Text>(raw)
+    |                                                     ^^^^ not found in `std::string`
+    |
+help: there is an enum variant `crate::settings_backup::Kind::Text`; try using the variant's enum
+    |
+123 -         Text => serde_json::from_str::<std::string::Text>(raw)
+123 +         Text => serde_json::from_str::<crate::settings_backup::Kind>(raw)
+    |
+
+error[E0425]: cannot find type `Text` in module `std::string`
+   --> crates/ocp-core/src/settings_backup.rs:143:30
+    |
+143 | ) -> Result<Map<std::string::Text, Value>, Failure> {
+    |                              ^^^^ not found in `std::string`
+    |
+help: there is an enum variant `crate::settings_backup::Kind::Text`; try using the variant's enum
+    |
+143 - ) -> Result<Map<std::string::Text, Value>, Failure> {
+143 + ) -> Result<Map<crate::settings_backup::Kind, Value>, Failure> {
+    |
+
+error[E0425]: cannot find type `Text` in module `std::string`
+   --> crates/ocp-core/src/settings_backup.rs:193:52
+    |
+193 | fn text_bytes(bytes: &[u8]) -> Result<std::string::Text, Failure> {
+    |                                                    ^^^^ not found in `std::string`
+    |
+help: there is an enum variant `crate::settings_backup::Kind::Text`; try using the variant's enum
+    |
+193 - fn text_bytes(bytes: &[u8]) -> Result<std::string::Text, Failure> {
+193 + fn text_bytes(bytes: &[u8]) -> Result<crate::settings_backup::Kind, Failure> {
+    |
+
+error[E0425]: cannot find type `Text` in module `std::string`
+   --> crates/ocp-core/src/settings_backup.rs:325:32
+    |
+325 |     input_base64: std::string::Text,
+    |                                ^^^^ not found in `std::string`
+    |
+help: there is an enum variant `crate::settings_backup::Kind::Text`; try using the variant's enum
+    |
+325 -     input_base64: std::string::Text,
+325 +     input_base64: crate::settings_backup::Kind,
+    |
+
+error[E0425]: cannot find type `Text` in module `std::string`
+   --> crates/ocp-core/src/settings_backup.rs:336:40
+    |
+336 |     preferences: BTreeMap<std::string::Text, Fact>,
+    |                                        ^^^^ not found in `std::string`
+    |
+help: there is an enum variant `crate::settings_backup::Kind::Text`; try using the variant's enum
+    |
+336 -     preferences: BTreeMap<std::string::Text, Fact>,
+336 +     preferences: BTreeMap<crate::settings_backup::Kind, Fact>,
+    |
+
+error[E0425]: cannot find type `Text` in module `std::string`
+   --> crates/ocp-core/src/settings_backup.rs:338:31
+    |
+338 |     exported_at: std::string::Text,
+    |                               ^^^^ not found in `std::string`
+    |
+help: there is an enum variant `crate::settings_backup::Kind::Text`; try using the variant's enum
+    |
+338 -     exported_at: std::string::Text,
+338 +     exported_at: crate::settings_backup::Kind,
+    |
+
+error[E0425]: cannot find type `Text` in module `std::string`
+   --> crates/ocp-core/src/settings_backup.rs:339:31
+    |
+339 |     app_version: std::string::Text,
+    |                               ^^^^ not found in `std::string`
+    |
+help: there is an enum variant `crate::settings_backup::Kind::Text`; try using the variant's enum
+    |
+339 -     app_version: std::string::Text,
+339 +     app_version: crate::settings_backup::Kind,
+    |
+
+error[E0425]: cannot find type `Text` in module `std::string`
+   --> crates/ocp-core/src/settings_backup.rs:340:38
+    |
+340 |     device_name: Option<std::string::Text>,
+    |                                      ^^^^ not found in `std::string`
+    |
+help: there is an enum variant `crate::settings_backup::Kind::Text`; try using the variant's enum
+    |
+340 -     device_name: Option<std::string::Text>,
+340 +     device_name: Option<crate::settings_backup::Kind>,
+    |
+
+error[E0425]: cannot find type `Text` in module `std::string`
+   --> crates/ocp-core/src/settings_backup.rs:341:49
+    |
+341 |     dandanplay_gateway_url: Option<std::string::Text>,
+    |                                                 ^^^^ not found in `std::string`
+    |
+help: there is an enum variant `crate::settings_backup::Kind::Text`; try using the variant's enum
+    |
+341 -     dandanplay_gateway_url: Option<std::string::Text>,
+341 +     dandanplay_gateway_url: Option<crate::settings_backup::Kind>,
+    |
+
+error[E0599]: no variant, associated function, or constant named `Text` found for enum `Value` in the current scope
+   --> crates/ocp-core/src/settings_backup.rs:124:25
+    |
+124 |             .map(Value::Text)
+    |                         ^^^^ variant, associated function, or constant not found in `Value`
+
+Some errors have detailed explanations: E0425, E0433, E0599.
+For more information about an error, try `rustc --explain E0425`.
+error: could not compile `ocp-core` (lib) due to 11 previous errors

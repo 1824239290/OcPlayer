@@ -1,0 +1,170 @@
+{
+  "source": "/var/folders/07/f4r9g1zd0jbg1c2sh6b4vsg80000gn/T/ocplayer-core-mp-auth-source-ujmuvgzm",
+  "filesMatchWorkspace": true,
+  "files": [
+    {
+      "path": "Cargo.lock",
+      "sha256": "c9ee0242e8faa05ecfe87e798bde92619ff33abe5ee03b7187cc7c69ee02f6df"
+    },
+    {
+      "path": "Cargo.toml",
+      "sha256": "bfdf8ae3b4f3ce6c9295598f1f28f6905eb9f504180cc82999070ef7562ce907"
+    },
+    {
+      "path": "crates/ocp-bangumi/Cargo.toml",
+      "sha256": "eed701aa8f3bbc5b293f20ac2631885ecfc2c789d937718d638cfe7392e9910c"
+    },
+    {
+      "path": "crates/ocp-bangumi/src/lib.rs",
+      "sha256": "b211bbbeb4a80e8c1d0f1eb8c66fdecd50eb61b54da04c332a24d709197d11e7"
+    },
+    {
+      "path": "crates/ocp-cli/Cargo.toml",
+      "sha256": "927f5efe4603bf0710fc9649594b93310a9ce2e3db7f1bdf9617ff4561320128"
+    },
+    {
+      "path": "crates/ocp-cli/src/main.rs",
+      "sha256": "ea1cc06d128253afbb02511db2a9ce870de533cae393f378a8c441bac55d11ec"
+    },
+    {
+      "path": "crates/ocp-core/Cargo.toml",
+      "sha256": "66b9dacd52e6d0ff29f307c398b0a6910d95a185b538eaac6c627697bcd162d8"
+    },
+    {
+      "path": "crates/ocp-core/src/events.rs",
+      "sha256": "cdd17da4a6ed5e930da8ce9fd8e6550aeba67c98fa193009bc959c9a9e80a051"
+    },
+    {
+      "path": "crates/ocp-core/src/lib.rs",
+      "sha256": "1f89ac4ecbf23c22c726d994e5bf0bc8f3d3479c6e1c150ac1e4c40b2f24bf13"
+    },
+    {
+      "path": "crates/ocp-core/src/network.rs",
+      "sha256": "ec50202e8bc8a63cabb8137a21f0291a6e9d60c6e56eee9a5e8d9d4d7e797d99"
+    },
+    {
+      "path": "crates/ocp-core/src/probe.rs",
+      "sha256": "677702aee0a80160ce948b079c8a5eebd58a89df26d835e34ed475e928905867"
+    },
+    {
+      "path": "crates/ocp-danmaku/Cargo.toml",
+      "sha256": "f316bea7260bb347719db0b34545a668762484bd61844a1970675c5a39c5e4b2"
+    },
+    {
+      "path": "crates/ocp-danmaku/src/lib.rs",
+      "sha256": "c6d67f57216010ded067cee21dd2f7afb988f76a51ecb77c5fbb167624fc56e5"
+    },
+    {
+      "path": "crates/ocp-ffi/Cargo.toml",
+      "sha256": "e005c6543534c095daa6e0a4f1c38764d0a30427edaed525e9a5d5c9814b5d0c"
+    },
+    {
+      "path": "crates/ocp-ffi/src/lib.rs",
+      "sha256": "a95a6bd277967da84d0bd668640ec18873e69af147a158468aa1af96d947e4a5"
+    },
+    {
+      "path": "crates/ocp-http/Cargo.toml",
+      "sha256": "753b326a283a9c844d87c46b8f7e1a5ae39679fa9bb33e09b4dd702df59d3b56"
+    },
+    {
+      "path": "crates/ocp-http/src/lib.rs",
+      "sha256": "f9bb94832a9477f527c012bc7de5107a5f4075680350f188c14824e93e80cfd6"
+    },
+    {
+      "path": "crates/ocp-jellyfin/Cargo.toml",
+      "sha256": "4e524092a79376ff58f3efcd630d119f564c48cc91d507a8ebaeacf0316e9a15"
+    },
+    {
+      "path": "crates/ocp-jellyfin/src/endpoint.rs",
+      "sha256": "e7eb19e248ce5e1bb9ac2acb53c8374a2e2f11ef262f8aed20c6d80f1d56f9df"
+    },
+    {
+      "path": "crates/ocp-jellyfin/src/lib.rs",
+      "sha256": "1c191ccbc32b33ab9243f197bf8be596dfb2d5d9693b425e65cc0243b01543b5"
+    },
+    {
+      "path": "crates/ocp-model/Cargo.toml",
+      "sha256": "7864ba98df5250f42ea797bbb080170076cc5dc12efbf7545d2ad7b6547056af"
+    },
+    {
+      "path": "crates/ocp-model/src/lib.rs",
+      "sha256": "9a682a74f42fb12a95b8968d87e2e0ccffd24a1935984f2e2e6cbd1921e99c98"
+    },
+    {
+      "path": "crates/ocp-moviepilot/Cargo.toml",
+      "sha256": "ad1e6f02188b484e41c6c4b7a57b307ed06c13587eea560cd503114dd003624b"
+    },
+    {
+      "path": "crates/ocp-moviepilot/src/lib.rs",
+      "sha256": "d67d1477010f05e639ddb2bb959db4aba3760e6443bc9c013cb1167de92b7cb3"
+    },
+    {
+      "path": "crates/ocp-moviepilot/src/stream.rs",
+      "sha256": "7fadb4db88d7dd47bdb4eee33da32ed45d0d10aea6c5007e338324ff41d247ee"
+    },
+    {
+      "path": "crates/ocp-session/Cargo.toml",
+      "sha256": "f6bb86d0e7458c5047a8ee179c2b5d17aa000c1f76a3f36467a4c81ec30207c9"
+    },
+    {
+      "path": "crates/ocp-session/src/engine.rs",
+      "sha256": "755a7581eee9c97753ee3f00d454f54e659f3392355a380a15ea9fa7d68b0950"
+    },
+    {
+      "path": "crates/ocp-session/src/flow.rs",
+      "sha256": "597883099767ce6897cb69728b1e94f9c6371c72b89e7b836766323dde7971dc"
+    },
+    {
+      "path": "crates/ocp-session/src/lib.rs",
+      "sha256": "316137b83b1cf66ba87a04360d162761f2293605762eb157c854852e0cb27fc9"
+    },
+    {
+      "path": "crates/ocp-session/src/report.rs",
+      "sha256": "4d9894454825832a9ddc4ebe1bfc85f1ca4346e4a5003f241700c16767f0da28"
+    },
+    {
+      "path": "crates/ocp-store/Cargo.toml",
+      "sha256": "8c2cb0bbea8521c1366d9c01057c231ec720e5da608b98adb73552d6b86d063c"
+    },
+    {
+      "path": "crates/ocp-store/src/bangumi.rs",
+      "sha256": "a74f8def36c2a9989f097e51da44d3db4d5051f1d57cae99e312c8cfce6ce4a9"
+    },
+    {
+      "path": "crates/ocp-store/src/cache.rs",
+      "sha256": "b47d580cdcf882b140a91b0286727709bcaa69c9c746310cf01a07f2d0721b86"
+    },
+    {
+      "path": "crates/ocp-store/src/lib.rs",
+      "sha256": "5f11b4840401263ba1cc6311355337df3ec0fddcc9a99f4d8bf4a1f8c857bb9e"
+    },
+    {
+      "path": "crates/ocp-tmdb/Cargo.toml",
+      "sha256": "99e068dd76bd6df19af831f0d9e699b54bbc030eb362b6eb40219f7d207e8ff8"
+    },
+    {
+      "path": "crates/ocp-tmdb/src/lib.rs",
+      "sha256": "4f4f0851889325bf8b76a860aa8ec28db9af386ae82bc8b69c50c8b2a8080738"
+    },
+    {
+      "path": "schema/bangumi_v1.sql",
+      "sha256": "f7bac5896ec09f114471d679623f750b9af74ab9c0864646fe4196eab9638615"
+    },
+    {
+      "path": "schema/media_v1.sql",
+      "sha256": "a051b9e6f86a2056ae7106f83b0b02e7b8cfb554685dc7779d867eb5753becdf"
+    },
+    {
+      "path": "schema/media_v2.sql",
+      "sha256": "c509b115f3422d15bad118a1a1edd4bb57d56d13651bd4f3dc2da664f496cdc3"
+    },
+    {
+      "path": "schema/media_v3.sql",
+      "sha256": "83e9c4a0f884cb6ca366d2bd6b791960951321caf5cf92d1162b2abf9f917f49"
+    },
+    {
+      "path": "schema/media_v4.sql",
+      "sha256": "05301caf5b463009c370c5609081b81d5afdfde6b934453742ea125aaac53f8f"
+    }
+  ]
+}

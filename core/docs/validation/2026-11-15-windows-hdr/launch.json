@@ -1,0 +1,32 @@
+{
+  "pid": 18760,
+  "startedAt": "2026-11-15T01:42:15.179234+08:00",
+  "binary": "D:\\OcPlayer-Core\\artifacts\\windows-hdr-luminance-2026-11-15\\windows_native_demo.luminance-fix.exe",
+  "sha256": "AE6913CB882992C0FFCE9CB9AFFFF9847CEE7C30B1C3FF03A81AF4ED5BCAF46F",
+  "media": "D:\\凡人修仙传 - S01E200 - 第 200 集.mp4",
+  "mode": "auto",
+  "frameAtSeconds": 180,
+  "d3d11TestsPassed": 17,
+  "graySourceNits": [
+    50,
+    100,
+    203,
+    300,
+    400,
+    600,
+    800,
+    1000
+  ],
+  "offscreenGrayCodes": [
+    100,
+    130,
+    169,
+    192,
+    209,
+    231,
+    245,
+    255
+  ],
+  "mapping": "SDR BT2446A luminance curve with uniform RGB gain; HDR BT2390",
+  "visualAcceptance": "accepted by user on the current SDR display"
+}

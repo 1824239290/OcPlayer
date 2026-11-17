@@ -1,0 +1,6 @@
+{
+  "nativeCommit": "888ccdd8a1098b4426166bb4b09b2f7dca3d8720",
+  "coreCheckpoint": "7ab7749",
+  "finalCoreCommit": "the commit containing this report",
+  "windowsRuntimeAcceptance": "handed to user"
+}

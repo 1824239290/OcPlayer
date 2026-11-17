@@ -1,0 +1,18 @@
+   Compiling tokio v1.54.1
+   Compiling hyper v1.12.0
+   Compiling tokio-rustls v0.26.6
+   Compiling tower v0.5.3
+   Compiling tower-http v0.6.11
+   Compiling hyper-util v0.1.21
+   Compiling hyper-rustls v0.27.10
+   Compiling reqwest v0.12.28
+   Compiling ocp-http v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-http)
+   Compiling ocp-moviepilot v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-moviepilot)
+   Compiling ocp-jellyfin v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-jellyfin)
+   Compiling ocp-bangumi v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-bangumi)
+   Compiling ocp-tmdb v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-tmdb)
+   Compiling ocp-danmaku v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-danmaku)
+   Compiling ocp-core v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-core)
+   Compiling ocp-ffi v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-ffi)
+    Finished `release` profile [optimized] target(s) in 11.83s
+/tmp/ocplayer-endpoints-initial/libocp_ffi.dylib

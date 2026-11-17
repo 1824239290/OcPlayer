@@ -1,0 +1,11 @@
+{
+  "count": 935,
+  "semanticSourceChangesAfterGate": 0,
+  "byteChanges": [
+    {
+      "path": "0:crates/ocp-http/Cargo.toml",
+      "onlyChange": "removed one trailing blank line; no TOML values changed",
+      "sha256": "a6092610b07f1c1e18497fa28de1657ef10bcdfd16e451d48357dab879bbdd06"
+    }
+  ]
+}

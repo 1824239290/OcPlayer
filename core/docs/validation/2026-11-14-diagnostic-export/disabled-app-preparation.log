@@ -1,0 +1,179 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild test-without-building -xctestrun /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/OcPlayer-diagnostic-export-disabled.xctestrun -destination platform=macOS,arch=arm64 -parallel-testing-enabled NO "-only-testing:OcPlayerTests/CollectionPlaybackTests" "-only-testing:OcPlayerTests/PlaybackSourceFailoverTests" "-only-testing:OcPlayerTests/AppPlaybackContinuationTests" "-only-testing:OcPlayerTests/CoreDiagnosticsExportParityTests" "-only-testing:OcPlayerTests/DiagnosticsExportTests"
+
+--- xcodebuild: WARNING: Using the first of multiple matching destinations:
+{ platform:macOS, arch:arm64, id:00008103-001A544E0A62001E, name:My Mac }
+{ platform:macOS, arch:arm64, variant:Mac Catalyst, id:00008103-001A544E0A62001E, name:My Mac }
+{ platform:macOS, arch:arm64, variant:DriverKit, id:00008103-001A544E0A62001E, name:My Mac }
+{ platform:macOS, arch:arm64, variant:Designed for [iPad,iPhone], id:00008103-001A544E0A62001E, name:My Mac }
+2026-11-14 16:54:12.073807+0800 OcPlayer[47587:27755500] [Playback] 内核注册 id=erika name=liberika
+2026-11-14 16:54:12.080952+0800 OcPlayer[47587:27755500] [App] 应用启动 fields={build="1",commit="dev",platform="macOS",version="0.3.0"}
+2026-11-14 16:54:12.139474+0800 OcPlayer[47587:27755532] [Connection] Unable to get synchronousRemoteObjectProxy, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 16:54:12.139511+0800 OcPlayer[47587:27755532] [Application] Error registering app with intents framework: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 16:54:12.142081+0800 OcPlayer[47587:27755538] [Connection] Unable to get synchronousRemoteObjectProxy, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 16:54:12.142097+0800 OcPlayer[47587:27755538] [Connection] Unable to re-register with Process Instance Registry, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 16:54:12.144689+0800 OcPlayer[47587:27755531] [Connection] Unable to get synchronousRemoteObjectProxy, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 16:54:12.144710+0800 OcPlayer[47587:27755531] [Connection] Unable to re-register with Process Instance Registry, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 16:54:12.147141+0800 OcPlayer[47587:27755532] [Connection] Unable to get synchronousRemoteObjectProxy, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 16:54:12.149590+0800 OcPlayer[47587:27755538] [Connection] Unable to get synchronousRemoteObjectProxy, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 16:54:12.149594+0800 OcPlayer[47587:27755532] [Connection] Unable to re-register with Process Instance Registry, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 16:54:12.149602+0800 OcPlayer[47587:27755538] [Connection] Unable to re-register with Process Instance Registry, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 16:54:12.152087+0800 OcPlayer[47587:27755538] [Connection] Will NOT re-try to establish the connection
+2026-11-14 16:54:12.152112+0800 OcPlayer[47587:27755531] [Connection] Unable to get synchronousRemoteObjectProxy, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 16:54:12.152122+0800 OcPlayer[47587:27755531] [Connection] Unable to re-register with Process Instance Registry, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 16:54:12.183952+0800 OcPlayer[47587:27755500] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/07/f4r9g1zd0jbg1c2sh6b4vsg80000gn/T/dev.jumusu.OcPlayer.savedState
+2026-11-14 16:54:12.284295+0800 OcPlayer[47587:27755500] [App] 启动动画跳过 fields={reason="测试宿主"}
+Test Suite 'Selected tests' started at 2026-11-14 16:54:12.444.
+Test Suite 'OcPlayerTests.xctest' started at 2026-11-14 16:54:12.444.
+Test Suite 'AppPlaybackContinuationTests' started at 2026-11-14 16:54:12.444.
+Test Case '-[OcPlayerTests.AppPlaybackContinuationTests testAppContinuationCommitsCompleteNextItemForActiveIdentity]' started.
+Test Case '-[OcPlayerTests.AppPlaybackContinuationTests testAppContinuationCommitsCompleteNextItemForActiveIdentity]' passed (0.003 seconds).
+Test Case '-[OcPlayerTests.AppPlaybackContinuationTests testLateContinuationCannotReplaceNewPlaybackNextItem]' started.
+Test Case '-[OcPlayerTests.AppPlaybackContinuationTests testLateContinuationCannotReplaceNewPlaybackNextItem]' passed (0.014 seconds).
+Test Case '-[OcPlayerTests.AppPlaybackContinuationTests testManualRetryDoesNotReenterLoadingPreparation]' started.
+2026-11-14 16:54:12.463416+0800 OcPlayer[47587:27755500] [App] cancelPlaybackOpen 取消播放准备
+Test Case '-[OcPlayerTests.AppPlaybackContinuationTests testManualRetryDoesNotReenterLoadingPreparation]' passed (0.002 seconds).
+Test Case '-[OcPlayerTests.AppPlaybackContinuationTests testManualRetryStartsFreshPlaybackInfoAndSessionWithOriginalResume]' started.
+2026-11-14 16:54:12.465463+0800 OcPlayer[47587:27755500] [App] cancelPlaybackOpen 取消播放准备
+2026-11-14 16:54:12.465582+0800 OcPlayer[47587:27755500] [App] play() 进入加载态 fields={title="原生剧集"}
+2026-11-14 16:54:12.466645+0800 OcPlayer[47587:27755500] [App] play() 加载态结束 fields={preparation="Optional(OcPlayer.PlaybackPreparation.loading(title: \"原生剧集 S1E2\"))"}
+2026-11-14 16:54:12.466733+0800 OcPlayer[47587:27755500] [App] cancelPlaybackOpen 取消播放准备
+Test Case '-[OcPlayerTests.AppPlaybackContinuationTests testManualRetryStartsFreshPlaybackInfoAndSessionWithOriginalResume]' passed (0.003 seconds).
+Test Case '-[OcPlayerTests.AppPlaybackContinuationTests testRecoveryDecisionMatrixPreservesOriginalRetryAndRebuildRules]' started.
+Test Case '-[OcPlayerTests.AppPlaybackContinuationTests testRecoveryDecisionMatrixPreservesOriginalRetryAndRebuildRules]' passed (0.001 seconds).
+Test Suite 'AppPlaybackContinuationTests' passed at 2026-11-14 16:54:12.469.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.023 (0.025) seconds
+Test Suite 'CollectionPlaybackTests' started at 2026-11-14 16:54:12.469.
+Test Case '-[OcPlayerTests.CollectionPlaybackTests testCollectionFallsBackToFirstMemberWhenAllWatched]' started.
+Test Case '-[OcPlayerTests.CollectionPlaybackTests testCollectionFallsBackToFirstMemberWhenAllWatched]' passed (0.002 seconds).
+Test Case '-[OcPlayerTests.CollectionPlaybackTests testCollectionMembersAreQueriedNonRecursively]' started.
+Test Case '-[OcPlayerTests.CollectionPlaybackTests testCollectionMembersAreQueriedNonRecursively]' passed (0.002 seconds).
+Test Case '-[OcPlayerTests.CollectionPlaybackTests testCollectionQueryFailurePropagates]' started.
+Test Case '-[OcPlayerTests.CollectionPlaybackTests testCollectionQueryFailurePropagates]' passed (0.001 seconds).
+Test Case '-[OcPlayerTests.CollectionPlaybackTests testCollectionResolvesToFirstUnwatchedMember]' started.
+Test Case '-[OcPlayerTests.CollectionPlaybackTests testCollectionResolvesToFirstUnwatchedMember]' passed (0.002 seconds).
+Test Case '-[OcPlayerTests.CollectionPlaybackTests testCollectionWithOnlySeriesResolvesThroughSeriesRule]' started.
+Test Case '-[OcPlayerTests.CollectionPlaybackTests testCollectionWithOnlySeriesResolvesThroughSeriesRule]' passed (0.002 seconds).
+Test Case '-[OcPlayerTests.CollectionPlaybackTests testEmptyCollectionResolvesToNil]' started.
+Test Case '-[OcPlayerTests.CollectionPlaybackTests testEmptyCollectionResolvesToNil]' passed (0.002 seconds).
+Test Case '-[OcPlayerTests.CollectionPlaybackTests testNoPlayableContentMessageMatchesItemKind]' started.
+Test Case '-[OcPlayerTests.CollectionPlaybackTests testNoPlayableContentMessageMatchesItemKind]' passed (0.001 seconds).
+Test Suite 'CollectionPlaybackTests' passed at 2026-11-14 16:54:12.482.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.011 (0.013) seconds
+Test Suite 'CoreDiagnosticsExportParityTests' started at 2026-11-14 16:54:12.482.
+Test Case '-[OcPlayerTests.CoreDiagnosticsExportParityTests testArchiveOrderingFiltersAndActualByteReclamation]' started.
+2026-11-14 16:54:12.485815+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics-c.jsonl
+2026-11-14 16:54:12.486176+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics-c.jsonl
+2026-11-14 16:54:12.486486+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics-c.jsonl
+2026-11-14 16:54:12.486782+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics-c.jsonl
+Test Case '-[OcPlayerTests.CoreDiagnosticsExportParityTests testArchiveOrderingFiltersAndActualByteReclamation]' passed (0.006 seconds).
+Test Case '-[OcPlayerTests.CoreDiagnosticsExportParityTests testNativeSanitizerDifferentialCorpusAndOrderedTraces]' started.
+Test Case '-[OcPlayerTests.CoreDiagnosticsExportParityTests testNativeSanitizerDifferentialCorpusAndOrderedTraces]' passed (0.003 seconds).
+Test Case '-[OcPlayerTests.CoreDiagnosticsExportParityTests testNoNewlineTraceKeepsSuffixAndLogReclaimsBudget]' started.
+2026-11-14 16:54:12.493172+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics.jsonl
+2026-11-14 16:54:12.493448+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics.jsonl
+Test Case '-[OcPlayerTests.CoreDiagnosticsExportParityTests testNoNewlineTraceKeepsSuffixAndLogReclaimsBudget]' passed (0.003 seconds).
+Test Case '-[OcPlayerTests.CoreDiagnosticsExportParityTests testQueuedRecordsAreFlushedBeforeCoreExportAndTemporaryFileIsRemoved]' started.
+2026-11-14 16:54:12.495841+0800 OcPlayer[47587:27755500] [export] queued event fields={event="fixture"}
+Test Case '-[OcPlayerTests.CoreDiagnosticsExportParityTests testQueuedRecordsAreFlushedBeforeCoreExportAndTemporaryFileIsRemoved]' passed (0.307 seconds).
+Test Case '-[OcPlayerTests.CoreDiagnosticsExportParityTests testUtf8RepairAcrossFilesAndIncompleteTraceTail]' started.
+2026-11-14 16:54:13.004068+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics-b.jsonl
+2026-11-14 16:54:13.004340+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics-b.jsonl
+2026-11-14 16:54:13.004580+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics-b.jsonl
+2026-11-14 16:54:13.004828+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics-b.jsonl
+2026-11-14 16:54:13.005071+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics-b.jsonl
+2026-11-14 16:54:13.005309+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics-b.jsonl
+2026-11-14 16:54:13.005549+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics-b.jsonl
+2026-11-14 16:54:13.005575+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics.jsonl
+2026-11-14 16:54:13.005598+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics-a.jsonl
+2026-11-14 16:54:13.005786+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics-b.jsonl
+2026-11-14 16:54:13.005811+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics.jsonl
+2026-11-14 16:54:13.005835+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics-a.jsonl
+2026-11-14 16:54:13.006021+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics-b.jsonl
+2026-11-14 16:54:13.006044+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics.jsonl
+2026-11-14 16:54:13.006067+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics-a.jsonl
+2026-11-14 16:54:13.006270+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics-b.jsonl
+2026-11-14 16:54:13.006294+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics.jsonl
+2026-11-14 16:54:13.006317+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics-a.jsonl
+2026-11-14 16:54:13.006524+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics-b.jsonl
+2026-11-14 16:54:13.006547+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics.jsonl
+2026-11-14 16:54:13.006569+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics-a.jsonl
+2026-11-14 16:54:13.006770+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics-b.jsonl
+2026-11-14 16:54:13.006793+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics.jsonl
+2026-11-14 16:54:13.006815+0800 OcPlayer[47587:27755500] [DiagnosticsKit.FileSink] 导出跳过不可读的日志文件 file=diagnostics-a.jsonl
+Test Case '-[OcPlayerTests.CoreDiagnosticsExportParityTests testUtf8RepairAcrossFilesAndIncompleteTraceTail]' passed (0.206 seconds).
+Test Suite 'CoreDiagnosticsExportParityTests' passed at 2026-11-14 16:54:13.008.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.525 (0.526) seconds
+Test Suite 'DiagnosticsExportTests' started at 2026-11-14 16:54:13.008.
+Test Case '-[OcPlayerTests.DiagnosticsExportTests testExportKeepsSmallKernelTraceWhole]' started.
+Test Case '-[OcPlayerTests.DiagnosticsExportTests testExportKeepsSmallKernelTraceWhole]' passed (0.003 seconds).
+Test Case '-[OcPlayerTests.DiagnosticsExportTests testExportRedactsKernelTraceQuery]' started.
+Test Case '-[OcPlayerTests.DiagnosticsExportTests testExportRedactsKernelTraceQuery]' passed (0.002 seconds).
+Test Case '-[OcPlayerTests.DiagnosticsExportTests testExportTextHasHeaderAndParsableBody]' started.
+Test Case '-[OcPlayerTests.DiagnosticsExportTests testExportTextHasHeaderAndParsableBody]' passed (0.001 seconds).
+Test Case '-[OcPlayerTests.DiagnosticsExportTests testExportTruncatesOversizedKernelTrace]' started.
+Test Case '-[OcPlayerTests.DiagnosticsExportTests testExportTruncatesOversizedKernelTrace]' passed (0.002 seconds).
+Test Case '-[OcPlayerTests.DiagnosticsExportTests testSuggestedFileNameIsTimestampedAndHasNoColon]' started.
+Test Case '-[OcPlayerTests.DiagnosticsExportTests testSuggestedFileNameIsTimestampedAndHasNoColon]' passed (0.001 seconds).
+Test Suite 'DiagnosticsExportTests' passed at 2026-11-14 16:54:13.019.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.010 (0.011) seconds
+Test Suite 'PlaybackSourceFailoverTests' started at 2026-11-14 16:54:13.019.
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testAbortedFailureRecordsButDoesNotFailover]' started.
+2026-11-14 16:54:13.022203+0800 OcPlayer[47587:27755500] [App] open 失败但该类不换源 fields={kind="aborted",title="测试剧集"}
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testAbortedFailureRecordsButDoesNotFailover]' passed (0.006 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testAlternateWithoutSessionContextStopsInsteadOfReusingOldContext]' started.
+2026-11-14 16:54:13.026912+0800 OcPlayer[47587:27755500] [App] 自动换源 fields={attempt=1,from_source="primary",kind="network",remaining=0,title="测试剧集",to_source="alt-1"}
+2026-11-14 16:54:13.027046+0800 OcPlayer[47587:27755500] [App] 自动换源已用尽 fields={last_kind="network",title="测试剧集",tried=1}
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testAlternateWithoutSessionContextStopsInsteadOfReusingOldContext]' passed (0.104 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testAuthenticationFailureNeverChangesSource]' started.
+2026-11-14 16:54:13.132652+0800 OcPlayer[47587:27755500] [App] open 失败但该类不换源 fields={kind="auth",title="测试剧集"}
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testAuthenticationFailureNeverChangesSource]' passed (0.003 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testCancellingPreparationInvalidatesAlreadyQueuedFailover]' started.
+2026-11-14 16:54:13.134965+0800 OcPlayer[47587:27755500] [App] 自动换源 fields={attempt=1,from_source="primary",kind="network",remaining=0,title="测试剧集",to_source="alt-1"}
+2026-11-14 16:54:13.135002+0800 OcPlayer[47587:27755500] [App] cancelPlaybackOpen 取消播放准备
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testCancellingPreparationInvalidatesAlreadyQueuedFailover]' passed (0.002 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testExhaustedShortChainExplainsBothSources]' started.
+2026-11-14 16:54:13.137133+0800 OcPlayer[47587:27755500] [App] 自动换源 fields={attempt=1,from_source="primary",kind="network",remaining=0,title="测试剧集",to_source="alt-1"}
+2026-11-14 16:54:13.138187+0800 OcPlayer[47587:27755500] [App] 弹幕自动匹配开始 fields={fileName="alt-1",fileSize=null,matchMode="hashAndFileName",source="remoteURL",videoDuration=null}
+2026-11-14 16:54:13.138407+0800 OcPlayer[47587:27755500] [App] 自动换源已用尽 fields={last_kind="format",title="测试剧集",tried=2}
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testExhaustedShortChainExplainsBothSources]' passed (0.003 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testExhaustingAlternatesStopsAtTheNamedLimit]' started.
+2026-11-14 16:54:13.141044+0800 OcPlayer[47587:27755500] [App] 自动换源 fields={attempt=1,from_source="primary",kind="network",remaining=3,title="测试剧集",to_source="alt-1"}
+2026-11-14 16:54:13.141648+0800 OcPlayer[47587:27755500] [App] 弹幕自动匹配开始 fields={fileName="alt-1",fileSize=null,matchMode="hashAndFileName",source="remoteURL",videoDuration=null}
+2026-11-14 16:54:13.141985+0800 OcPlayer[47587:27755500] [App] 自动换源 fields={attempt=2,from_source="alt-1",kind="network",remaining=2,title="测试剧集",to_source="alt-2"}
+2026-11-14 16:54:13.142451+0800 OcPlayer[47587:27755500] [App] 弹幕自动匹配开始 fields={fileName="alt-2",fileSize=null,matchMode="hashAndFileName",source="remoteURL",videoDuration=null}
+2026-11-14 16:54:13.142794+0800 OcPlayer[47587:27755500] [App] 自动换源 fields={attempt=3,from_source="alt-2",kind="network",remaining=1,title="测试剧集",to_source="alt-3"}
+2026-11-14 16:54:13.143230+0800 OcPlayer[47587:27755500] [App] 弹幕自动匹配开始 fields={fileName="alt-3",fileSize=null,matchMode="hashAndFileName",source="remoteURL",videoDuration=null}
+2026-11-14 16:54:13.143512+0800 OcPlayer[47587:27755500] [App] 自动换源已用尽 fields={last_kind="network",title="测试剧集",tried=4}
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testExhaustingAlternatesStopsAtTheNamedLimit]' passed (0.005 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testFailoverUsesTheAlternateOwnSessionContext]' started.
+2026-11-14 16:54:13.146353+0800 OcPlayer[47587:27755500] [App] 自动换源 fields={attempt=1,from_source="primary",kind="network",remaining=1,title="测试剧集",to_source="alt-1"}
+2026-11-14 16:54:13.146974+0800 OcPlayer[47587:27755500] [App] 弹幕自动匹配开始 fields={fileName="alt-1",fileSize=null,matchMode="hashAndFileName",source="remoteURL",videoDuration=null}
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testFailoverUsesTheAlternateOwnSessionContext]' passed (0.101 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testFailureForAnotherRequestIsIgnored]' started.
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testFailureForAnotherRequestIsIgnored]' passed (0.003 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testMissingMediaItemKeepsOriginalRequest]' started.
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testMissingMediaItemKeepsOriginalRequest]' passed (0.105 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testOldFailureCannotRestoreHistoryAfterNewUserPlayResetsIt]' started.
+/Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackSourceFailoverTests.swift:147: -[OcPlayerTests.PlaybackSourceFailoverTests testOldFailureCannotRestoreHistoryAfterNewUserPlayResetsIt] : Test skipped - Shared request invalidation requires Core
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testOldFailureCannotRestoreHistoryAfterNewUserPlayResetsIt]' skipped (0.111 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testSingleSourceFailureKeepsErrorStateAndRecordsOneAttempt]' started.
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testSingleSourceFailureKeepsErrorStateAndRecordsOneAttempt]' passed (0.007 seconds).
+Test Suite 'PlaybackSourceFailoverTests' passed at 2026-11-14 16:54:13.475.
+	 Executed 11 tests, with 1 test skipped and 0 failures (0 unexpected) in 0.451 (0.455) seconds
+Test Suite 'OcPlayerTests.xctest' passed at 2026-11-14 16:54:13.475.
+	 Executed 33 tests, with 1 test skipped and 0 failures (0 unexpected) in 1.019 (1.031) seconds
+Test Suite 'Selected tests' passed at 2026-11-14 16:54:13.476.
+	 Executed 33 tests, with 1 test skipped and 0 failures (0 unexpected) in 1.019 (1.032) seconds
+2026-11-14 16:54:13.793 xcodebuild[47582:27755449] [MT] IDETestOperationsObserverDebug: 2.183 elapsed -- Testing started completed.
+2026-11-14 16:54:13.793 xcodebuild[47582:27755449] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-11-14 16:54:13.793 xcodebuild[47582:27755449] [MT] IDETestOperationsObserverDebug: 2.183 sec, +2.183 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/jumusu/Library/Developer/Xcode/DerivedData/OcPlayer-cayfkwrxtxzoksfdoquemtdqoyfn/Logs/Test/Test-OcPlayer-macOS-2026.11.14_16-54-11-+0800.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started
+
+EXIT_STATUS=0

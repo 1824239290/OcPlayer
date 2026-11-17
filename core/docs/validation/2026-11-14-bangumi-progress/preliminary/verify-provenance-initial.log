@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/tmp/ocp-bangumi-progress-check.py", line 92, in <module>
+    print(json.dumps({key:summary[key] for key in ['rust','independentRust','abi','nativeTotal','app','disabledMoviePilot','runtimeSectionCount']}))
+                          ~~~~~~~^^^^^
+KeyError: 'disabledMoviePilot'

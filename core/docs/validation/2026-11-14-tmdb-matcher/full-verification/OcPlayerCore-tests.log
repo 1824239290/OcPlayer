@@ -1,0 +1,54 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[1 / 1]
+Build complete! (0.33秒)
+Test Suite 'All tests' started at 2026-11-14 01:30:19.327.
+Test Suite 'OcPlayerCoreTests.xctest' started at 2026-11-14 01:30:19.328.
+Test Suite 'OcpCoreClientTests' started at 2026-11-14 01:30:19.328.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testEngineEventFoldingUpdatesSessionEndAndPreservesPreferences]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testEngineEventFoldingUpdatesSessionEndAndPreservesPreferences]' passed (0.006 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testEngineRejectsOldGenerationsAndInvalidCommandsWithoutMutation]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testEngineRejectsOldGenerationsAndInvalidCommandsWithoutMutation]' passed (0.001 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testExplicitMissingLibraryDoesNotLoadAnotherCandidate]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testExplicitMissingLibraryDoesNotLoadAnotherCandidate]' passed (0.000 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testFoundationDefaultsPermitCoreButInjectedProtocolsDoNot]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testFoundationDefaultsPermitCoreButInjectedProtocolsDoNot]' passed (0.002 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testJSONValueCanDecodeIntoHostTypes]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testJSONValueCanDecodeIntoHostTypes]' passed (0.000 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testMalformedFlowArgumentsDoNotModifyActiveRequestOrHistory]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testMalformedFlowArgumentsDoNotModifyActiveRequestOrHistory]' passed (0.001 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testNativeEventTelemetryCoalescesAndStaleEventsProduceNoNotifications]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testNativeEventTelemetryCoalescesAndStaleEventsProduceNoNotifications]' passed (0.083 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testPlaybackPreferencesSurvivePositionPauseAndTrackClearing]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testPlaybackPreferencesSurvivePositionPauseAndTrackClearing]' passed (0.003 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testPlaybackSessionMirrorsLifecycleWhenLibraryIsConfigured]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testPlaybackSessionMirrorsLifecycleWhenLibraryIsConfigured]' passed (0.001 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testReportPolicyPreservesPauseHeartbeatAndOnlyCleanNaturalEnd]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testReportPolicyPreservesPauseHeartbeatAndOnlyCleanNaturalEnd]' passed (0.001 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRequestChainSurvivesEngineSessionReplacementAndRejectsLateAdoption]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRequestChainSurvivesEngineSessionReplacementAndRejectsLateAdoption]' passed (0.002 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRustCoreSmokeWhenLibraryIsConfigured]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRustCoreSmokeWhenLibraryIsConfigured]' passed (0.001 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRustEventBackpressurePreservesControlsAndLatestPosition]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRustEventBackpressurePreservesControlsAndLatestPosition]' passed (0.076 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testSharedForegroundIntentAndErrorDecisionTable]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testSharedForegroundIntentAndErrorDecisionTable]' passed (0.001 seconds).
+Test Suite 'OcpCoreClientTests' passed at 2026-11-14 01:30:19.508.
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.179 (0.180) seconds
+Test Suite 'OcpDanmakuLoaderTests' started at 2026-11-14 01:30:19.508.
+Test Case '-[OcPlayerCoreTests.OcpDanmakuLoaderTests testPublicLoaderCancellationStopsLiveFetchAndClosesFlow]' started.
+Test Case '-[OcPlayerCoreTests.OcpDanmakuLoaderTests testPublicLoaderCancellationStopsLiveFetchAndClosesFlow]' passed (0.143 seconds).
+Test Case '-[OcPlayerCoreTests.OcpDanmakuLoaderTests testPublicLoaderReusesNativeCacheAndManualSelectionForcesIntroResolution]' started.
+Test Case '-[OcPlayerCoreTests.OcpDanmakuLoaderTests testPublicLoaderReusesNativeCacheAndManualSelectionForcesIntroResolution]' passed (0.166 seconds).
+Test Case '-[OcPlayerCoreTests.OcpDanmakuLoaderTests testPublicLoaderSelectsOneCandidateAndPreservesExactIDsAndIntro]' started.
+Test Case '-[OcPlayerCoreTests.OcpDanmakuLoaderTests testPublicLoaderSelectsOneCandidateAndPreservesExactIDsAndIntro]' passed (0.133 seconds).
+Test Suite 'OcpDanmakuLoaderTests' passed at 2026-11-14 01:30:19.951.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.443 (0.443) seconds
+Test Suite 'OcPlayerCoreTests.xctest' passed at 2026-11-14 01:30:19.951.
+	 Executed 17 tests, with 0 failures (0 unexpected) in 0.622 (0.623) seconds
+Test Suite 'All tests' passed at 2026-11-14 01:30:19.951.
+	 Executed 17 tests, with 0 failures (0 unexpected) in 0.622 (0.624) seconds
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.

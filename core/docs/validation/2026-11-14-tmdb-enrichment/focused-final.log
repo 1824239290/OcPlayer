@@ -1,0 +1,144 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Using on-disk description]
+[1 / 1]
+[1 / 40] CNIOLinux
+[2 / 13] MetadataKit
+[5 / 16] MetadataKit
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbEnricher.swift:212:110: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+210 |         defer { _ = try? rust.core.call("tmdbEnrichment.batch.close",arguments:["batchID":id]) }
+211 |         do {
+212 |             var state: RustTMDbEnricher.BatchState = try rust.call("batch.begin", ["batchID":id,"configured":await client.isConfigured,"items":rust.object(items.map(RustTMDbMatcher.Item.init))])
+    |                                                                                                              `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+213 |             guard state.started else { return state.result }
+214 |             await onProgress(state.progress.native)
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[12 / 23] MetadataKit
+[16 / 26] MetadataKit
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/Media/MediaRepository+Detail.swift:45:49: warning: immutable value 'store' was never used; consider replacing with '_' or removing it [#NoUsage]
+ 43 |         var members: [MediaItem] = []
+ 44 |         var memberTotal: Int?
+ 45 |         if cachedItem.item.kind == .series, let store {
+    |                                                 `- warning: immutable value 'store' was never used; consider replacing with '_' or removing it [#NoUsage]
+ 46 |             seasons = (await read { try await $0.seasons(seriesID: itemID, tenant: tenant) }) ?? []
+ 47 |             if let seasonID = Self.defaultSeasonID(in: seasons) {
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+[20 / 25] MetadataKit-product
+[20 / 25] MetadataKitTests-product
+[29 / 34] MetadataKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbBatchConcurrencyTests.swift:216:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+214 |     nonisolated(unsafe) private static var peakValue = 0
+215 |     nonisolated(unsafe) private static var startedValue = 0
+216 |     nonisolated(unsafe) private static let counterLock = NSLock()
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+217 | 
+218 |     /// 桩被请求的总次数（判断「取消后还有没有继续派发」）。
+[30 / 34] MetadataKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbBatchConcurrencyTests.swift:216:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+214 |     nonisolated(unsafe) private static var peakValue = 0
+215 |     nonisolated(unsafe) private static var startedValue = 0
+216 |     nonisolated(unsafe) private static let counterLock = NSLock()
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+217 | 
+218 |     /// 桩被请求的总次数（判断「取消后还有没有继续派发」）。
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbBatchConcurrencyTests.swift:252:23: warning: capture of 'self' with non-Sendable type 'ConcurrencyProbeProtocol?' in a '@Sendable' closure [#SendableClosureCaptures]
+250 |         let delay = Self.latency
+251 |         DispatchQueue.global().asyncAfter(deadline: .now() + delay) { [weak self] in
+252 |             guard let self else { return }
+    |                       `- warning: capture of 'self' with non-Sendable type 'ConcurrencyProbeProtocol?' in a '@Sendable' closure [#SendableClosureCaptures]
+253 |             Self.counterLock.lock(); Self.inFlight -= 1; Self.counterLock.unlock()
+254 |             // 404 → 快速走完一条（`noMatch`），不触发季请求，用例更快。
+
+Swift.Optional:1:21: note: generic enum 'Optional' does not conform to the 'Sendable' protocol
+1 | @frozen public enum Optional<Wrapped> : ~Copyable, ~Escapable where Wrapped : ~Copyable, Wrapped : ~Escapable {
+  |                     `- note: generic enum 'Optional' does not conform to the 'Sendable' protocol
+2 |     case none
+3 |     case some(Wrapped)
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbEnricherTests.swift:418:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+416 |         }
+417 |         let key = TMDbEntityKey.season(tvID: 100, number: 1)
+418 |         try await enricher.fetchAndStore(key: key)
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+419 |         let stored = try await store.tmdbPayload(key: key, language: "zh-CN")
+420 |         let cached = try XCTUnwrap(stored)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbMatcherTests.swift:65:25: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 63 |         let m = TMDbMatcher(language: "zh-CN") { _, _, _, _ in [] }
+ 64 |         for dirty in ["", " ", "0", "-5", "abc", "12.5", "\n"] {
+ 65 |             let value = await m.providerTmdbID(of: item(name: "x", tmdbID: dirty))
+    |                         `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 66 |             XCTAssertNil(value, "「\(dirty)」应被当作没有 id")
+ 67 |         }
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbMatcherTests.swift:68:21: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 66 |             XCTAssertNil(value, "「\(dirty)」应被当作没有 id")
+ 67 |         }
+ 68 |         let clean = await m.providerTmdbID(of: item(name: "x", tmdbID: " 603 "))
+    |                     `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 69 |         XCTAssertEqual(clean, 603, "前后空白应被容忍")
+ 70 |     }
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[32 / 35] MetadataKitTests-product
+[34 / 38] MetadataKitTests-product
+[36 / 38] MetadataKitTests-product
+Build complete! (5.73秒)
+Test Suite 'Selected tests' started at 2026-11-14 02:31:31.376.
+Test Suite 'MetadataKitTests.xctest' started at 2026-11-14 02:31:31.377.
+Test Suite 'RustCacheIntegrationTests' started at 2026-11-14 02:31:31.377.
+Test Case '-[MetadataKitTests.RustCacheIntegrationTests testProductionCacheActivatesAndBothClientsReadTheSameDatabase]' started.
+Test Case '-[MetadataKitTests.RustCacheIntegrationTests testProductionCacheActivatesAndBothClientsReadTheSameDatabase]' passed (0.921 seconds).
+Test Case '-[MetadataKitTests.RustCacheIntegrationTests testReplacementSnapshotsTMDbExpiryAndAtomicRollbackAcrossClients]' started.
+Test Case '-[MetadataKitTests.RustCacheIntegrationTests testReplacementSnapshotsTMDbExpiryAndAtomicRollbackAcrossClients]' passed (0.022 seconds).
+Test Suite 'RustCacheIntegrationTests' passed at 2026-11-14 02:31:32.320.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.943 (0.943) seconds
+Test Suite 'RustTMDbEnrichmentTests' started at 2026-11-14 02:31:32.320.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testAiringAndFreshnessDecisionsMatchNativeAcrossCompleteDateCases]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testAiringAndFreshnessDecisionsMatchNativeAcrossCompleteDateCases]' passed (0.060 seconds).
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testBatchAiringSeasonRefreshUnsupportedCountsAndResumeMatchNative]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testBatchAiringSeasonRefreshUnsupportedCountsAndResumeMatchNative]' passed (0.132 seconds).
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCancellationInProgressStopsRefillAndDrainsFourEnteredWorkers]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCancellationInProgressStopsRefillAndDrainsFourEnteredWorkers]' passed (0.483 seconds).
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCollectionResolutionBudgetManualBindingAndExactCacheIDsMatchNative]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCollectionResolutionBudgetManualBindingAndExactCacheIDsMatchNative]' passed (0.192 seconds).
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCompleteRefreshAuthorityFreshnessSearchAndFailureModelsMatchNative]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCompleteRefreshAuthorityFreshnessSearchAndFailureModelsMatchNative]' passed (0.180 seconds).
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testSingleFlightLanguageIsolationFailureAndRetirementMatchNative]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testSingleFlightLanguageIsolationFailureAndRetirementMatchNative]' passed (0.769 seconds).
+Test Suite 'RustTMDbEnrichmentTests' passed at 2026-11-14 02:31:34.136.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 1.815 (1.816) seconds
+Test Suite 'RustTMDbIntegrationTests' started at 2026-11-14 02:31:34.136.
+Test Case '-[MetadataKitTests.RustTMDbIntegrationTests testNativeMetadataFallbackEndpointAuthSeasonAndErrorParity]' started.
+Test Case '-[MetadataKitTests.RustTMDbIntegrationTests testNativeMetadataFallbackEndpointAuthSeasonAndErrorParity]' passed (0.847 seconds).
+Test Suite 'RustTMDbIntegrationTests' passed at 2026-11-14 02:31:34.983.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.847 (0.847) seconds
+Test Suite 'RustTMDbMatcherTests' started at 2026-11-14 02:31:34.983.
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testAllScoreTiersStableAlternativesAndExactIdentifiers]' started.
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testAllScoreTiersStableAlternativesAndExactIdentifiers]' passed (0.612 seconds).
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testCompleteInjectedSearchFlowMatchesIndependentNative]' started.
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testCompleteInjectedSearchFlowMatchesIndependentNative]' passed (0.069 seconds).
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch]' started.
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch]' passed (0.016 seconds).
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testReferenceUnicodeNormalizationAndYearCorpus]' started.
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testReferenceUnicodeNormalizationAndYearCorpus]' passed (1.285 seconds).
+Test Suite 'RustTMDbMatcherTests' passed at 2026-11-14 02:31:36.965.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 1.981 (1.982) seconds
+Test Suite 'RustTMDbWireTests' started at 2026-11-14 02:31:36.965.
+Test Case '-[MetadataKitTests.RustTMDbWireTests testCompleteSharedWireModelsMatchNativeJSONObjectDecoding]' started.
+Test Case '-[MetadataKitTests.RustTMDbWireTests testCompleteSharedWireModelsMatchNativeJSONObjectDecoding]' passed (0.133 seconds).
+Test Case '-[MetadataKitTests.RustTMDbWireTests testMalformedEncodingAndObjectErrorsNeverBecomeSuccessfulEmptyModels]' started.
+Test Case '-[MetadataKitTests.RustTMDbWireTests testMalformedEncodingAndObjectErrorsNeverBecomeSuccessfulEmptyModels]' passed (0.064 seconds).
+Test Case '-[MetadataKitTests.RustTMDbWireTests testSignedRequestRangesAndEpisodeSearchYearSuppression]' started.
+Test Case '-[MetadataKitTests.RustTMDbWireTests testSignedRequestRangesAndEpisodeSearchYearSuppression]' passed (0.063 seconds).
+Test Suite 'RustTMDbWireTests' passed at 2026-11-14 02:31:37.225.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.260 (0.261) seconds
+Test Suite 'MetadataKitTests.xctest' passed at 2026-11-14 02:31:37.225.
+	 Executed 16 tests, with 0 failures (0 unexpected) in 5.846 (5.849) seconds
+Test Suite 'Selected tests' passed at 2026-11-14 02:31:37.225.
+	 Executed 16 tests, with 0 failures (0 unexpected) in 5.846 (5.850) seconds

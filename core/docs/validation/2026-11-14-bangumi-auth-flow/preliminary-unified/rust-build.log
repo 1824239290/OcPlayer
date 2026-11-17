@@ -1,0 +1,5 @@
+   Compiling ocp-bangumi v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-bangumi)
+   Compiling ocp-core v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-core)
+   Compiling ocp-ffi v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-ffi)
+    Finished `release` profile [optimized] target(s) in 16.87s
+/tmp/ocp-bangumi-auth-flow-macos/libocp_ffi.dylib

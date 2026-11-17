@@ -1,0 +1,32 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Provisioning 45 / 47]
+[1 / 4] NIOFoundationCompat
+[5 / 13] JellyfinKitTests-product
+[7 / 15] JellyfinKitTests-product
+[11 / 14] JellyfinKitTests-product
+[13 / 15] JellyfinKitTests-product
+[15 / 15] JellyfinKitTests-product
+Build complete! (2.60秒)
+Test Suite 'Selected tests' started at 2026-11-14 13:48:37.206.
+Test Suite 'JellyfinKitTests.xctest' started at 2026-11-14 13:48:37.207.
+Test Suite 'PlaybackPreparationHTTPTests' started at 2026-11-14 13:48:37.207.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP]' passed (0.181 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyContinuationOverRealHTTP]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyContinuationOverRealHTTP]' passed (0.141 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyEpisodeEndpointSortingAndContinuationWindow]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyEpisodeEndpointSortingAndContinuationWindow]' passed (0.141 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP]' passed (0.141 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinContinuationOverRealHTTP]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinContinuationOverRealHTTP]' passed (0.142 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinEpisodeEndpointSortingAndContinuationWindow]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinEpisodeEndpointSortingAndContinuationWindow]' passed (0.142 seconds).
+Test Suite 'PlaybackPreparationHTTPTests' passed at 2026-11-14 13:48:38.097.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.888 (0.889) seconds
+Test Suite 'JellyfinKitTests.xctest' passed at 2026-11-14 13:48:38.097.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.888 (0.890) seconds
+Test Suite 'Selected tests' passed at 2026-11-14 13:48:38.097.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.888 (0.890) seconds

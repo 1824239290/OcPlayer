@@ -1,0 +1,23 @@
+   Compiling tokio v1.54.1
+   Compiling icu_provider v2.4.0
+   Compiling hyper v1.12.0
+   Compiling tower v0.5.3
+   Compiling tokio-rustls v0.26.6
+   Compiling icu_normalizer v2.4.0
+   Compiling icu_properties v2.4.0
+   Compiling hyper-util v0.1.21
+   Compiling idna_adapter v1.2.2
+   Compiling hyper-rustls v0.27.10
+   Compiling idna v1.1.0
+   Compiling url v2.5.8
+   Compiling tower-http v0.6.11
+   Compiling reqwest v0.12.28
+   Compiling ocp-http v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-http)
+error: incremental compilation: could not create session directory lock file: Operation not supported (os error 45)
+  |
+  = note: the filesystem for the incremental path at /Volumes/Backup/软件/OcPlayer-Core/target/debug/incremental/ocp_http-2o79nvt23nse5/s-ho4zkjym1r-0tv7qoq-working does not appear to support locking, consider changing the incremental path to a filesystem that supports locking or disable incremental compilation
+  = help: incremental compilation can be disabled by setting the environment variable CARGO_INCREMENTAL=0 (see https://doc.rust-lang.org/cargo/reference/profiles.html#incremental)
+  = help: the entire build directory can be changed to a different filesystem by setting the environment variable CARGO_TARGET_DIR to a different path (see https://doc.rust-lang.org/cargo/reference/config.html#buildtarget-dir)
+
+error: could not compile `ocp-http` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...

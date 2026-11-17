@@ -1,0 +1,35 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Provisioning 24 / 47]
+[2 / 20] JellyfinKit
+[4 / 22] JellyfinKit
+[11 / 20] JellyfinKitTests-product
+[14 / 23] JellyfinKitTests-product
+[19 / 23] JellyfinKitTests-product
+[21 / 23] JellyfinKitTests-product
+[23 / 23] JellyfinKitTests-product
+Build complete! (3.13秒)
+Test Suite 'Selected tests' started at 2026-11-14 12:57:40.280.
+Test Suite 'JellyfinKitTests.xctest' started at 2026-11-14 12:57:40.281.
+Test Suite 'PlaybackPreparationWorkflowTests' started at 2026-11-14 12:57:40.281.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testCancellationErrorWithoutTaskCancellationKeepsInfoFallbackSemantics]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testCancellationErrorWithoutTaskCancellationKeepsInfoFallbackSemantics]' passed (0.012 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testCollectionReadsCurrentHomeAfterMembersAndUsesResolvedItemResume]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testCollectionReadsCurrentHomeAfterMembersAndUsesResolvedItemResume]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testCompleteSourceSequencePreservesNativeObjectsAndSkipsOnlyFailedAlternate]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testCompleteSourceSequencePreservesNativeObjectsAndSkipsOnlyFailedAlternate]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testPlaybackInfoFallbackKeepsOriginalFailureAndNativeRuntime]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testPlaybackInfoFallbackKeepsOriginalFailureAndNativeRuntime]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testPrimaryURLFailureFallsBackWithoutReusingPlaybackSession]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testPrimaryURLFailureFallsBackWithoutReusingPlaybackSession]' passed (0.001 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testResolutionPreservesOriginalErrorTypeEmptyResultAndEpisodeOrder]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testResolutionPreservesOriginalErrorTypeEmptyResultAndEpisodeOrder]' passed (0.002 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testRetiredMetadataCannotPresentOrCancelNewPreparationLease]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationWorkflowTests testRetiredMetadataCannotPresentOrCancelNewPreparationLease]' passed (0.016 seconds).
+Test Suite 'PlaybackPreparationWorkflowTests' passed at 2026-11-14 12:57:40.319.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.037 (0.038) seconds
+Test Suite 'JellyfinKitTests.xctest' passed at 2026-11-14 12:57:40.319.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.037 (0.038) seconds
+Test Suite 'Selected tests' passed at 2026-11-14 12:57:40.319.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.037 (0.039) seconds

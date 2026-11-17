@@ -1,0 +1,9 @@
+test_authoritative_and_parent_identity_boundary (__main__.TmdbMatcherContract.test_authoritative_and_parent_identity_boundary) ... ok
+test_preflight_rejects_wrong_types_and_overflow (__main__.TmdbMatcherContract.test_preflight_rejects_wrong_types_and_overflow) ... ok
+test_search_year_is_separate_from_score_and_original_fallback (__main__.TmdbMatcherContract.test_search_year_is_separate_from_score_and_original_fallback) ... ok
+test_unicode_canonical_matching_and_stable_manual_candidates (__main__.TmdbMatcherContract.test_unicode_canonical_matching_and_stable_manual_candidates) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 2.028s
+
+OK

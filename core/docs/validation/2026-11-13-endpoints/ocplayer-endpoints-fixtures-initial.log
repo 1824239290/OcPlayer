@@ -1,0 +1,26 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Provisioning 24 / 47]
+[Pre-planning 1 / 1016]
+[Planning deferred tasks]
+[8 / 91]
+[11 / 20] JellyfinKitTests-product
+[13 / 22] JellyfinKitTests-product
+[17 / 21] JellyfinKitTests-product
+[19 / 21] JellyfinKitTests-product
+[21 / 21] JellyfinKitTests-product
+Build complete! (3.34秒)
+Test Suite 'Selected tests' started at 2026-11-13 15:56:04.975.
+Test Suite 'JellyfinKitTests.xctest' started at 2026-11-13 15:56:04.976.
+Test Suite 'RustEndpointIntegrationTests' started at 2026-11-13 15:56:04.976.
+Test Case '-[JellyfinKitTests.RustEndpointIntegrationTests testEmbyCoreRequestsFollowDynamicEndpoints]' started.
+Test Case '-[JellyfinKitTests.RustEndpointIntegrationTests testEmbyCoreRequestsFollowDynamicEndpoints]' passed (1.942 seconds).
+Test Case '-[JellyfinKitTests.RustEndpointIntegrationTests testJellyfinCoreRequestsFollowDynamicEndpoints]' started.
+Test Case '-[JellyfinKitTests.RustEndpointIntegrationTests testJellyfinCoreRequestsFollowDynamicEndpoints]' passed (1.837 seconds).
+Test Suite 'RustEndpointIntegrationTests' passed at 2026-11-13 15:56:08.755.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 3.779 (3.780) seconds
+Test Suite 'JellyfinKitTests.xctest' passed at 2026-11-13 15:56:08.756.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 3.779 (3.780) seconds
+Test Suite 'Selected tests' passed at 2026-11-13 15:56:08.756.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 3.779 (3.781) seconds

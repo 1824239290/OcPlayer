@@ -1,0 +1,81 @@
+{
+  "platform": "macOS arm64",
+  "goalComplete": false,
+  "checks": {
+    "OcPlayerCore": {
+      "executed": 5,
+      "passed": 5,
+      "skipped": 0,
+      "failed": 0,
+      "includesSwiftTesting": true
+    },
+    "JellyfinKit": {
+      "executed": 240,
+      "passed": 240,
+      "skipped": 0,
+      "failed": 0,
+      "includesSwiftTesting": true
+    },
+    "MetadataKit": {
+      "executed": 304,
+      "passed": 304,
+      "skipped": 0,
+      "failed": 0,
+      "includesSwiftTesting": true
+    },
+    "MoviePilotKit": {
+      "executed": 108,
+      "passed": 108,
+      "skipped": 0,
+      "failed": 0,
+      "includesSwiftTesting": true
+    },
+    "BangumiKit": {
+      "executed": 94,
+      "passed": 94,
+      "skipped": 0,
+      "failed": 0,
+      "includesSwiftTesting": true
+    },
+    "MacOSAppTests": {
+      "executed": 1001,
+      "passed": 982,
+      "skipped": 19,
+      "failed": 0
+    },
+    "CoreActivation": {
+      "enabledInNativeTestHost": true,
+      "inMemoryTransportPreserved": true
+    },
+    "Rust": {
+      "passed": 43,
+      "failed": 0
+    },
+    "BangumiCABI": {
+      "passed": 4,
+      "failed": 0
+    },
+    "ExportedAppleBinding": {
+      "passed": 5,
+      "failed": 0,
+      "sameCasesAsNativeAdapter": true,
+      "sourceEquivalent": true
+    },
+    "NativePlayback": {
+      "seconds": 10,
+      "coreFromBundle": true,
+      "controls": [
+        "pause",
+        "resume",
+        "seek",
+        "rate",
+        "resize"
+      ],
+      "renderFailures": 0,
+      "audioFailures": 0
+    }
+  },
+  "application": "/tmp/ocplayer-bangumi-verification/DerivedData/Build/Products/Debug/OcPlayer.app",
+  "nativeTestResults": "/tmp/ocplayer-bangumi-verification/DerivedData/Logs/Test",
+  "initialAppTestFailure": "Injected in-memory server was mistakenly replaced by HTTP transport; fixed and complete final AppTests passed."
+}

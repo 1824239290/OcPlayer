@@ -1,0 +1,23 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Using on-disk description]
+Build complete! (0.35秒)
+Test Suite 'Selected tests' started at 2026-11-13 20:24:52.121.
+Test Suite 'DanmakuKitTests.xctest' started at 2026-11-13 20:24:52.121.
+Test Suite 'RustDanmakuPolicyTests' started at 2026-11-13 20:24:52.121.
+Test Case '-[DanmakuKitTests.RustDanmakuPolicyTests testBatchSelectionRetainsExactIDsShiftAndGlobalOrder]' started.
+Test Case '-[DanmakuKitTests.RustDanmakuPolicyTests testBatchSelectionRetainsExactIDsShiftAndGlobalOrder]' passed (0.024 seconds).
+Test Case '-[DanmakuKitTests.RustDanmakuPolicyTests testEpisodeTokenAndUnicodeComparisonAgainstNative]' started.
+Test Case '-[DanmakuKitTests.RustDanmakuPolicyTests testEpisodeTokenAndUnicodeComparisonAgainstNative]' passed (0.006 seconds).
+Test Case '-[DanmakuKitTests.RustDanmakuPolicyTests testFilenameAndCanonicalPolicyAgainstNativeCorpus]' started.
+Test Case '-[DanmakuKitTests.RustDanmakuPolicyTests testFilenameAndCanonicalPolicyAgainstNativeCorpus]' passed (0.203 seconds).
+Test Case '-[DanmakuKitTests.RustDanmakuPolicyTests testScoresAgainstNativeIdentityRules]' started.
+Test Case '-[DanmakuKitTests.RustDanmakuPolicyTests testScoresAgainstNativeIdentityRules]' passed (0.594 seconds).
+Test Case '-[DanmakuKitTests.RustDanmakuPolicyTests testSpecialKeywordBoundariesAndRawCanonicalFallback]' started.
+Test Case '-[DanmakuKitTests.RustDanmakuPolicyTests testSpecialKeywordBoundariesAndRawCanonicalFallback]' passed (0.020 seconds).
+Test Suite 'RustDanmakuPolicyTests' passed at 2026-11-13 20:24:52.968.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.846 (0.847) seconds
+Test Suite 'DanmakuKitTests.xctest' passed at 2026-11-13 20:24:52.968.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.846 (0.847) seconds
+Test Suite 'Selected tests' passed at 2026-11-13 20:24:52.968.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.846 (0.848) seconds

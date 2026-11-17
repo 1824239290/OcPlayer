@@ -1,0 +1,37 @@
+{
+  "platform": "Windows-11-10.0.26300-SP0",
+  "architecture": "AMD64",
+  "python": "3.12.14",
+  "library": "D:\\OcPlayer-Core\\target\\debug\\ocp_ffi.dll",
+  "librarySha256": "da76837da70a31974d14de8ec154562e192e3d5442001b673f15eff03d1580a0",
+  "sdk": {
+    "mode": "real",
+    "checks": 31,
+    "contracts": 3,
+    "passed": [
+      "real Core: business API, exact integers, cancellation, reused IDs, events and surface lifecycle",
+      "real Core playback lifecycle, retained settings and validation",
+      "Windows hidden HWND adapter lifecycle and ordered Core events (metadata only)"
+    ],
+    "windowsRuntimeTested": true,
+    "operatingSystem": "Microsoft Windows 10.0.26300",
+    "architecture": "X64"
+  },
+  "abi": {
+    "executed": 218,
+    "passed": 216,
+    "failures": 0,
+    "errors": 0,
+    "skipped": [
+      {
+        "test": "test_all_codings_decode_as_native_and_keep_raw_headers (transport_fidelity_contract.TransportFidelity.test_all_codings_decode_as_native_and_keep_raw_headers)",
+        "reason": "requires an independent Apple URLSession probe; Core transport tests still run"
+      },
+      {
+        "test": "test_native_rejected_encoding_chains_fail_without_replay (transport_fidelity_contract.TransportFidelity.test_native_rejected_encoding_chains_fail_without_replay)",
+        "reason": "requires an independent Apple URLSession probe; Core transport tests still run"
+      }
+    ]
+  },
+  "seconds": 92.579
+}

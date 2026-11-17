@@ -1,0 +1,12 @@
+   Compiling ocp-store v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-store)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.49s
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_store-31cc728d50abbed7)
+
+running 4 tests
+test repository::tests::refresh_ownership_retirement_and_invalidation_match_native ... ok
+test repository::tests::structured_keys_and_wide_nested_payloads_are_retained ... ok
+test repository::tests::complete_freshness_boundaries_and_invalid_receipts_leave_entries_intact ... ok
+test repository::tests::complete_lru_touch_delete_all_and_minimum_limits ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 14 filtered out; finished in 0.00s
+

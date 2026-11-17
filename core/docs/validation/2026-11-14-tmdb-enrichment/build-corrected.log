@@ -1,0 +1,5 @@
+    Blocking waiting for file lock on build directory
+   Compiling ocp-tmdb v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-tmdb)
+   Compiling ocp-core v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-core)
+   Compiling ocp-ffi v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-ffi)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.07s

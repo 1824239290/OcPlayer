@@ -1,0 +1,266 @@
+diff --git a/crates/erika/src/renderer/metal/apple.rs b/crates/erika/src/renderer/metal/apple.rs
+index 0329398..8dd2914 100644
+--- a/crates/erika/src/renderer/metal/apple.rs
++++ b/crates/erika/src/renderer/metal/apple.rs
+@@ -47,6 +47,8 @@ use objc2_metal::{
+     MTLRenderPipelineState,
+ };
+ use objc2_metal::{MTLSamplerDescriptor, MTLSamplerMinMagFilter, MTLSamplerState};
++#[cfg(target_os = "macos")]
++use objc2_quartz_core::CAEDRMetadata;
+ use objc2_quartz_core::{CAMetalDrawable, CAMetalLayer};
+ #[cfg(any(target_os = "ios", target_os = "tvos"))]
+ use objc2_quartz_core::{kCAContentsFormatRGBA8Uint, kCAContentsFormatRGBA16Float};
+@@ -197,6 +199,8 @@ pub struct MetalRendererImpl {
+     pending_gpu_timing: Option<Retained<ProtocolObject<dyn MTLCommandBuffer>>>,
+     stats: MetalRendererStats,
+     layer_color_space_label: &'static str,
++    #[cfg(target_os = "macos")]
++    layer_hdr_metadata: Option<Hdr10LayerMetadata>,
+     /// Perceptual gamut LUT (3D RGBA16Float) cached per (source, target,
+     /// peak) key; `None` when the fast path is in use.
+     gamut_lut: Option<GamutLutCache>,
+@@ -217,6 +221,46 @@ pub struct MetalRendererImpl {
+     reported_display_headroom: Option<f32>,
+ }
+ 
++/// The PQ drawable is display-referred HDR. Core Animation must receive its
++/// mastering range before nextDrawable, otherwise out-of-display highlights
++/// can be clipped instead of tone mapped. The PQ encoding ceiling is not the
++/// source mastering peak (nor the screen's EDR headroom).
++#[cfg(target_os = "macos")]
++#[derive(Debug, Clone, Copy, PartialEq)]
++struct Hdr10LayerMetadata {
++    min_nits: f32,
++    max_nits: f32,
++}
++
++#[cfg(target_os = "macos")]
++impl Hdr10LayerMetadata {
++    fn for_source(source: SourceColorState) -> Option<Self> {
++        if source.transfer != TransferFunction::Pq {
++            return None;
++        }
++        let mastering = source.hdr_metadata.and_then(|hdr| hdr.mastering_display);
++        let peak = mastering
++            .and_then(|m| m.max_luminance_nits)
++            .filter(|n| n.is_finite() && *n > 0.0)
++            .or_else(|| {
++                source
++                    .hdr_metadata
++                    .and_then(|hdr| hdr.nominal_peak_nits())
++                    .filter(|n| n.is_finite() && *n > 0.0)
++            })
++            .unwrap_or(1000.0)
++            .min(10_000.0);
++        let black = mastering
++            .and_then(|m| m.min_luminance_nits)
++            .filter(|n| n.is_finite() && *n >= 0.0 && *n < peak)
++            .unwrap_or(0.0);
++        Some(Self {
++            min_nits: black,
++            max_nits: peak,
++        })
++    }
++}
++
+ fn hdr_debug_enabled() -> bool {
+     std::env::var("ERIKA_HDR_DEBUG")
+         .ok()
+@@ -299,6 +343,8 @@ impl MetalRendererImpl {
+             pending_gpu_timing: None,
+             stats: MetalRendererStats::default(),
+             layer_color_space_label: "unconfigured",
++            #[cfg(target_os = "macos")]
++            layer_hdr_metadata: None,
+             gamut_lut: None,
+             gamut_lut_job: None,
+             dummy_gamut_lut: None,
+@@ -578,6 +624,11 @@ impl MetalRendererImpl {
+     }
+ 
+     fn configure_layer_output(&mut self, layer: &CAMetalLayer) {
++        #[cfg(target_os = "macos")]
++        {
++            layer.setEDRMetadata(None);
++            self.layer_hdr_metadata = None;
++        }
+         self.drawable_pixel_format = metal_drawable_pixel_format(self.output_mode);
+         layer.setPixelFormat(metal_pixel_format(self.drawable_pixel_format));
+         configure_layer_dynamic_range(layer, self.output_mode.is_edr());
+@@ -627,6 +678,24 @@ impl MetalRendererImpl {
+                 return;
+             }
+             let (color_space_name, color_space_label) = edr_layer_color_space(Some(source));
++            #[cfg(target_os = "macos")]
++            {
++                let metadata = Hdr10LayerMetadata::for_source(source);
++                if metadata != self.layer_hdr_metadata {
++                    let native = metadata.map(|m| {
++                        CAEDRMetadata::HDR10MetadataWithMinLuminance_maxLuminance_opticalOutputScale(
++                            m.min_nits, m.max_nits, 10_000.0,
++                        )
++                    });
++                    layer.setEDRMetadata(native.as_deref());
++                    self.layer_hdr_metadata = metadata;
++                    if hdr_debug_enabled() {
++                        eprintln!(
++                            "ErikaHDR: system HDR10 tone mapping metadata={metadata:?} optical_output_scale=10000"
++                        );
++                    }
++                }
++            }
+             if color_space_label == self.layer_color_space_label {
+                 return;
+             }
+@@ -4512,6 +4581,133 @@ mod tests {
+             .expect("dual-atlas danmaku pipeline");
+     }
+ 
++    #[cfg(target_os = "macos")]
++    #[test]
++    fn pq_layer_has_system_tone_mapping_metadata_and_clears_it_for_sdr() {
++        let mut renderer =
++            super::MetalRendererImpl::new(crate::renderer::metal::MetalRendererConfig::default())
++                .expect("test requires the host Metal device");
++        let layer = objc2_quartz_core::CAMetalLayer::new();
++        renderer.set_output_mode(crate::renderer::metal::MetalOutputMode::apple_edr(2.0));
++        renderer.configure_layer_output(&layer);
++        let source = crate::renderer::pipeline::SourceColorState::new(
++            ColorPrimaries::Bt2020,
++            TransferFunction::Pq,
++        );
++        renderer.configure_layer_source_color(&layer, source);
++        assert!(
++            layer.EDRMetadata().is_some(),
++            "PQ passthrough must ask Core Animation to map highlights"
++        );
++        renderer.set_output_mode(crate::renderer::metal::MetalOutputMode::Sdr);
++        renderer.configure_layer_output(&layer);
++        assert!(
++            layer.EDRMetadata().is_none(),
++            "SDR must not inherit HDR mapping"
++        );
++    }
++
++    #[cfg(target_os = "macos")]
++    #[test]
++    fn pq_mastering_changes_update_metadata_without_a_colorspace_change() {
++        use crate::renderer::pipeline::{HdrMetadata, MasteringDisplayMetadata};
++        let mut renderer =
++            super::MetalRendererImpl::new(crate::renderer::metal::MetalRendererConfig::default())
++                .expect("test requires the host Metal device");
++        let layer = objc2_quartz_core::CAMetalLayer::new();
++        renderer.set_output_mode(crate::renderer::metal::MetalOutputMode::apple_edr(2.0));
++        renderer.configure_layer_output(&layer);
++        let source = |peak| {
++            crate::renderer::pipeline::SourceColorState::new(
++                ColorPrimaries::Bt2020,
++                TransferFunction::Pq,
++            )
++            .hdr_metadata(Some(HdrMetadata::new(
++                Some(MasteringDisplayMetadata {
++                    display_primaries: None,
++                    white_point: None,
++                    min_luminance_nits: Some(0.0001),
++                    max_luminance_nits: Some(peak),
++                }),
++                None,
++            )))
++        };
++        renderer.configure_layer_source_color(&layer, source(1000.0));
++        let first = layer.EDRMetadata().unwrap();
++        assert_eq!(renderer.layer_hdr_metadata.unwrap().max_nits, 1000.0);
++        renderer.configure_layer_source_color(&layer, source(1000.0));
++        assert_eq!(
++            first,
++            layer.EDRMetadata().unwrap(),
++            "unchanged metadata must be retained"
++        );
++        renderer.configure_layer_source_color(&layer, source(4000.0));
++        assert_eq!(renderer.layer_color_space_label, "itur-2100-pq");
++        assert_eq!(renderer.layer_hdr_metadata.unwrap().max_nits, 4000.0);
++        assert_ne!(first, layer.EDRMetadata().unwrap());
++        renderer.configure_layer_source_color(
++            &layer,
++            crate::renderer::pipeline::SourceColorState::new(
++                ColorPrimaries::Bt2020,
++                TransferFunction::Hlg,
++            ),
++        );
++        assert!(
++            layer.EDRMetadata().is_none(),
++            "already mapped HLG must not be mapped again"
++        );
++        assert_eq!(renderer.layer_color_space_label, "extended-linear-srgb");
++    }
++
++    #[cfg(target_os = "macos")]
++    #[test]
++    fn pq_metadata_validates_mastering_values_and_uses_a_finite_fallback() {
++        use crate::renderer::pipeline::{HdrMetadata, MasteringDisplayMetadata};
++        let source = |min, max| {
++            crate::renderer::pipeline::SourceColorState::new(
++                ColorPrimaries::Bt2020,
++                TransferFunction::Pq,
++            )
++            .hdr_metadata(Some(HdrMetadata::new(
++                Some(MasteringDisplayMetadata {
++                    display_primaries: None,
++                    white_point: None,
++                    min_luminance_nits: Some(min),
++                    max_luminance_nits: Some(max),
++                }),
++                None,
++            )))
++        };
++        for (min, max) in [(f32::NAN, f32::INFINITY), (-1.0, -1.0), (2000.0, 1000.0)] {
++            assert_eq!(
++                super::Hdr10LayerMetadata::for_source(source(min, max)),
++                Some(super::Hdr10LayerMetadata {
++                    min_nits: 0.0,
++                    max_nits: 1000.0
++                })
++            );
++        }
++        assert_eq!(
++            super::Hdr10LayerMetadata::for_source(source(0.0001, 4000.0)),
++            Some(super::Hdr10LayerMetadata {
++                min_nits: 0.0001,
++                max_nits: 4000.0
++            })
++        );
++        assert_eq!(
++            super::Hdr10LayerMetadata::for_source(source(0.0, 20_000.0))
++                .unwrap()
++                .max_nits,
++            10_000.0
++        );
++        assert!(
++            super::Hdr10LayerMetadata::for_source(
++                crate::renderer::pipeline::SourceColorState::default()
++            )
++            .is_none()
++        );
++    }
++
+     #[test]
+     fn reported_display_headroom_drives_output_mode_negotiation() {
+         // The renderer negotiates on the render thread, where AppKit must not
+diff --git a/crates/erika/src/renderer/metal/mod.rs b/crates/erika/src/renderer/metal/mod.rs
+index cfc887b..90bb7b4 100644
+--- a/crates/erika/src/renderer/metal/mod.rs
++++ b/crates/erika/src/renderer/metal/mod.rs
+@@ -1152,9 +1152,9 @@ impl RendererBackend for MetalRenderer {
+             },
+             native_data_space: -1,
+             requested_headroom: self.output_mode.headroom(),
+-            active_headroom: if is_hdr10_pq {
+-                10_000.0 / 203.0
+-            } else if extended {
++            // PQ's 10,000/203 encoding range is not the negotiated screen
++            // headroom. Report the host-resolved output mode for both paths.
++            active_headroom: if extended {
+                 active_output_mode.headroom()
+             } else {
+                 1.0

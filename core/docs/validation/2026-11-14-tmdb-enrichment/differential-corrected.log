@@ -1,0 +1,52 @@
+Building for debugging...
+[Computing dependencies]
+[Using on-disk description]
+[1 / 94] Get
+[3 / 14] MetadataKitTests-product
+[8 / 19] MetadataKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbBatchConcurrencyTests.swift:216:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+214 |     nonisolated(unsafe) private static var peakValue = 0
+215 |     nonisolated(unsafe) private static var startedValue = 0
+216 |     nonisolated(unsafe) private static let counterLock = NSLock()
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+217 | 
+218 |     /// 桩被请求的总次数（判断「取消后还有没有继续派发」）。
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbEnricherTests.swift:418:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+416 |         }
+417 |         let key = TMDbEntityKey.season(tvID: 100, number: 1)
+418 |         try await enricher.fetchAndStore(key: key)
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+419 |         let stored = try await store.tmdbPayload(key: key, language: "zh-CN")
+420 |         let cached = try XCTUnwrap(stored)
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[12 / 18] MetadataKitTests-product
+[14 / 18] MetadataKitTests-product
+[16 / 18] MetadataKitTests-product
+Build complete! (2.86秒)
+Test Suite 'Selected tests' started at 2026-11-14 02:24:18.750.
+Test Suite 'MetadataKitTests.xctest' started at 2026-11-14 02:24:18.751.
+Test Suite 'RustTMDbEnrichmentTests' started at 2026-11-14 02:24:18.751.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testAiringAndFreshnessDecisionsMatchNativeAcrossCompleteDateCases]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testAiringAndFreshnessDecisionsMatchNativeAcrossCompleteDateCases]' passed (0.049 seconds).
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testBatchAiringSeasonRefreshUnsupportedCountsAndResumeMatchNative]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testBatchAiringSeasonRefreshUnsupportedCountsAndResumeMatchNative]' passed (0.231 seconds).
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCancellationInProgressStopsRefillAndDrainsFourEnteredWorkers]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCancellationInProgressStopsRefillAndDrainsFourEnteredWorkers]' passed (0.512 seconds).
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCollectionResolutionBudgetManualBindingAndExactCacheIDsMatchNative]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbEnrichmentTests.swift:114: error: -[MetadataKitTests.RustTMDbEnrichmentTests testCollectionResolutionBudgetManualBindingAndExactCacheIDsMatchNative] : XCTAssertTrue failed
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbEnrichmentTests.swift:116: error: -[MetadataKitTests.RustTMDbEnrichmentTests testCollectionResolutionBudgetManualBindingAndExactCacheIDsMatchNative] : failed - Missing exact payload
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCollectionResolutionBudgetManualBindingAndExactCacheIDsMatchNative]' failed (1.132 seconds).
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCompleteRefreshAuthorityFreshnessSearchAndFailureModelsMatchNative]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbEnrichmentTests.swift:75: error: -[MetadataKitTests.RustTMDbEnrichmentTests testCompleteRefreshAuthorityFreshnessSearchAndFailureModelsMatchNative] : XCTAssertEqual failed: ("["/movie/1 api_key=fixture&append_to_response=credits,images,external_ids,content_ratings&language=en-US", "/movie/1 api_key=fixture&append_to_response=credits,images,external_ids,content_ratings&language=en-US", "/movie/1 api_key=fixture&append_to_response=credits,images,external_ids,content_ratings&language=en-US", "/movie/500 api_key=fixture&append_to_response=credits,images,external_ids,content_ratings&language=en-US", "/movie/500 api_key=fixture&append_to_response=credits,images,external_ids,content_ratings&language=en-US", "/movie/500 api_key=fixture&append_to_response=credits,images,external_ids,content_ratings&language=en-US", "/search/movie api_key=fixture&language=en-US&query=作品&year=2024"]") is not equal to ("["/movie/1 api_key=fixture&append_to_response=credits,images,external_ids,content_ratings&language=en-US", "/movie/1 api_key=fixture&append_to_response=credits,images,external_ids,content_ratings&language=en-US", "/movie/1 api_key=fixture&append_to_response=credits,images,external_ids,content_ratings&language=en-US", "/movie/500 api_key=fixture&append_to_response=credits,images,external_ids,content_ratings&language=en-US", "/search/movie api_key=fixture&language=en-US&query=作品&year=2024"]")
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCompleteRefreshAuthorityFreshnessSearchAndFailureModelsMatchNative]' failed (0.944 seconds).
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testSingleFlightLanguageIsolationFailureAndRetirementMatchNative]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testSingleFlightLanguageIsolationFailureAndRetirementMatchNative]' passed (0.856 seconds).
+Test Suite 'RustTMDbEnrichmentTests' failed at 2026-11-14 02:24:22.476.
+	 Executed 6 tests, with 3 failures (0 unexpected) in 3.724 (3.726) seconds
+Test Suite 'MetadataKitTests.xctest' failed at 2026-11-14 02:24:22.476.
+	 Executed 6 tests, with 3 failures (0 unexpected) in 3.724 (3.726) seconds
+Test Suite 'Selected tests' failed at 2026-11-14 02:24:22.476.
+	 Executed 6 tests, with 3 failures (0 unexpected) in 3.724 (3.727) seconds
+Note: Some test targets reported failures:
+  - MetadataKitTests (XCTest)

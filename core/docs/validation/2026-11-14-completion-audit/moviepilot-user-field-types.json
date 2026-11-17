@@ -1,0 +1,11 @@
+{
+  "name": "str",
+  "email": "str",
+  "is_active": "bool",
+  "is_superuser": "bool",
+  "avatar": "str",
+  "is_otp": "bool",
+  "permissions": "dict",
+  "settings": "dict",
+  "id": "int"
+}

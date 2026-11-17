@@ -1,0 +1,155 @@
+{
+  "rust": 134,
+  "abi": {
+    "moviepilot-contract-tests.log": 10,
+    "danmaku-contract-tests.log": 4,
+    "intro-contract-tests.log": 9,
+    "intro-provider-contract-tests.log": 6,
+    "danmaku-cache-contract-tests.log": 6,
+    "network-contract-tests.log": 7,
+    "tmdb-matcher-contract-tests.log": 4,
+    "tmdb-enrichment-contract-tests.log": 8,
+    "intro-identity-contract-tests.log": 6,
+    "bangumi-contract-tests.log": 4,
+    "repository-progress-contract-tests.log": 4,
+    "media-repository-contract-tests.log": 6,
+    "danmaku-policy-contract-tests.log": 4,
+    "repository-composition-contract-tests.log": 3,
+    "media-login-contract-tests.log": 10,
+    "tmdb-wire-contract-tests.log": 5,
+    "standalone-contract-tests.log": 10,
+    "repository-flow-contract-tests.log": 5,
+    "danmaku-flow-contract-tests.log": 6
+  },
+  "abiTotal": 117,
+  "packages": {
+    "OcPlayerCore": {
+      "executed": 19,
+      "skipped": 0,
+      "failures": 0
+    },
+    "JellyfinKit": {
+      "executed": 255,
+      "skipped": 0,
+      "failures": 0
+    },
+    "MetadataKit": {
+      "executed": 337,
+      "skipped": 0,
+      "failures": 0
+    },
+    "MoviePilotKit": {
+      "executed": 124,
+      "skipped": 0,
+      "failures": 0
+    },
+    "BangumiKit": {
+      "executed": 99,
+      "skipped": 0,
+      "failures": 0
+    },
+    "PlaybackKit": {
+      "executed": 96,
+      "skipped": 0,
+      "failures": 0
+    },
+    "DanmakuKit": {
+      "executed": 272,
+      "skipped": 0,
+      "failures": 0
+    }
+  },
+  "packageTotal": 1202,
+  "appTests": {
+    "executed": 1008,
+    "passed": 989,
+    "skipped": 19,
+    "failed": 0
+  },
+  "coreDisabledMetadata": {
+    "executed": 337,
+    "passed": 301,
+    "skipped": 36,
+    "failed": 0
+  },
+  "runtimeSections": {
+    "__TEXT,__text": {
+      "bytes": 7356156,
+      "sha256": "76fedfc3723c196b01f76526162511a38f49c6077668c6ce83c15fcdf48b8ab4"
+    },
+    "__TEXT,__stubs": {
+      "bytes": 1860,
+      "sha256": "b50d10a6aa104a51e11d7b0f103d08694cacd957316bd9aa91beb16e16ff467f"
+    },
+    "__TEXT,__stub_helper": {
+      "bytes": 1884,
+      "sha256": "7739092edbfd1054755f689a236441aa335e7d1bf32398e0c9739d8ba2d03120"
+    },
+    "__TEXT,__gcc_except_tab": {
+      "bytes": 362676,
+      "sha256": "ddc384d2c482757192252f77d60785d886b7905b08c6e6c7dbbc27527c1f9ba1"
+    },
+    "__TEXT,__cstring": {
+      "bytes": 116062,
+      "sha256": "79ca791bc05eeb3ca945d52502def785204809628a0d6e5d296b8cc0c49bcde6"
+    },
+    "__TEXT,__const": {
+      "bytes": 1038072,
+      "sha256": "57038ee7f80d3325876e9c781a473c2ddd873287f63748a2590ba987a2e296c3"
+    },
+    "__TEXT,__unwind_info": {
+      "bytes": 150656,
+      "sha256": "cef237e437fbd98a863c8d83284c2c2e2fbcd79512e7d9967ff28cc43cfb5fe4"
+    },
+    "__TEXT,__eh_frame": {
+      "bytes": 815032,
+      "sha256": "34d074c1d4262ebf85009048362e3e82041ef879d378bf5f4bdf6d33d2b9140c"
+    },
+    "__DATA_CONST,__const": {
+      "bytes": 441792,
+      "sha256": "439101c598ba5a65a0c3567c1fb5f70de44cf884844b260e66b679f29cbe9153"
+    },
+    "__DATA_CONST,__got": {
+      "bytes": 32,
+      "sha256": "85bb086f83aec9c0838ca020ed7f8858402bfc17846a8cf5feee21247cc81e8f"
+    },
+    "__DATA,__la_symbol_ptr": {
+      "bytes": 1240,
+      "sha256": "c14b9090a24f43cfc32f3cf362f3203d5425e0c60aa459ce81296b1fcd4e4622"
+    },
+    "__DATA,__data": {
+      "bytes": 25240,
+      "sha256": "9d3828a3aa96a3237771dd0c54d15002b33a6fe20b2946d5b7431a3d2d5d2d1f"
+    },
+    "__DATA,__thread_vars": {
+      "bytes": 408,
+      "sha256": "3f5660fae9508d5fa4289b7c14b950e641c9a5646f06b3f0251060e7f03adebc"
+    },
+    "__DATA,__thread_data": {
+      "bytes": 232,
+      "sha256": "9ae65cf32e8d10cfc6d077df31c5a82287d7ea9108a1e39d4f10a82ea393d883"
+    }
+  },
+  "librarySha256": "0031b77c4a1bc3cebd6423788e57891d4e78e34bdf7d1344cd3c00a19ff66ce8",
+  "embeddedLibrarySha256": "fa96a86b2e81b9e9119e7240e0d99a49f1d5cee770cceb87e475f7bf42aa862f",
+  "outputDirectory": "/tmp/ocp-repository-flow-macos",
+  "app": "/tmp/ocp-repository-flow-macos/DerivedData/Build/Products/Debug/OcPlayer.app",
+  "sourceBase": {
+    "core": "6585c59a77b08c43bd5058e22d8d6faa83e55c42",
+    "apple": "1989b231d94973ac6811b45230493777ba5d0f8b"
+  },
+  "playback": {
+    "completed": true,
+    "coreAvailable": true,
+    "renderFailures": 0,
+    "audioFailures": 0,
+    "bundledLibrary": true
+  },
+  "eof": {
+    "completed": true,
+    "coreAvailable": true,
+    "renderFailures": 0,
+    "audioFailures": 0,
+    "bundledLibrary": true
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "OcPlayerCore": {
+    "executed": 19,
+    "skipped": 0,
+    "failures": 0
+  },
+  "JellyfinKit": {
+    "executed": 255,
+    "skipped": 0,
+    "failures": 0
+  },
+  "MetadataKit": {
+    "executed": 337,
+    "skipped": 0,
+    "failures": 0
+  },
+  "MoviePilotKit": {
+    "executed": 124,
+    "skipped": 0,
+    "failures": 0
+  },
+  "BangumiKit": {
+    "executed": 99,
+    "skipped": 0,
+    "failures": 0
+  },
+  "PlaybackKit": {
+    "executed": 96,
+    "skipped": 0,
+    "failures": 0
+  },
+  "DanmakuKit": {
+    "executed": 272,
+    "skipped": 0,
+    "failures": 0
+  }
+}

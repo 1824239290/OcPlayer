@@ -1,0 +1,17 @@
+F.......
+======================================================================
+FAIL: test_account_retirement_rejects_late_http_sql_and_does_not_reuse_tokens (__main__.ProgressContract.test_account_retirement_rejects_late_http_sql_and_does_not_reuse_tokens)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/bangumi_progress_contract.py", line 190, in test_account_retirement_rejects_late_http_sql_and_does_not_reuse_tokens
+    self.success(method, **args)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/bangumi_sync_contract.py", line 45, in success
+    self.assertTrue(reply['ok'], reply)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : {'ok': False, 'code': 1001, 'retryable': False, 'message': 'unknown method: configure', 'data': None}
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.666s
+
+FAILED (failures=1)

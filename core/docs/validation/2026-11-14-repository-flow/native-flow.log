@@ -1,0 +1,115 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Constructing description]
+[Pre-planning 1 / 1106]
+[Planning deferred tasks]
+[1 / 104] Atomics
+[8 / 29] MetadataKit
+[12 / 33] MetadataKit
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/Media/MediaRepository+Detail.swift:60:49: warning: immutable value 'store' was never used; consider replacing with '_' or removing it [#NoUsage]
+ 58 |         var members: [MediaItem] = []
+ 59 |         var memberTotal: Int?
+ 60 |         if cachedItem.item.kind == .series, let store {
+    |                                                 `- warning: immutable value 'store' was never used; consider replacing with '_' or removing it [#NoUsage]
+ 61 |             seasons = (await read { try await $0.seasons(seriesID: itemID, tenant: tenant) }) ?? []
+ 62 |             if let seasonID = try? repositoryDefaultSeason(in: seasons) {
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbEnricher.swift:283:40: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+281 |         "batch.begin",
+282 |         [
+283 |           "batchID": id, "configured": await client.isConfigured,
+    |                                        `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+284 |           "items": rust.object(items.map(RustTMDbMatcher.Item.init)),
+285 |         ])
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[17 / 32] MetadataKit
+[20 / 31] MetadataKitTests-product
+[22 / 33] MetadataKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbBatchConcurrencyTests.swift:216:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+214 |     nonisolated(unsafe) private static var peakValue = 0
+215 |     nonisolated(unsafe) private static var startedValue = 0
+216 |     nonisolated(unsafe) private static let counterLock = NSLock()
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+217 | 
+218 |     /// 桩被请求的总次数（判断「取消后还有没有继续派发」）。
+[28 / 32] MetadataKitTests-product
+[30 / 32] MetadataKitTests-product
+Build complete! (4.23秒)
+Test Suite 'Selected tests' started at 2026-11-14 08:08:32.960.
+Test Suite 'MetadataKitTests.xctest' started at 2026-11-14 08:08:32.961.
+Test Suite 'MediaRepositoryTests' started at 2026-11-14 08:08:32.961.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testCachedHomeReadsDiskWithoutNetwork]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testCachedHomeReadsDiskWithoutNetwork]' passed (0.131 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testConcurrentDetailRefreshIsCoalesced]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testConcurrentDetailRefreshIsCoalesced]' passed (0.015 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testDetailRestoresFromDiskInNewRepository]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testDetailRestoresFromDiskInNewRepository]' passed (0.012 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testEmptyRailResponseClearsStaleRail]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testEmptyRailResponseClearsStaleRail]' passed (0.013 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testLatePlayStateRepliesCannotPersistAfterShutdownOrCancellation]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testLatePlayStateRepliesCannotPersistAfterShutdownOrCancellation]' passed (0.010 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testMarkPlayedUsesServerStateAndWritesStore]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testMarkPlayedUsesServerStateAndWritesStore]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testMemoryOnlyRepositoryKeepsProtocolWithoutStore]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testMemoryOnlyRepositoryKeepsProtocolWithoutStore]' passed (0.003 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testPagesPersistAndMergeAcrossInstances]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testPagesPersistAndMergeAcrossInstances]' passed (0.014 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testPartialRailFailureKeepsPreviousContentAndReportsFailure]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testPartialRailFailureKeepsPreviousContentAndReportsFailure]' passed (0.012 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testPlaybackProgressUpdatesHomeDetailPagesAndStore]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testPlaybackProgressUpdatesHomeDetailPagesAndStore]' passed (0.012 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testSearchTermsHaveSeparatePageCaches]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testSearchTermsHaveSeparatePageCaches]' passed (0.010 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testShutdownRejectsNewPlayStateRequests]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testShutdownRejectsNewPlayStateRequests]' passed (0.001 seconds).
+Test Suite 'MediaRepositoryTests' passed at 2026-11-14 08:08:33.201.
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.240 (0.241) seconds
+Test Suite 'RustMediaRepositoryTests' started at 2026-11-14 08:08:33.202.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testCancelledWaiterAndInvalidationDoNotCancelOrRetireSharedRefresh]' started.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testCancelledWaiterAndInvalidationDoNotCancelOrRetireSharedRefresh]' passed (0.359 seconds).
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testEveryMemoryBucketMatchesNativeLRUAcrossMutationAndWideIntegerCorpus]' started.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testEveryMemoryBucketMatchesNativeLRUAcrossMutationAndWideIntegerCorpus]' passed (2.920 seconds).
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testNativeAndCoreDatabaseMigrationRebuildAndFileAccountingMatch]' started.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testNativeAndCoreDatabaseMigrationRebuildAndFileAccountingMatch]' passed (0.051 seconds).
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testPublicMemoryOnlyRepositoryHomeDetailPageAndProgressMatchIndependentNative]' started.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testPublicMemoryOnlyRepositoryHomeDetailPageAndProgressMatchIndependentNative]' passed (0.009 seconds).
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testStructuredPageAndEpisodeKeysRetainNativeIdentity]' started.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testStructuredPageAndEpisodeKeysRetainNativeIdentity]' passed (0.004 seconds).
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testUnrecoverableDatabaseParentFailureIsReturnedByBothImplementations]' started.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testUnrecoverableDatabaseParentFailureIsReturnedByBothImplementations]' passed (0.006 seconds).
+Test Suite 'RustMediaRepositoryTests' passed at 2026-11-14 08:08:36.551.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 3.349 (3.350) seconds
+Test Suite 'RustRepositoryCompositionTests' started at 2026-11-14 08:08:36.551.
+Test Case '-[MetadataKitTests.RustRepositoryCompositionTests testAllHomePartialFailureCombinationsMatchNativeWithoutExtraRequests]' started.
+Test Case '-[MetadataKitTests.RustRepositoryCompositionTests testAllHomePartialFailureCombinationsMatchNativeWithoutExtraRequests]' passed (0.068 seconds).
+Test Case '-[MetadataKitTests.RustRepositoryCompositionTests testDiskPageReductionMatchesIndependentNativeAcrossGapsAndDuplicates]' started.
+Test Case '-[MetadataKitTests.RustRepositoryCompositionTests testDiskPageReductionMatchesIndependentNativeAcrossGapsAndDuplicates]' passed (0.079 seconds).
+Test Case '-[MetadataKitTests.RustRepositoryCompositionTests testSeriesMissingHintSpecialSeasonAndCollectionFallbackMatchNative]' started.
+Test Case '-[MetadataKitTests.RustRepositoryCompositionTests testSeriesMissingHintSpecialSeasonAndCollectionFallbackMatchNative]' passed (0.049 seconds).
+Test Suite 'RustRepositoryCompositionTests' passed at 2026-11-14 08:08:36.746.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.195 (0.195) seconds
+Test Suite 'RustRepositoryFlowTests' started at 2026-11-14 08:08:36.746.
+Test Case '-[MetadataKitTests.RustRepositoryFlowTests testConcurrentDetailWaitersAndAuxiliaryFailureMatchNativeRequestCounts]' started.
+Test Case '-[MetadataKitTests.RustRepositoryFlowTests testConcurrentDetailWaitersAndAuxiliaryFailureMatchNativeRequestCounts]' passed (0.186 seconds).
+Test Case '-[MetadataKitTests.RustRepositoryFlowTests testEveryPublicRefreshUsesRetainedFlowsAndRetiresPrimaryFailure]' started.
+Test Case '-[MetadataKitTests.RustRepositoryFlowTests testEveryPublicRefreshUsesRetainedFlowsAndRetiresPrimaryFailure]' passed (0.014 seconds).
+Test Case '-[MetadataKitTests.RustRepositoryFlowTests testPageIdentityMatchesNativeFullDescriptorAndSignedWindowCorpus]' started.
+Test Case '-[MetadataKitTests.RustRepositoryFlowTests testPageIdentityMatchesNativeFullDescriptorAndSignedWindowCorpus]' passed (0.045 seconds).
+Test Suite 'RustRepositoryFlowTests' passed at 2026-11-14 08:08:36.992.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.245 (0.245) seconds
+Test Suite 'RustRepositoryProgressTests' started at 2026-11-14 08:08:36.992.
+Test Case '-[MetadataKitTests.RustRepositoryProgressTests testAllPublicProjectionsConfirmAndReplaceProgressLikeIndependentNative]' started.
+Test Case '-[MetadataKitTests.RustRepositoryProgressTests testAllPublicProjectionsConfirmAndReplaceProgressLikeIndependentNative]' passed (0.013 seconds).
+Test Case '-[MetadataKitTests.RustRepositoryProgressTests testForeignDiskConfirmationAndOwnedPostShutdownFinalWriteMatchNative]' started.
+Test Case '-[MetadataKitTests.RustRepositoryProgressTests testForeignDiskConfirmationAndOwnedPostShutdownFinalWriteMatchNative]' passed (0.037 seconds).
+Test Case '-[MetadataKitTests.RustRepositoryProgressTests testRemoteConfirmationMatchesNativeAtSignedDateAndOneSecondBoundaries]' started.
+Test Case '-[MetadataKitTests.RustRepositoryProgressTests testRemoteConfirmationMatchesNativeAtSignedDateAndOneSecondBoundaries]' passed (0.071 seconds).
+Test Suite 'RustRepositoryProgressTests' passed at 2026-11-14 08:08:37.114.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.122 (0.122) seconds
+Test Suite 'MetadataKitTests.xctest' passed at 2026-11-14 08:08:37.114.
+	 Executed 27 tests, with 0 failures (0 unexpected) in 4.150 (4.153) seconds
+Test Suite 'Selected tests' passed at 2026-11-14 08:08:37.114.
+	 Executed 27 tests, with 0 failures (0 unexpected) in 4.150 (4.154) seconds

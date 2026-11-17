@@ -1,0 +1,48 @@
+   Compiling ocp-session v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-session)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.57s
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_session-7b0b9f83c071257d)
+
+running 34 tests
+test engine::tests::foreground_requires_intent_and_current_state_before_rebuilding ... ok
+test engine::tests::new_source_rejects_previous_generation_and_resets_failure_history ... ok
+test engine::tests::only_tail_read_eio_is_folded ... ok
+test engine::tests::stale_tail_pair_folds_once_and_real_error_is_preserved ... ok
+test engine::tests::nil_and_empty_messages_share_the_native_deduplication_key ... ok
+test flow::tests::cancellation_or_new_play_invalidates_queued_adoption ... ok
+test flow::tests::all_candidates_exhausted_explains_chain_but_single_source_keeps_original_error ... ok
+test flow::tests::chain_preserves_identity_history_and_limits_across_replacements ... ok
+test flow::tests::classifier_preserves_native_priority_and_capabilities ... ok
+test flow::tests::recovery_stops_for_auth_cancel_missing_item_and_missing_context ... ok
+test preparation::tests::continuation_invalid_and_retired_results_cannot_consume_new_work ... ok
+test preparation::tests::collection_series_reads_home_then_uses_new_item_position_and_exact_title ... ok
+test preparation::tests::empty_result_and_same_id_resume_match_native_fallback ... ok
+test preparation::tests::episodes_filter_specials_and_choose_first_unwatched_without_reordering ... ok
+test preparation::tests::full_source_order_skips_only_bad_alternate_and_preserves_identity ... ok
+test preparation::tests::wrong_receipts_and_responses_are_nonconsuming_and_invalidation_retires_ready ... ok
+test recovery::tests::background_rebuild_trusts_loaded_position_including_zero ... ok
+test recovery::tests::invalid_recovery_positions_are_rejected ... ok
+test preparation::tests::continuation_noop_and_unanchored_windows_do_not_leave_leases ... ok
+test preparation::tests::continuation_uses_bounded_server_window_and_first_current_anchor ... ok
+test preparation::tests::info_and_primary_failures_use_direct_fallback_and_original_failure ... ok
+test recovery::tests::manual_retry_preserves_threshold_fallback_and_loading_guard ... ok
+test report::tests::terminal_requires_clean_stopped_and_known_duration ... ok
+test report::tests::pause_reports_once_then_resuming_restores_periodic_reporting ... ok
+test tests::engine_unknown_duration_preserves_timeline_and_clears_previous_clamp ... ok
+test preparation::tests::bounds_and_exhaustion_fail_before_mutation_and_explicit_cleanup_works ... ok
+test tests::failed_candidate_advances_and_generation_changes ... ok
+test tracks::tests::external_fallback_and_off_are_preserved ... ok
+test tracks::tests::import_commits_name_before_selection_and_failure_keeps_gate_open ... ok
+test tracks::tests::reentrant_refresh_cannot_replace_pending_effect ... ok
+test tracks::tests::removal_unlocks_manual_only_after_success_and_selected_removal ... ok
+test tracks::tests::reset_and_batches_retire_old_work_without_consuming_current ... ok
+test tracks::tests::track_ids_are_scoped_to_kind ... ok
+test tracks::tests::scoring_respects_field_trust_and_ties ... ok
+
+test result: ok. 34 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ocp_session
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

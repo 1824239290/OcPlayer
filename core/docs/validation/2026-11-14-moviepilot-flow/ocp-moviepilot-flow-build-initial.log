@@ -1,0 +1,24 @@
+   Compiling ocp-moviepilot v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-moviepilot)
+   Compiling ocp-core v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-core)
+error[E0308]: mismatched types
+   --> crates/ocp-core/src/lib.rs:669:71
+    |
+669 | ...                   state.moviepilot_flow.retain_revision(revision);
+    |                                             --------------- ^^^^^^^^ expected `u64`, found `Option<u64>`
+    |                                             |
+    |                                             arguments to this method are incorrect
+    |
+    = note: expected type `u64`
+               found enum `std::option::Option<u64>`
+note: method defined here
+   --> crates/ocp-moviepilot/src/flow.rs:174:12
+    |
+174 |     pub fn retain_revision(&mut self, revision: u64) {
+    |            ^^^^^^^^^^^^^^^
+help: consider using `Option::expect` to unwrap the `std::option::Option<u64>` value, panicking if the value is an `Option::None`
+    |
+669 |                                 state.moviepilot_flow.retain_revision(revision.expect("REASON"));
+    |                                                                               +++++++++++++++++
+
+For more information about this error, try `rustc --explain E0308`.
+error: could not compile `ocp-core` (lib) due to 1 previous error

@@ -1,0 +1,143 @@
+   Compiling ocp-http v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-http)
+   Compiling ocp-bangumi v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-bangumi)
+   Compiling ocp-moviepilot v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-moviepilot)
+   Compiling ocp-jellyfin v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-jellyfin)
+   Compiling ocp-danmaku v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-danmaku)
+   Compiling ocp-tmdb v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-tmdb)
+   Compiling ocp-core v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-core)
+error[E0277]: `dyn for<'a> Fn(&'a str) -> Cow<'_, [u8]>` cannot be shared between threads safely
+    --> crates/ocp-core/src/lib.rs:1897:13
+     |
+1897 |     service.run(cancellable(cancelled, async move {
+     |             ^^^ `dyn for<'a> Fn(&'a str) -> Cow<'_, [u8]>` cannot be shared between threads safely
+     |
+     = help: the trait `Sync` is not implemented for `dyn for<'a> Fn(&'a str) -> Cow<'_, [u8]>`
+     = note: required for `&dyn for<'a> Fn(&'a str) -> Cow<'_, [u8]>` to implement `Send`
+note: required because it appears within the type `std::option::Option<&dyn for<'a> Fn(&'a str) -> Cow<'_, [u8]>>`
+    --> /opt/homebrew/Cellar/rust/1.99.1/lib/rustlib/src/rust/library/core/src/option.rs:598:10
+     |
+ 598 | pub enum Option<T> {
+     |          ^^^^^^
+note: required because it appears within the type `form_urlencoded::Serializer<'_, std::string::String>`
+    --> /Users/jumusu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/form_urlencoded-1.2.2/src/lib.rs:176:12
+     |
+ 176 | pub struct Serializer<'a, T: Target> {
+     |            ^^^^^^^^^^
+note: required because it's used within this `async` fn body
+    --> crates/ocp-http/src/lib.rs:206:5
+     |
+ 206 | /     {
+ 207 | |         let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+ 208 | |         for (key, value) in fields {
+ 209 | |             serializer.append_pair(key.as_ref(), value.as_ref());
+...    |
+ 220 | |         .await
+ 221 | |     }
+     | |_____^
+note: required because it's used within this `async` fn body
+    --> crates/ocp-moviepilot/src/lib.rs:284:100
+     |
+ 284 |       pub async fn login(&mut self, username: &str, password: &str) -> Result<User, MoviePilotError> {
+     |  ____________________________________________________________________________________________________^
+ 285 | |         let response = self
+ 286 | |             .http
+ 287 | |             .form(
+...    |
+ 303 | |         self.current_user().await
+ 304 | |     }
+     | |_____^
+note: required because it's used within this `async` block
+    --> crates/ocp-core/src/lib.rs:1897:40
+     |
+1897 |     service.run(cancellable(cancelled, async move {
+     |                                        ^^^^^^^^^^
+note: required because it's used within this `async` fn body
+    --> crates/ocp-core/src/lib.rs:81:30
+     |
+  81 |   ) -> Result<T, CommandError> {
+     |  ______________________________^
+  82 | |     let Some(cancelled) = cancelled else {
+  83 | |         return operation.await;
+  84 | |     };
+...    |
+  98 | | }
+     | |_^
+note: required by a bound in `NetworkService::run`
+    --> crates/ocp-core/src/network.rs:151:68
+     |
+ 149 |     pub(crate) fn run<T: Send + 'static>(
+     |                   --- required by a bound in this associated function
+ 150 |         &self,
+ 151 |         operation: impl Future<Output = Result<T, CommandError>> + Send + 'static,
+     |                                                                    ^^^^ required by this bound in `NetworkService::run`
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `ocp-core` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error[E0277]: `dyn for<'a> Fn(&'a str) -> Cow<'_, [u8]>` cannot be shared between threads safely
+    --> crates/ocp-core/src/lib.rs:1897:13
+     |
+1897 |     service.run(cancellable(cancelled, async move {
+     |             ^^^ `dyn for<'a> Fn(&'a str) -> Cow<'_, [u8]>` cannot be shared between threads safely
+     |
+     = help: the trait `Sync` is not implemented for `dyn for<'a> Fn(&'a str) -> Cow<'_, [u8]>`
+     = note: required for `&dyn for<'a> Fn(&'a str) -> Cow<'_, [u8]>` to implement `Send`
+note: required because it appears within the type `std::option::Option<&dyn for<'a> Fn(&'a str) -> Cow<'_, [u8]>>`
+    --> /opt/homebrew/Cellar/rust/1.99.1/lib/rustlib/src/rust/library/core/src/option.rs:598:10
+     |
+ 598 | pub enum Option<T> {
+     |          ^^^^^^
+note: required because it appears within the type `form_urlencoded::Serializer<'_, std::string::String>`
+    --> /Users/jumusu/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/form_urlencoded-1.2.2/src/lib.rs:176:12
+     |
+ 176 | pub struct Serializer<'a, T: Target> {
+     |            ^^^^^^^^^^
+note: required because it's used within this `async` fn body
+    --> crates/ocp-http/src/lib.rs:206:5
+     |
+ 206 | /     {
+ 207 | |         let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+ 208 | |         for (key, value) in fields {
+ 209 | |             serializer.append_pair(key.as_ref(), value.as_ref());
+...    |
+ 220 | |         .await
+ 221 | |     }
+     | |_____^
+note: required because it's used within this `async` fn body
+    --> crates/ocp-moviepilot/src/lib.rs:284:100
+     |
+ 284 |       pub async fn login(&mut self, username: &str, password: &str) -> Result<User, MoviePilotError> {
+     |  ____________________________________________________________________________________________________^
+ 285 | |         let response = self
+ 286 | |             .http
+ 287 | |             .form(
+...    |
+ 303 | |         self.current_user().await
+ 304 | |     }
+     | |_____^
+note: required because it's used within this `async` block
+    --> crates/ocp-core/src/lib.rs:1897:40
+     |
+1897 |     service.run(cancellable(cancelled, async move {
+     |                                        ^^^^^^^^^^
+note: required because it's used within this `async` fn body
+    --> crates/ocp-core/src/lib.rs:81:30
+     |
+  81 |   ) -> Result<T, CommandError> {
+     |  ______________________________^
+  82 | |     let Some(cancelled) = cancelled else {
+  83 | |         return operation.await;
+  84 | |     };
+...    |
+  98 | | }
+     | |_^
+note: required by a bound in `network::NetworkService::run`
+    --> crates/ocp-core/src/network.rs:151:68
+     |
+ 149 |     pub(crate) fn run<T: Send + 'static>(
+     |                   --- required by a bound in this associated function
+ 150 |         &self,
+ 151 |         operation: impl Future<Output = Result<T, CommandError>> + Send + 'static,
+     |                                                                    ^^^^ required by this bound in `NetworkService::run`
+
+error: could not compile `ocp-core` (lib test) due to 1 previous error

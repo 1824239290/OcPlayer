@@ -1,0 +1,176 @@
+Building for debugging...
+[Constructing description]
+[Planning deferred tasks]
+[1 / 1]
+[6 / 25] DanmakuKit
+[9 / 28] DanmakuKit
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Sources/DanmakuKit/DanmakuLoadOrchestrator.swift:128:26: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 126 |             try Task.checkCancellation()
+ 127 |             if forceRematch {
+ 128 |                 _ = try? await playback.clearDanmaku(uuid: matchContext.uuid)
+     |                          `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 129 |             }
+ 130 |             // 先无条件 claim（幂等，取 max）：isCurrent 依赖 claim 已存在。
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Sources/DanmakuKit/DanmakuLoadOrchestrator.swift:584:32: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 582 |             let accepted: Bool
+ 583 |             if payload.entries != nil || payload.json != nil {
+ 584 |                 accepted = try await playback.replaceDanmaku(
+     |                                `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 585 |                     uuid: uuid,
+ 586 |                     entries: payload.entries ?? [],
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Sources/DanmakuKit/DanmakuLoadOrchestrator.swift:592:32: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 590 |                 )
+ 591 |             } else {
+ 592 |                 accepted = try await playback.clearDanmaku(uuid: uuid)
+     |                                `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 593 |             }
+ 594 |             guard accepted else {
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[15 / 30] DanmakuKit
+[21 / 32] DanmakuKitTests-product
+[25 / 36] DanmakuKitTests-product
+[29 / 35] DanmakuKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuLoadOrchestratorTests.swift:24:9: warning: main actor-isolated property 'cache' can not be mutated from a nonisolated context
+  13 | final class DanmakuLoadOrchestratorTests: XCTestCase {
+  14 | 
+  15 |     private var cache: DanmakuCache!
+     |                 `- note: mutation of this property is only permitted within the actor
+  16 |     private var service: DanmakuService!
+  17 |     private var orchestrator: DanmakuLoadOrchestrator!
+     :
+  22 |         let directory = FileManager.default.temporaryDirectory
+  23 |             .appendingPathComponent("DanmakuOrchestratorTests-\(UUID().uuidString)", isDirectory: true)
+  24 |         cache = DanmakuCache(directory: directory)
+     |         `- warning: main actor-isolated property 'cache' can not be mutated from a nonisolated context
+  25 |         service = DanmakuService(cache: cache)
+  26 |         orchestrator = DanmakuLoadOrchestrator(
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuLoadOrchestratorTests.swift:25:9: warning: main actor-isolated property 'service' can not be mutated from a nonisolated context
+  14 | 
+  15 |     private var cache: DanmakuCache!
+  16 |     private var service: DanmakuService!
+     |                 `- note: mutation of this property is only permitted within the actor
+  17 |     private var orchestrator: DanmakuLoadOrchestrator!
+  18 |     private var playback: FakePlaybackHost!
+     :
+  23 |             .appendingPathComponent("DanmakuOrchestratorTests-\(UUID().uuidString)", isDirectory: true)
+  24 |         cache = DanmakuCache(directory: directory)
+  25 |         service = DanmakuService(cache: cache)
+     |         `- warning: main actor-isolated property 'service' can not be mutated from a nonisolated context
+  26 |         orchestrator = DanmakuLoadOrchestrator(
+  27 |             service: service,
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuLoadOrchestratorTests.swift:25:41: warning: main actor-isolated property 'cache' can not be referenced from a nonisolated context
+  13 | final class DanmakuLoadOrchestratorTests: XCTestCase {
+  14 | 
+  15 |     private var cache: DanmakuCache!
+     |                 `- note: property declared here
+  16 |     private var service: DanmakuService!
+  17 |     private var orchestrator: DanmakuLoadOrchestrator!
+     :
+  23 |             .appendingPathComponent("DanmakuOrchestratorTests-\(UUID().uuidString)", isDirectory: true)
+  24 |         cache = DanmakuCache(directory: directory)
+  25 |         service = DanmakuService(cache: cache)
+     |                                         `- warning: main actor-isolated property 'cache' can not be referenced from a nonisolated context
+  26 |         orchestrator = DanmakuLoadOrchestrator(
+  27 |             service: service,
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuLoadOrchestratorTests.swift:26:9: warning: main actor-isolated property 'orchestrator' can not be mutated from a nonisolated context
+  15 |     private var cache: DanmakuCache!
+  16 |     private var service: DanmakuService!
+  17 |     private var orchestrator: DanmakuLoadOrchestrator!
+     |                 `- note: mutation of this property is only permitted within the actor
+  18 |     private var playback: FakePlaybackHost!
+  19 | 
+     :
+  24 |         cache = DanmakuCache(directory: directory)
+  25 |         service = DanmakuService(cache: cache)
+  26 |         orchestrator = DanmakuLoadOrchestrator(
+     |         `- warning: main actor-isolated property 'orchestrator' can not be mutated from a nonisolated context
+  27 |             service: service,
+  28 |             session: TestSupport.mockedSession(),
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuLoadOrchestratorTests.swift:26:24: warning: call to main actor-isolated initializer 'init(service:session:retryPolicy:aniSkipClient:aniSkipIDResolver:titleAliases:animeSkipClientProvider:theIntroDBClient:introLearningStore:totalBudget:)' in a synchronous nonisolated context [#ActorIsolatedCall]
+  24 |         cache = DanmakuCache(directory: directory)
+  25 |         service = DanmakuService(cache: cache)
+  26 |         orchestrator = DanmakuLoadOrchestrator(
+     |                        `- warning: call to main actor-isolated initializer 'init(service:session:retryPolicy:aniSkipClient:aniSkipIDResolver:titleAliases:animeSkipClientProvider:theIntroDBClient:introLearningStore:totalBudget:)' in a synchronous nonisolated context [#ActorIsolatedCall]
+  27 |             service: service,
+  28 |             session: TestSupport.mockedSession(),
+
+DanmakuKit.DanmakuLoadOrchestrator.init:2:19: note: calls to initializer 'init(service:session:retryPolicy:aniSkipClient:aniSkipIDResolver:titleAliases:animeSkipClientProvider:theIntroDBClient:introLearningStore:totalBudget:)' from outside of its actor context are implicitly asynchronous
+1 | struct DanmakuLoadOrchestrator {
+2 | @MainActor public init(service: DanmakuKit.DanmakuService, session: URLSession = DanmakuNetworking.makeSession(), retryPolicy: DiagnosticsKit.RetryPolicy = RetryPolicy(), aniSkipClient: DanmakuKit.AniSkipClient? = nil, aniSkipIDResolver: DanmakuKit.AniSkipIDResolver? = nil, titleAliases: (any DanmakuKit.DanmakuTitleAliasProviding)? = nil, animeSkipClientProvider: (@Sendable () -> DanmakuKit.AnimeSkipClient?)? = nil, theIntroDBClient: DanmakuKit.TheIntroDBClient? = nil, introLearningStore: DanmakuKit.IntroLearningStore? = nil, totalBudget: Duration = .seconds(30))}
+  |                   `- note: calls to initializer 'init(service:session:retryPolicy:aniSkipClient:aniSkipIDResolver:titleAliases:animeSkipClientProvider:theIntroDBClient:introLearningStore:totalBudget:)' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuLoadOrchestratorTests.swift:27:22: warning: main actor-isolated property 'service' can not be referenced from a nonisolated context
+  14 | 
+  15 |     private var cache: DanmakuCache!
+  16 |     private var service: DanmakuService!
+     |                 `- note: property declared here
+  17 |     private var orchestrator: DanmakuLoadOrchestrator!
+  18 |     private var playback: FakePlaybackHost!
+     :
+  25 |         service = DanmakuService(cache: cache)
+  26 |         orchestrator = DanmakuLoadOrchestrator(
+  27 |             service: service,
+     |                      `- warning: main actor-isolated property 'service' can not be referenced from a nonisolated context
+  28 |             session: TestSupport.mockedSession(),
+  29 |             // 零等待重试策略：编排层透传给网关客户端，重试用例不空等退避。
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuLoadOrchestratorTests.swift:32:9: warning: main actor-isolated property 'playback' can not be mutated from a nonisolated context
+  16 |     private var service: DanmakuService!
+  17 |     private var orchestrator: DanmakuLoadOrchestrator!
+  18 |     private var playback: FakePlaybackHost!
+     |                 `- note: mutation of this property is only permitted within the actor
+  19 | 
+  20 |     override func setUp() {
+     :
+  30 |             retryPolicy: RetryPolicy(attempts: 3, base: 0, jitter: 0.0...0.0)
+  31 |         )
+  32 |         playback = FakePlaybackHost()
+     |         `- warning: main actor-isolated property 'playback' can not be mutated from a nonisolated context
+  33 |     }
+  34 | 
+
+[#ActorIsolatedCall]: <https://docs.swift.org/compiler/documentation/diagnostics/actor-isolated-call>
+[31 / 35] DanmakuKitTests-product
+Build complete! (3.21秒)
+Test Suite 'Selected tests' started at 2026-11-13 22:09:59.621.
+Test Suite 'DanmakuKitTests.xctest' started at 2026-11-13 22:09:59.622.
+Test Suite 'RustIntroProviderTests' started at 2026-11-13 22:09:59.622.
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testActivationAndURLProtocolGateForEveryProvider]' started.
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testActivationAndURLProtocolGateForEveryProvider]' passed (0.071 seconds).
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testAniSkipDecoderUnicodeDuplicatesMalformedAndUnknownTypes]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/RustIntroProviderTests.swift:34: error: -[DanmakuKitTests.RustIntroProviderTests testAniSkipDecoderUnicodeDuplicatesMalformedAndUnknownTypes] : failed - Different decode outcome: {"found":false}, encoding Unicode (UTF-32)
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/RustIntroProviderTests.swift:34: error: -[DanmakuKitTests.RustIntroProviderTests testAniSkipDecoderUnicodeDuplicatesMalformedAndUnknownTypes] : failed - Different decode outcome: {"found":true}, encoding Unicode (UTF-32)
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/RustIntroProviderTests.swift:34: error: -[DanmakuKitTests.RustIntroProviderTests testAniSkipDecoderUnicodeDuplicatesMalformedAndUnknownTypes] : failed - Different decode outcome: {"found":true,"results":null}, encoding Unicode (UTF-32)
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/RustIntroProviderTests.swift:34: error: -[DanmakuKitTests.RustIntroProviderTests testAniSkipDecoderUnicodeDuplicatesMalformedAndUnknownTypes] : failed - Different decode outcome: {"found":false,"found":true}, encoding Unicode (UTF-32)
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/RustIntroProviderTests.swift:34: error: -[DanmakuKitTests.RustIntroProviderTests testAniSkipDecoderUnicodeDuplicatesMalformedAndUnknownTypes] : failed - Different decode outcome: {"found":true,"results":[{"skipType":"future","interval":{"startTime":0,"endTime":90}}]}, encoding Unicode (UTF-32)
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/RustIntroProviderTests.swift:34: error: -[DanmakuKitTests.RustIntroProviderTests testAniSkipDecoderUnicodeDuplicatesMalformedAndUnknownTypes] : failed - Different decode outcome: {"found":true,"results":[{"skipType":"op","skipType":"ed","interval":{"startTime":0,"endTime":90}}]}, encoding Unicode (UTF-32)
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/RustIntroProviderTests.swift:34: error: -[DanmakuKitTests.RustIntroProviderTests testAniSkipDecoderUnicodeDuplicatesMalformedAndUnknownTypes] : failed - Different decode outcome: {"found":true,"results":[{"skipType":"op","interval":{"startTime":0.10000000000000001,"endTime":90.12345678901234}}]}, encoding Unicode (UTF-32)
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/RustIntroProviderTests.swift:39: error: -[DanmakuKitTests.RustIntroProviderTests testAniSkipDecoderUnicodeDuplicatesMalformedAndUnknownTypes] : XCTAssertThrowsError failed: did not throw an error
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testAniSkipDecoderUnicodeDuplicatesMalformedAndUnknownTypes]' failed (0.140 seconds).
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testHintClampAndTimestampSelectionAgainstNative]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/RustIntroProviderTests.swift:71: error: -[DanmakuKitTests.RustIntroProviderTests testHintClampAndTimestampSelectionAgainstNative] : XCTAssertEqual failed: ("Optional(90.0)") is not equal to ("Optional(0.0)")
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testHintClampAndTimestampSelectionAgainstNative]' failed (0.081 seconds).
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testIntroDBStrictIntegersFirstSegmentAndUnicode]' started.
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testIntroDBStrictIntegersFirstSegmentAndUnicode]' passed (0.001 seconds).
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testPublicProviderRequestsAndAniListFallbackThroughRealHTTP]' started.
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testPublicProviderRequestsAndAniListFallbackThroughRealHTTP]' passed (0.076 seconds).
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testStatusAndDecodeFailuresPreserveTypesWithoutHTTPReplay]' started.
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testStatusAndDecodeFailuresPreserveTypesWithoutHTTPReplay]' passed (0.058 seconds).
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testTransportTimeoutRetriesAndCancellationStopsOneAttempt]' started.
+Test Case '-[DanmakuKitTests.RustIntroProviderTests testTransportTimeoutRetriesAndCancellationStopsOneAttempt]' passed (0.228 seconds).
+Test Suite 'RustIntroProviderTests' failed at 2026-11-13 22:10:00.278.
+	 Executed 7 tests, with 9 failures (0 unexpected) in 0.655 (0.656) seconds
+Test Suite 'DanmakuKitTests.xctest' failed at 2026-11-13 22:10:00.278.
+	 Executed 7 tests, with 9 failures (0 unexpected) in 0.655 (0.656) seconds
+Test Suite 'Selected tests' failed at 2026-11-13 22:10:00.278.
+	 Executed 7 tests, with 9 failures (0 unexpected) in 0.655 (0.657) seconds
+Note: Some test targets reported failures:
+  - DanmakuKitTests (XCTest)

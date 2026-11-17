@@ -1,0 +1,58 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Using on-disk description]
+[1 / 1]
+[2 / 21] DanmakuKit
+[4 / 23] DanmakuKit
+[7 / 26] DanmakuKit
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Sources/DanmakuKit/DanmakuLoadOrchestrator.swift:128:26: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 126 |             try Task.checkCancellation()
+ 127 |             if forceRematch {
+ 128 |                 _ = try? await playback.clearDanmaku(uuid: matchContext.uuid)
+     |                          `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 129 |             }
+ 130 |             // 先无条件 claim（幂等，取 max）：isCurrent 依赖 claim 已存在。
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Sources/DanmakuKit/DanmakuLoadOrchestrator.swift:584:32: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 582 |             let accepted: Bool
+ 583 |             if payload.entries != nil || payload.json != nil {
+ 584 |                 accepted = try await playback.replaceDanmaku(
+     |                                `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 585 |                     uuid: uuid,
+ 586 |                     entries: payload.entries ?? [],
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Sources/DanmakuKit/DanmakuLoadOrchestrator.swift:592:32: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 590 |                 )
+ 591 |             } else {
+ 592 |                 accepted = try await playback.clearDanmaku(uuid: uuid)
+     |                                `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 593 |             }
+ 594 |             guard accepted else {
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[11 / 26] DanmakuKit
+[15 / 26] DanmakuKitTests-product
+[17 / 28] DanmakuKitTests-product
+[23 / 27] DanmakuKitTests-product
+Build complete! (2.36秒)
+Test Suite 'Selected tests' started at 2026-11-13 21:10:29.702.
+Test Suite 'DanmakuKitTests.xctest' started at 2026-11-13 21:10:29.703.
+Test Suite 'RustIntroPolicyTests' started at 2026-11-13 21:10:29.703.
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testDetectorMatchesIndependentNativeAcrossSignalsAndNoise]' started.
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testDetectorMatchesIndependentNativeAcrossSignalsAndNoise]' passed (0.365 seconds).
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testLearningConsensusMatchesNativeDistinctEpisodesMedianAndTies]' started.
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testLearningConsensusMatchesNativeDistinctEpisodesMedianAndTies]' passed (0.425 seconds).
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testLearningFilesBidirectionalPersistenceDatesIDsAndEventBounds]' started.
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testLearningFilesBidirectionalPersistenceDatesIDsAndEventBounds]' passed (1.154 seconds).
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testSeekBoundaryAndConfirmedSourceRules]' started.
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testSeekBoundaryAndConfirmedSourceRules]' passed (0.011 seconds).
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testSourceSelectionAndSiblingAggregationMatchNative]' started.
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testSourceSelectionAndSiblingAggregationMatchNative]' passed (0.153 seconds).
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testTimestampAndCommentFieldsMatchNativeUnicodeAndNumberRules]' started.
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testTimestampAndCommentFieldsMatchNativeUnicodeAndNumberRules]' passed (0.034 seconds).
+Test Suite 'RustIntroPolicyTests' passed at 2026-11-13 21:10:31.845.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 2.141 (2.142) seconds
+Test Suite 'DanmakuKitTests.xctest' passed at 2026-11-13 21:10:31.845.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 2.141 (2.142) seconds
+Test Suite 'Selected tests' passed at 2026-11-13 21:10:31.845.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 2.141 (2.143) seconds
