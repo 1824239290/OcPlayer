@@ -80,12 +80,15 @@ $receipt.PSObject.Properties.Remove('kernelRoot')
 $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $receiptPath -Encoding utf8
 if (!$VcRuntimeDirectory) {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-    if (!(Test-Path -LiteralPath $vswhere)) { throw 'Pass -VcRuntimeDirectory pointing to the official release Microsoft.VC143.CRT directory.' }
+    if (!(Test-Path -LiteralPath $vswhere)) { throw 'Pass -VcRuntimeDirectory pointing to the official MSVC v14 release CRT directory.' }
     $vsInstallation = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
     $redistVersion = Get-ChildItem -LiteralPath (Join-Path $vsInstallation 'VC\Redist\MSVC') -Directory |
         Where-Object Name -match '^\d+\.' | Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
     $crtPlatform = if ($Platform -eq 'ARM64') { 'arm64' } else { 'x64' }
-    $VcRuntimeDirectory = Join-Path $redistVersion.FullName "$crtPlatform\Microsoft.VC143.CRT"
+    $runtimeDirectory = Get-ChildItem -LiteralPath (Join-Path $redistVersion.FullName $crtPlatform) -Directory -Filter 'Microsoft.VC14*.CRT' |
+        Sort-Object Name -Descending | Select-Object -First 1
+    if (!$runtimeDirectory) { throw "Official MSVC v14 release CRT is missing for $crtPlatform." }
+    $VcRuntimeDirectory = $runtimeDirectory.FullName
 }
 $VcRuntimeDirectory = (Resolve-Path -LiteralPath $VcRuntimeDirectory).Path
 foreach ($required in @('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll')) {

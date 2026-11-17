@@ -1,6 +1,6 @@
 Microsoft Visual C++ Runtime
 
-The Windows installer includes the release Microsoft.VC143.CRT runtime files
+The Windows installer includes the official MSVC v14 release CRT runtime files
 from the Visual Studio Build Tools redistribution directory. These files are
 Microsoft components, not part of OcPlayer's open-source license.
 
@@ -11,5 +11,6 @@ runtime files are not redistributable and must not be included.
 Visual Studio licensing:
 https://visualstudio.microsoft.com/license-terms/
 
-Visual Studio 2022 redistribution list:
+Use the REDIST list for the installed Visual Studio version. Visual Studio
+2022 redistribution reference:
 https://learn.microsoft.com/visualstudio/releases/2022/redistribution
