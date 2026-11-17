@@ -21,7 +21,6 @@ cp "$repo_root/tests/fixtures/native_http_probe.swift" "$output_dir/native-http-
 swiftc "$output_dir/native-http-probe.swift" -o "$output_dir/native-http-probe" > "$output_dir/native-http-probe-build.log" 2>&1
 export OCP_NATIVE_HTTP_PROBE_PATH="$output_dir/native-http-probe"
 export OCP_CORE_ECHO_LIBRARY_PATH="$output_dir/apple-boundary-echo.dylib"
-python3 tests/public_command_contract.py > "$output_dir/public-command-contract-tests.log" 2>&1
 python3 tests/transport_fidelity_contract.py > "$output_dir/transport-fidelity-contract-tests.log" 2>&1
 Scripts/check-apple-binding.sh "$apple_root" > "$output_dir/apple-binding-layout.log" 2>&1
 cmp tests/media_projection_server.py "$apple_root/Packages/JellyfinKit/Tests/JellyfinKitTests/Fixtures/media_projection_server.py" > "$output_dir/media-projection-fixture-equivalence.log" 2>&1
@@ -78,4 +77,5 @@ xcodebuild -project "$apple_root/OcPlayer.xcodeproj" -scheme OcPlayer-macOS \
   -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO test > "$output_dir/macos-app-tests.log" 2>&1
 Scripts/embed-macos-core.sh "$output_dir/DerivedData/Build/Products/Debug/OcPlayer.app" \
   "$OCP_CORE_LIBRARY_PATH" > "$output_dir/macos-embed.log" 2>&1
+python3 tests/public_command_contract.py > "$output_dir/public-command-contract-tests.log" 2>&1
 echo "macOS build and package checks passed; complete raw logs: $output_dir"

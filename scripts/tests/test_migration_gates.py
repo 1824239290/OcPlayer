@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class MigrationGateTests(unittest.TestCase):
     def test_public_inventory_still_blocks_apple_success(self):
-        script = (ROOT / "core/scripts/verify-macos.sh").read_text(encoding="utf-8")
+        script = (ROOT / "core/Scripts/verify-macos.sh").read_text(encoding="utf-8")
         inventory = "python3 tests/public_command_contract.py"
         self.assertEqual(script.count(inventory), 1)
         self.assertLess(script.index("Scripts/embed-macos-core.sh"), script.index(inventory))
