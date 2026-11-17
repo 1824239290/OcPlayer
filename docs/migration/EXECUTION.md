@@ -18,7 +18,7 @@
 - 完整备份：`D:\OcPlayer-Migration-Backups\20261117-monorepo`，包含 apple/core/windows 的 `.bundle` 与已验证 `.git` mirror。
 - 原 Apple、Core、Windows 工作区不移动，不纳入未提交的 `extract_frame.c`；原 Windows 的规划文档仍保持未提交。
 - 源提交、树、导入提交和备份 SHA256 见 [source-manifest.json](source-manifest.json)。
-- `validationCommit` 固定业务源码候选 `6be4a6f380e77aa951fe47c4b0eeb9fb82265316`，不代表完整门禁通过。迁移模式核对当前 Swift/内核基线，普通模式核对这份历史快照，后续正常业务修改不会被误判为迁移破坏。
+- `validationCommit` 固定结构迁移源码快照 `6be4a6f380e77aa951fe47c4b0eeb9fb82265316`，不代表完整门禁通过。两种模式都核对这份历史快照；迁移模式还核对当前 Swift/内核基线以及用户授权的精确后续修复，后续正常业务修改不会被误判为迁移破坏。
 
 ## 候选提交与同步
 
@@ -102,7 +102,7 @@ Core-enabled job 已完成并失败。真实公共 Swift SDK 的 41 个测试、
 
 完整下载证据在 `artifacts/verification/github-apple-core-initial`。脚本在 DanmakuKit 失败处以非零状态退出，因此后续 DiagnosticsKit、Core-enabled AppTests、嵌入和末尾公共命令清单检查没有执行，不能将它们标成通过。普通 AppTests 的 macOS/iOS 失败在源基线与迁移候选中同为 NativeCastFacts 用例，iOS 对照日志在 `github-ios-baseline.log`、`github-ios-initial.log`。
 
-## 尚未通过的验收与切换限制
+## 修复前的验收阻塞与切换限制（fbb4ccd）
 
 - 既有 Core 命令清单仅列 370 条，生产 routing 有 372 条，缺少 `danmakuCache.clearComments`、`danmakuCache.pruneComments`。原 Core 工作区与迁移候选的差异完全相同，详见 `artifacts/verification/baseline-inventory-diff.json`；本轮不改业务/命令清单、不删除或跳过失败用例。
 - Apple 源基线 `888ccdd8` 的 [既有 Actions 43596895993](https://github.com/1824239290/OcPlayer/actions/runs/43596895993) 已经有 macOS/iOS AppTests 失败。候选 macOS 的失败与基线同为 `CoreRuntimePreferenceParityTests.testAllRuntimePreferencesMatchOriginalPolicyForNativeCastFacts`，该测试要求实际 Rust 库；未修改该 Swift 测试或跳过它。基线元数据和日志在 `artifacts/verification/github-apple-baseline.json`、`github-macos-baseline.log`，候选日志在 `github-macos-initial.log`。
@@ -111,3 +111,16 @@ Core-enabled job 已完成并失败。真实公共 Swift SDK 的 41 个测试、
 - 在取得真实 Apple/Core-enabled、Windows 构建和打包结果，并消除验收失败前，不切换任何远端 `main`，不归档旧 Core/Windows 仓库。迁移分支可以作为候选同步，但不把它描述为已经完成切换。
 
 最终代码候选的完整 CI 与 Core-enabled parity 均未通过；只完成候选合仓与双远端同步，不宣称完成主分支切换。尚未执行、失败或被跳过的检查均不标成通过。
+
+## 用户授权的基线问题修复
+
+完整候选 CI 出结果后，用户明确要求“接着修吧”。此阶段独立修复已有问题，不把业务修复混入原始结构迁移证明，不改写历史报告或原源清单：
+
+- 公共命令清单补齐 `danmakuCache.clearComments` 和 `danmakuCache.pruneComments`，现在与生产 routing 的 372 条一致。原有全命令非对象参数、requestId 及副作用边界合同不变；本机真实 DLL 的 6 个公共合同测试通过。
+- Swift `parseNative` 只删除已知媒体后缀；季数、年份和分辨率排除仅作用于裸数字，不再吞掉 `S01E01`、显式 E1080 或无后缀点号命名。增加固定预期回归，既检查原生兜底也检查公共入口；Rust 业务代码、canonical 语义和原差分 corpus 不改。
+- 普通 macOS / iOS simulator AppTests 先构建对应平台的真实 Rust dylib，嵌入并签名测试宿主，再运行全部 AppTests。全局 Core 默认仍关闭，偏好用例自行切换 override；实库存在和每轮 29 次调用的断言全部保留。正式打包和 Core-enabled macOS 验证仍是独立入口。
+- 冻结快照仍证明 706 个 Apple Swift 文件与源基线一致。当前修复只允许 [审计清单](follow-up-repairs.json) 中两份文件的精确前后 blob，另外 704 份和全部文件模式保持不变；额外变化、原 blob 被改写、绑定复制或修改均由迁移守卫拒绝。
+- 本机 40 个根回归测试通过，包含平台目标选择、带中文/空格路径、缺库构建/架构/签名失败门禁与 Swift 精确修复审计。Apple 工具链调用使用 mock fixture 验证，不将其标成真实 macOS/iOS 运行结果；真实平台结果须由新候选完整 CI 提供。
+- 本机完整 Windows Core 验证已通过：217 个 Rust 测试、真实 C# SDK 的 31 个检查与 3 组合同；Python C ABI 执行 218 个用例，216 通过、0 失败、0 错误，2 个既有 Apple URLSession probe 用例仍跳过。原清单失败已经消除；完整证据在 `artifacts/verification/ci-fixes-windows-core`，跳过项不能记为通过。
+
+修复候选尚待完整云端验收，`main` 和旧仓库保持不动；未发布、签名或安装新的正式发行包。

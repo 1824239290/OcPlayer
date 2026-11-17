@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "$#" != 3 ]]; then
+  echo 'Usage: test-apple-app.sh <macos|ios-simulator> <destination> <derived-data-path>' >&2
+  exit 2
+fi
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+apple_root="$repo_root/apps/apple"
+platform="$1"
+destination="$2"
+derived_data="$3"
+host_target="$(rustc -vV | awk '/^host:/ {print $2}')"
+case "$host_target" in
+  aarch64-apple-darwin|x86_64-apple-darwin) ;;
+  *) echo 'Apple AppTests require a macOS Rust host' >&2; exit 2 ;;
+esac
+case "$platform" in
+  macos)
+    scheme=OcPlayer-macOS
+    target="$host_target"
+    product_directory=Debug
+    executable_relative=Contents/MacOS/OcPlayer
+    frameworks_relative=Contents/Frameworks
+    ;;
+  ios-simulator)
+    scheme=OcPlayer-iOS
+    case "$host_target" in
+      aarch64-apple-darwin) target=aarch64-apple-ios-sim ;;
+      x86_64-apple-darwin) target=x86_64-apple-ios ;;
+    esac
+    product_directory=Debug-iphonesimulator
+    executable_relative=OcPlayer
+    frameworks_relative=Frameworks
+    export IPHONEOS_DEPLOYMENT_TARGET="${IPHONEOS_DEPLOYMENT_TARGET:-16.0}"
+    ;;
+  *) echo "Unsupported Apple test platform: $platform" >&2; exit 2 ;;
+esac
+mkdir -p "$derived_data"
+derived_data="$(cd "$derived_data" && pwd -P)"
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$repo_root/core/target}"
+library_directory="$derived_data/CoreTestLibrary"
+echo "==> Building real Core for $platform ($target)"
+CARGO_BUILD_TARGET="$target" "$repo_root/core/Scripts/build-apple-dylib.sh" "$library_directory"
+
+build_arguments=(
+  -project "$apple_root/OcPlayer.xcodeproj"
+  -scheme "$scheme"
+  -configuration Debug
+  -destination "$destination"
+  -derivedDataPath "$derived_data"
+)
+xcodebuild "${build_arguments[@]}" build-for-testing
+app="$derived_data/Build/Products/$product_directory/OcPlayer.app"
+executable="$app/$executable_relative"
+library="$library_directory/libocp_ffi.dylib"
+[[ -f "$executable" && -f "$library" ]] || { echo 'Built test host and real Core library are required' >&2; exit 1; }
+for architecture in $(xcrun lipo -archs "$executable"); do
+  xcrun lipo -verify_arch "$architecture" "$library"
+done
+mkdir -p "$app/$frameworks_relative"
+cp "$library" "$app/$frameworks_relative/libocp_ffi.dylib"
+codesign --force --sign - --timestamp=none "$app/$frameworks_relative/libocp_ffi.dylib"
+codesign --force --sign - --timestamp=none --preserve-metadata=entitlements,requirements,flags "$app"
+codesign --verify --deep --strict "$app"
+
+TEST_RUNNER_OCP_CORE_ENABLED=0 TEST_RUNNER_OCP_CORE_LIBRARY_PATH='' \
+  xcodebuild "${build_arguments[@]}" test-without-building

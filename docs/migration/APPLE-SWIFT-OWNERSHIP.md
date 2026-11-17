@@ -4,17 +4,17 @@
 
 ## 迁移不变量
 
-- Apple 原生平台、业务和测试 Swift 文件共 706 个保持原 Git blob 和文件模式。
+- 冻结的结构迁移快照中，Apple 原生平台、业务和测试 Swift 文件共 706 个保持原 Git blob 和文件模式。
 - 原 Apple 公共绑定与 Core 公共绑定共 23 个文件内容一致，包含 README；其中 Swift/fixture 文件模式有差异，统一沿用 Core 的模式。
 - 唯一公共绑定在 `core/bindings/apple/OcPlayerCore`；只修改六个 Package.swift 与 Xcode 包路径，没有改变 SDK 或业务方法。
 - `OcpCoreFeature.isEnabled` 仍按环境变量、UserDefaults、Info.plist 决定，未配置时为 false。实际激活还依赖可用的 Core client；关闭、加载失败与注入依赖时按各入口原合同执行。
 - 原生库加载失败不等于所有操作都可重放；已经提交的写入或请求必须保留单一执行者。
 
-`scripts/verify-monorepo.py --migration` 核对当前迁移候选的上述不变量；默认模式核对冻结的迁移验收提交。日后业务修改保留独立提交和测试，不需要改写历史源清单，也不受旧 Swift 文件内容永久冻结的限制。
+`scripts/verify-monorepo.py` 始终核对冻结的结构迁移快照；`--migration` 还核对当前候选。用户在完整 CI 失败后另行批准基线问题修复：当前候选仅解析器及其回归测试两份 Swift 文件改变，前后精确 blob 和理由见 [后续修复审计](follow-up-repairs.json)，另外 704 份与原模式不变。额外或未审计的修改仍被拒绝，公共 SDK 也未改变。日后业务修改保留独立提交和测试，不需要改写历史源清单，也不受旧 Swift 文件内容永久冻结的限制。
 
 ## 领域归属
 
-路径相对 `apps/apple`；Rust command 以生产 routing 为事实源。原 `core/docs/public-command-inventory.json` 记录 370 条，本次在原 Core 和迁移候选均生成 372 条，漏了两个缓存命令；该已有失败见执行记录，不将旧清单当成完整验收依据。
+路径相对 `apps/apple`；Rust command 以生产 routing 为事实源。原 `core/docs/public-command-inventory.json` 记录 370 条，生产已有 372 条；后续修复补齐两个缓存命令，并保留严格的全清单 C ABI 合同。旧审计报告中的 370 是历史结果，不改写为新的通过记录。
 
 | 领域 / Swift 生产入口 | Rust command / 门面 | 实际选路与保留的原生职责 | 验收位置 |
 | --- | --- | --- | --- |
@@ -39,6 +39,6 @@
 
 ## 执行阶段验收
 
-普通 macOS/iOS 构建与 Core-enabled macOS 验证分别运行。Core-enabled job 必须提供实际构建的 dylib 和启用环境；缺库跳过激活用例不算成功。用现有 fixture 和差分测试检查实际后端、错误/注入路径及写入、同步、登录重试的执行次数。
+普通 macOS/iOS 构建与 Core-enabled macOS 验证分别运行。普通 AppTests 只为偏好差分提供对应平台的实库，默认不开全局 Core；Core-enabled job 必须提供实际构建的 dylib 和启用环境。缺库跳过激活用例不算成功。用现有 fixture 和差分测试检查实际后端、错误/注入路径及写入、同步、登录重试的执行次数。
 
 业务退出必须另行逐函数确认：生产和 iOS 调用方不再依赖旧分支；关闭/缺库合同已明确；Rust 的完整行为和数据兼容性通过；同一操作不重复执行原生副作用；必要旧规则仅作为独立测试对照保留。

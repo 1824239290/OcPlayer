@@ -11,7 +11,7 @@ python scripts/verify-monorepo.py --output artifacts/verification/layout.json
 cargo test --manifest-path core/Cargo.toml --workspace --locked
 ```
 
-布局检查需要完整 Git 历史；CI checkout 使用 `fetch-depth: 0`。它验证源提交可达、导入时文件/模式一致、单一 Swift SDK、依赖路径和 ignore 规则。`--migration` 还要求当前候选的 Apple Swift 源码和内核钉点保持基线；常规检查使用清单中冻结的迁移验收提交验证历史证据，不阻止日后正常更新业务、SDK 或内核。
+布局检查需要完整 Git 历史；CI checkout 使用 `fetch-depth: 0`。它验证源提交可达、导入时文件/模式一致、单一 Swift SDK、依赖路径和 ignore 规则。两种模式都保留清单中冻结的结构迁移快照检查；`--migration` 另外检查当前 index，Apple Swift 只能是原基线或 [后续修复审计](migration/follow-up-repairs.json) 中逐文件记录的精确 blob，文件模式、绑定和内核钉点仍保持基线。未声明的变化、额外修改和重写原 blob 均失败；常规模式不阻止日后独立提交的正常业务、SDK 或内核更新。
 
 ## Windows
 
@@ -49,6 +49,16 @@ MSI 参数仍是纯数值版本，例如 `1.0.0`；不能直接传入 `windows/v
 ```
 
 打包保留已有签名、内核下载与构建缓存参数，见 [Apple 组件文档](../apps/apple/README.md)。普通打包不自动变成 Core-enabled 分发。
+
+普通 AppTests 的真实 Core fixture：
+
+```bash
+./scripts/test-apple-app.sh macos 'platform=macOS' artifacts/verification/app-tests-macos
+rustup target add aarch64-apple-ios-sim x86_64-apple-ios
+./scripts/test-apple-app.sh ios-simulator 'platform=iOS Simulator,name=iPhone 17' artifacts/verification/app-tests-ios
+```
+
+将 iOS destination 换成本机可用模拟器的 name 或 id。入口构建对应 macOS / iOS simulator 的 Rust dylib，先 `build-for-testing`，再把库放进测试宿主的 Frameworks 并校验架构/签名，最后 `test-without-building`。普通测试的 Core 开关仍为 0，仅既有偏好差分用例临时打开自己的 override；该用例的实库与每轮 29 次 getter 断言不变。测试库不会写入正式构建或改变产品默认启用策略，也不替代 iOS 静态 XCFramework 分发验收。
 
 Core-enabled macOS 的完整接入检查：
 

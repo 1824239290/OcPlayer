@@ -72,7 +72,7 @@ jobs:
         env:
           CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: python scripts/ci_paths.py
-      - name: Verify history, bindings and unchanged Swift behavior
+      - name: Verify history, bindings, frozen Swift and audited repairs
         env:
           VERIFY_MIGRATION: ${{ github.ref == 'refs/heads/codex/monorepo-migration' }}
         run: |
@@ -95,6 +95,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
 
       - name: Resolve Erika version
         id: erika-version
@@ -200,13 +202,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          xcodebuild \
-            -project OcPlayer.xcodeproj \
-            -scheme OcPlayer-macOS \
-            -configuration Debug \
-            -destination 'platform=macOS' \
-            -derivedDataPath .local-build/ci-test \
-            test
+          ../../scripts/test-apple-app.sh macos 'platform=macOS' .local-build/ci-test
 
       - name: Upload test logs on failure
         if: failure()
@@ -228,6 +224,10 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios-sim,x86_64-apple-ios
 
       - name: Resolve Erika version
         id: erika-version
@@ -309,13 +309,8 @@ jobs:
 
           # ② 用 id= 跳过机型解析；并记录整步耗时以便和预算对比。
           test_start=$(date +%s)
-          xcodebuild \
-            -project OcPlayer.xcodeproj \
-            -scheme OcPlayer-iOS \
-            -configuration Debug \
-            -destination "platform=iOS Simulator,id=$udid" \
-            -derivedDataPath .local-build/ci-test-ios \
-            test
+          ../../scripts/test-apple-app.sh ios-simulator \
+            "platform=iOS Simulator,id=$udid" .local-build/ci-test-ios
           test_elapsed=$(( $(date +%s) - test_start ))
           echo "[BLD-08] xcodebuild test took ${test_elapsed}s (预热 ${sim_ready}s)"
 
