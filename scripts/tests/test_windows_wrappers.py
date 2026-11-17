@@ -81,6 +81,10 @@ class WindowsWrapperTests(unittest.TestCase):
         parameters = self.invoke("prepare-kernel.ps1", " ".join(f'-{name} "{name}"' for name in names))
         self.assert_caller_paths(parameters, names)
 
+    def test_prepare_only_is_forwarded_to_the_pinned_kernel_checkout(self):
+        parameters = self.invoke("prepare-kernel.ps1", "-PrepareOnly")
+        self.assertTrue(parameters["PrepareOnly"]["IsPresent"])
+
     def test_package_output_and_inputs_preserve_caller_location(self):
         names = ["CoreRoot", "VcRuntimeDirectory", "OutputDirectory"]
         parameters = self.invoke("package-windows.ps1", " ".join(f'-{name} "{name}"' for name in names) + " -Version 1.2.3")

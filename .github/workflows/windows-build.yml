@@ -56,6 +56,8 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
+      - name: Check out and verify pinned liberika
+        run: ./scripts/prepare-kernel.ps1 -PrepareOnly
       - uses: actions/cache@v4
         with:
           path: |
@@ -64,7 +66,7 @@ jobs:
             apps/windows/artifacts/kernel-target
             apps/windows/artifacts/liberika-v0.3.7/third_party
           key: monorepo-windows-native-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.cachekey }}-${{ hashFiles('core/Cargo.lock', 'apps/windows/Config/Kernel.version.json', 'apps/windows/Scripts/patches/*.patch') }}
-      - name: Prepare pinned liberika
+      - name: Build pinned liberika dependencies
         run: ./scripts/prepare-kernel.ps1
       - name: Build native Core and WinUI app
         run: ./scripts/build-windows.ps1 -Configuration Release -LibClangPath $env:LIBCLANG_PATH

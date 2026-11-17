@@ -23,6 +23,18 @@ class MigrationGateTests(unittest.TestCase):
         self.assertEqual(workflow.count("./scripts/verify-core.ps1 -Configuration release"), 1)
         self.assertNotIn("continue-on-error", workflow)
 
+    def test_pinned_kernel_checkout_precedes_dependency_cache_restore(self):
+        workflow = (ROOT / ".github/workflows/windows-build.yml").read_text(encoding="utf-8")
+        checkout = workflow.index("run: ./scripts/prepare-kernel.ps1 -PrepareOnly")
+        cache = workflow.index("      - uses: actions/cache@v4")
+        dependencies = workflow.index("run: ./scripts/prepare-kernel.ps1\n")
+        self.assertLess(checkout, cache)
+        self.assertLess(cache, dependencies)
+        self.assertIn("apps/windows/artifacts/liberika-v0.3.7/third_party", workflow)
+        script = (ROOT / "apps/windows/Scripts/prepare-kernel.ps1").read_text(encoding="utf-8")
+        self.assertIn('if (Test-Path -LiteralPath $source) { throw "Choose a new kernel source directory: $source" }', script)
+        self.assertIn('if ((& git -C $source rev-parse HEAD).Trim() -ne $pin.commit)', script)
+
     def test_apple_migration_packages_do_not_publish(self):
         workflow = (ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8")
         packaging = workflow.split("  apple-packaging:\n", 1)[1].split("\n  windows:\n", 1)[0]
