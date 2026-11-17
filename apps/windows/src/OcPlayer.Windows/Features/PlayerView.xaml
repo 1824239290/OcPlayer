@@ -1,0 +1,164 @@
+<UserControl x:Class="OcPlayer.Windows.PlayerView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    RequestedTheme="Dark" IsTabStop="True" UseSystemFocusVisuals="False" KeyboardAcceleratorPlacementMode="Hidden">
+    <Grid x:Name="PlayerRoot" Background="Black" PointerMoved="Player_PointerMoved" PointerExited="Player_PointerExited">
+        <Grid.Resources>
+            <SolidColorBrush x:Key="HudSurface" Color="#7020242B" />
+            <!-- Preserve WinUI's control templates, focus rings and pointer states. -->
+            <Style x:Key="HudButton" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+                <Setter Property="Width" Value="40" />
+                <Setter Property="Height" Value="40" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="CornerRadius" Value="40" />
+                <Setter Property="Background" Value="{StaticResource HudSurface}" />
+                <Setter Property="BorderBrush" Value="#1AFFFFFF" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Foreground" Value="White" />
+            </Style>
+            <Style x:Key="QuietHudButton" TargetType="Button" BasedOn="{StaticResource HudButton}">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderBrush" Value="Transparent" />
+            </Style>
+            <Style x:Key="HudSlider" TargetType="Slider" BasedOn="{StaticResource DefaultSliderStyle}">
+                <Setter Property="Foreground" Value="White" />
+            </Style>
+            <x:Double x:Key="SliderTrackThemeHeight">3</x:Double>
+            <SolidColorBrush x:Key="SliderTrackFill" Color="#40FFFFFF" />
+            <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="#60FFFFFF" />
+            <SolidColorBrush x:Key="SliderTrackFillPressed" Color="#60FFFFFF" />
+            <SolidColorBrush x:Key="SliderTrackValueFill" Color="White" />
+            <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="White" />
+            <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="#DDFFFFFF" />
+            <SolidColorBrush x:Key="SliderThumbBackground" Color="White" />
+            <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver" Color="White" />
+            <SolidColorBrush x:Key="SliderThumbBackgroundPressed" Color="White" />
+        </Grid.Resources>
+        <Image x:Name="Backdrop" Stretch="UniformToFill" />
+        <SwapChainPanel x:Name="VideoPanel" Visibility="Collapsed" />
+        <TextBlock x:Name="SubtitlePreview" Visibility="Collapsed" Text="字幕预览" Foreground="White" IsHitTestVisible="False"
+                   FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="20,0,20,170" />
+        <Border x:Name="VideoGestures" Background="Transparent" Tapped="Video_Tapped" DoubleTapped="Video_DoubleTapped" />
+        <Grid x:Name="PlayerTitleBar" Height="48" VerticalAlignment="Top" Background="Transparent" />
+        <Grid x:Name="Hud">
+            <!-- Matches macOS PlayerHUDReadabilityScrim: one uniform 32% black layer. -->
+            <Border x:Name="ReadabilityScrim" Background="Black" Opacity="0.32" IsHitTestVisible="False" />
+            <StackPanel x:Name="TitleActions" Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Top"
+                        PointerEntered="Controls_PointerEntered" PointerExited="Controls_PointerExited">
+                <Button x:Name="ReturnButton" Style="{StaticResource NavigationBackButtonNormalStyle}" Click="Close_Click"
+                        Width="46" Height="48" Margin="0" CornerRadius="0"
+                        AutomationProperties.Name="返回上一页" ToolTipService.ToolTip="返回上一页">
+                </Button>
+                <Button x:Name="FullscreenButton" Width="46" Height="48" Margin="0" Padding="0" CornerRadius="0"
+                        Background="Transparent" BorderThickness="0" Click="Fullscreen_Click"
+                        AutomationProperties.Name="全屏" ToolTipService.ToolTip="全屏 (F)">
+                    <Viewbox Width="16" Height="16"><SymbolIcon x:Name="FullscreenIcon" Symbol="FullScreen" /></Viewbox>
+                </Button>
+            </StackPanel>
+            <Button x:Name="VolumeButton" Width="46" Height="48" Margin="0,0,138,0" Padding="0" CornerRadius="0"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Background="Transparent" BorderThickness="0"
+                    AutomationProperties.Name="调整音量" ToolTipService.ToolTip="音量"
+                    PointerEntered="Controls_PointerEntered" PointerExited="Controls_PointerExited">
+                <Viewbox Width="16" Height="16"><SymbolIcon x:Name="VolumeIcon" Symbol="Volume" /></Viewbox>
+                <Button.Flyout>
+                    <Flyout x:Name="VolumeFlyout" Placement="BottomEdgeAlignedRight" Opened="VolumeFlyout_Opened" Closed="VolumeFlyout_Closed">
+                        <Flyout.FlyoutPresenterStyle>
+                            <Style TargetType="FlyoutPresenter">
+                                <Setter Property="RequestedTheme" Value="Dark" />
+                                <Setter Property="Padding" Value="12,8" />
+                                <Setter Property="CornerRadius" Value="8" />
+                            </Style>
+                        </Flyout.FlyoutPresenterStyle>
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Button x:Name="MuteButton" Style="{StaticResource QuietHudButton}" Width="32" Height="32" BorderThickness="0"
+                                    Click="Mute_Click" AutomationProperties.Name="静音" ToolTipService.ToolTip="静音 (M)">
+                                <Viewbox Width="16" Height="16"><SymbolIcon x:Name="MuteIcon" Symbol="Volume" /></Viewbox>
+                            </Button>
+                            <Slider x:Name="Volume" Width="168" Minimum="0" Maximum="100" Value="40" StepFrequency="1"
+                                    VerticalAlignment="Center" AutomationProperties.Name="音量" />
+                            <TextBlock x:Name="VolumeLabel" Text="40" FontSize="12" MinWidth="24" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
+            <StackPanel x:Name="TransportControls" Orientation="Horizontal" Spacing="40" HorizontalAlignment="Center" VerticalAlignment="Center"
+                        PointerEntered="Controls_PointerEntered" PointerExited="Controls_PointerExited">
+                <StackPanel.Resources>
+                    <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="Transparent" />
+                    <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent" />
+                </StackPanel.Resources>
+                <Button x:Name="SkipBackButton" Style="{StaticResource QuietHudButton}" Width="66" Height="66" VerticalAlignment="Center" Click="Back_Click"
+                        AutomationProperties.Name="后退 10 秒" ToolTipService.ToolTip="后退 10 秒 (←)">
+                    <Grid Width="28" Height="30">
+                        <Path Data="M 2,10 C 7,-1 21,-1 26,10 M 2,10 L 2,3 M 2,10 L 9,10"
+                              Stroke="White" StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                        <TextBlock Text="10" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Bottom" />
+                    </Grid>
+                </Button>
+                <Button x:Name="PlayButton" Style="{StaticResource QuietHudButton}" Width="80" Height="80"
+                        Click="Play_Click" AutomationProperties.Name="播放">
+                    <Grid Width="32" Height="32">
+                        <Path x:Name="PlayIcon" Fill="White" Data="M 8,3 C 8,1.4 9.5,0.6 11,1.5 L 31,14 C 32.5,15 32.5,17 31,18 L 11,30.5 C 9.5,31.4 8,30.6 8,29 Z" />
+                        <Path x:Name="PauseIcon" Fill="White" Visibility="Collapsed"
+                              Data="M 6,3 Q 6,1 8,1 L 12,1 Q 14,1 14,3 L 14,29 Q 14,31 12,31 L 8,31 Q 6,31 6,29 Z M 22,3 Q 22,1 24,1 L 28,1 Q 30,1 30,3 L 30,29 Q 30,31 28,31 L 24,31 Q 22,31 22,29 Z" />
+                    </Grid>
+                </Button>
+                <Button x:Name="SkipForwardButton" Style="{StaticResource QuietHudButton}" Width="66" Height="66" VerticalAlignment="Center" Click="Forward_Click"
+                        AutomationProperties.Name="前进 10 秒" ToolTipService.ToolTip="前进 10 秒 (→)">
+                    <Grid Width="28" Height="30">
+                        <Path Data="M 2,10 C 7,-1 21,-1 26,10 M 26,10 L 19,10 M 26,10 L 26,3"
+                              Stroke="White" StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                        <TextBlock Text="10" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Bottom" />
+                    </Grid>
+                </Button>
+            </StackPanel>
+            <StackPanel x:Name="BottomDock" VerticalAlignment="Bottom" Margin="28,0,28,28" Spacing="14"
+                        PointerEntered="Controls_PointerEntered" PointerExited="Controls_PointerExited">
+                <StackPanel.Resources>
+                    <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#B02B3038" />
+                    <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#D020242B" />
+                    <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#40FFFFFF" />
+                    <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#20FFFFFF" />
+                    <SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="White" />
+                    <SolidColorBrush x:Key="ButtonForegroundPressed" Color="#DCFFFFFF" />
+                </StackPanel.Resources>
+                <Grid ColumnSpacing="24">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <StackPanel Spacing="4" VerticalAlignment="Center">
+                        <TextBlock x:Name="EpisodeTitle" FontSize="13" FontWeight="Medium" Foreground="#C2FFFFFF" TextTrimming="CharacterEllipsis" />
+                        <TextBlock x:Name="MediaTitle" FontSize="20" FontWeight="SemiBold" Foreground="White" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <StackPanel x:Name="PlaybackCommands" Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Button x:Name="DanmakuButton" Style="{StaticResource QuietHudButton}" Click="Danmaku_Click" AutomationProperties.Name="弹幕" ToolTipService.ToolTip="弹幕">
+                            <Path Data="M 1,3 L 19,3 M 1,9 L 14,9 M 1,15 L 17,15" Width="20" Height="18" Stroke="White" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                        </Button>
+                        <Button x:Name="SubtitlesButton" Style="{StaticResource QuietHudButton}" Click="Subtitles_Click" AutomationProperties.Name="字幕" ToolTipService.ToolTip="字幕">
+                            <Viewbox Width="20" Height="20"><SymbolIcon Symbol="ClosedCaption" /></Viewbox>
+                        </Button>
+                        <Button x:Name="AudioButton" Style="{StaticResource QuietHudButton}" Click="Audio_Click" AutomationProperties.Name="音轨" ToolTipService.ToolTip="音轨">
+                            <Viewbox Width="20" Height="20"><SymbolIcon Symbol="Volume" /></Viewbox>
+                        </Button>
+                        <Button x:Name="ChaptersButton" Style="{StaticResource QuietHudButton}" Click="Chapters_Click" AutomationProperties.Name="章节" ToolTipService.ToolTip="章节">
+                            <Viewbox Width="20" Height="20"><SymbolIcon Symbol="Bullets" /></Viewbox>
+                        </Button>
+                        <Button x:Name="RateButton" Style="{StaticResource QuietHudButton}" Click="Rate_Click" AutomationProperties.Name="播放设置" ToolTipService.ToolTip="播放设置">
+                            <FontIcon Glyph="&#xE713;" FontSize="20" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
+                <StackPanel Spacing="4">
+                    <Slider x:Name="Timeline" Style="{StaticResource HudSlider}" Minimum="0" Maximum="1440" MinHeight="44" IsThumbToolTipEnabled="False"
+                            ValueChanged="Timeline_ValueChanged" AutomationProperties.Name="播放进度" />
+                    <Grid>
+                        <TextBlock x:Name="PositionLabel" FontSize="12" Typography.NumeralAlignment="Tabular" Foreground="#C2FFFFFF" />
+                        <TextBlock x:Name="DurationLabel" FontSize="12" Typography.NumeralAlignment="Tabular" HorizontalAlignment="Right" Foreground="#C2FFFFFF" />
+                    </Grid>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+        <InfoBar x:Name="PlaybackError" IsOpen="False" Severity="Error" IsClosable="True" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="24,104,24,0" MaxWidth="850" />
+        <InfoBar x:Name="DanmakuNotice" IsOpen="False" Severity="Warning" Title="弹幕" IsClosable="True" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="24,168,24,0" MaxWidth="850" />
+    </Grid>
+</UserControl>

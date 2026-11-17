@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Compile the authoritative SDK sources in place. This also keeps all
+         generated build output in Windows, without writing into Core. -->
+    <Compile Include="$(OcpCoreRoot)bindings\windows\OcPlayerCore.cs" Link="SharedSdk\OcpCore.cs" />
+    <Compile Include="$(OcpCoreRoot)bindings\windows\OcPlayerCore\*.cs" Link="SharedSdk\%(Filename)%(Extension)" />
+  </ItemGroup>
+  <Target Name="CheckSharedCore" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('$(OcpCoreRoot)bindings\windows\OcPlayerCore\OcPlayerCore.csproj')"
+           Text="OcPlayer-Core SDK not found. Check out OcPlayer-Core beside OcPlayer-Windows or set -p:OcpCoreRoot=absolute-path." />
+  </Target>
+</Project>
