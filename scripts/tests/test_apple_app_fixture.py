@@ -76,8 +76,12 @@ elif tool == "xcodebuild":
 elif tool == "xcrun":
     if "-archs" in arguments:
         print(os.environ.get("MOCK_ARCH", "arm64"))
-    elif failure == "architecture":
-        sys.exit(10)
+    else:
+        assert len(arguments) == 4 and arguments[0] == "lipo"
+        assert arguments[1].endswith("libocp_ffi.dylib")
+        assert arguments[2:] == ["-verify_arch", os.environ.get("MOCK_ARCH", "arm64")]
+        if failure == "architecture":
+            sys.exit(10)
 elif tool == "codesign" and failure == "signing":
     sys.exit(11)
 ''',
@@ -165,6 +169,13 @@ elif tool == "codesign" and failure == "signing":
 
 
 class AppleAppWorkflowTests(unittest.TestCase):
+    def test_embedding_scripts_use_lipo_input_before_architecture_flags(self):
+        for relative in ["scripts/test-apple-app.sh", "core/Scripts/embed-macos-core.sh"]:
+            script = (ROOT / relative).read_text(encoding="utf-8")
+            with self.subTest(script=relative):
+                self.assertIn('xcrun lipo "$library" -verify_arch "$architecture"', script)
+                self.assertNotIn('lipo -verify_arch "$architecture" "$library"', script)
+
     def test_both_ordinary_app_jobs_supply_the_real_core_fixture(self):
         workflow = (ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8")
         self.assertIn("../../scripts/test-apple-app.sh macos", workflow)

@@ -11,7 +11,7 @@ plist="$app/Contents/Info.plist"
 executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist")"
 [[ -f "$app/Contents/MacOS/$executable" ]] || { echo 'App executable is missing' >&2; exit 1; }
 for architecture in $(xcrun lipo -archs "$app/Contents/MacOS/$executable"); do
-  xcrun lipo -verify_arch "$architecture" "$library"
+  xcrun lipo "$library" -verify_arch "$architecture"
 done
 # Verify every required export before changing the application.
 python3 - "$library" <<'PY'

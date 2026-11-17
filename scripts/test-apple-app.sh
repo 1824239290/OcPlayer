@@ -56,7 +56,7 @@ executable="$app/$executable_relative"
 library="$library_directory/libocp_ffi.dylib"
 [[ -f "$executable" && -f "$library" ]] || { echo 'Built test host and real Core library are required' >&2; exit 1; }
 for architecture in $(xcrun lipo -archs "$executable"); do
-  xcrun lipo -verify_arch "$architecture" "$library"
+  xcrun lipo "$library" -verify_arch "$architecture"
 done
 mkdir -p "$app/$frameworks_relative"
 cp "$library" "$app/$frameworks_relative/libocp_ffi.dylib"
