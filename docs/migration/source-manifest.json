@@ -1,6 +1,7 @@
 {
   "date": "2026-11-17",
   "branch": "codex/monorepo-migration",
+  "validationCommit": "6be4a6f380e77aa951fe47c4b0eeb9fb82265316",
   "backupDirectory": "D:\\OcPlayer-Migration-Backups\\20261117-monorepo",
   "appleRetainedRoots": [".agents", ".github", ".gitignore", "LICENSE", "skills-lock.json"],
   "sources": {
