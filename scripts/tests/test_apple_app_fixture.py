@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -97,6 +98,8 @@ elif tool == "codesign" and failure == "signing":
             MOCK_ARCH=architecture,
             MOCK_RUST_HOST="aarch64-apple-darwin" if architecture == "arm64" else "x86_64-apple-darwin",
             MOCK_FAILURE=failure,
+            PYTHONUTF8="1",
+            PYTHONIOENCODING="utf-8",
             CARGO_TARGET_DIR=(self.root / "cargo target with spaces").as_posix(),
             TEST_RUNNER_OCP_CORE_ENABLED="1",
             TEST_RUNNER_OCP_CORE_LIBRARY_PATH="external-host-library.dylib",
@@ -140,6 +143,10 @@ elif tool == "codesign" and failure == "signing":
 
     def test_x86_simulator_uses_its_matching_rust_target(self):
         self.assert_success("ios-simulator", "x86_64-apple-ios", "x86_64")
+
+    def test_fixture_python_output_is_utf8_even_with_a_legacy_encoding(self):
+        with patch.dict(os.environ, {"PYTHONUTF8": "0", "PYTHONIOENCODING": "cp1252"}):
+            self.assert_success("macos", "aarch64-apple-darwin")
 
     def test_core_build_failure_stops_before_xcode_tests(self):
         result, records = self.invoke("macos", failure="cargo")

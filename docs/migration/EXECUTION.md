@@ -120,7 +120,7 @@ Core-enabled job 已完成并失败。真实公共 Swift SDK 的 41 个测试、
 - Swift `parseNative` 只删除已知媒体后缀；季数、年份和分辨率排除仅作用于裸数字，不再吞掉 `S01E01`、显式 E1080 或无后缀点号命名。增加固定预期回归，既检查原生兜底也检查公共入口；Rust 业务代码、canonical 语义和原差分 corpus 不改。
 - 普通 macOS / iOS simulator AppTests 先构建对应平台的真实 Rust dylib，嵌入并签名测试宿主，再运行全部 AppTests。全局 Core 默认仍关闭，偏好用例自行切换 override；实库存在和每轮 29 次调用的断言全部保留。正式打包和 Core-enabled macOS 验证仍是独立入口。
 - 冻结快照仍证明 706 个 Apple Swift 文件与源基线一致。当前修复只允许 [审计清单](follow-up-repairs.json) 中两份文件的精确前后 blob，另外 704 份和全部文件模式保持不变；额外变化、原 blob 被改写、绑定复制或修改均由迁移守卫拒绝。
-- 本机 40 个根回归测试通过，包含平台目标选择、带中文/空格路径、缺库构建/架构/签名失败门禁与 Swift 精确修复审计。Apple 工具链调用使用 mock fixture 验证，不将其标成真实 macOS/iOS 运行结果；真实平台结果须由新候选完整 CI 提供。
+- 本机 41 个根回归测试通过，包含平台目标选择、带中文/空格路径、旧 Python 编码环境、缺库构建/架构/签名失败门禁与 Swift 精确修复审计。Apple 工具链调用使用 mock fixture 验证，不将其标成真实 macOS/iOS 运行结果；真实平台结果须由新候选完整 CI 提供。
 - 本机完整 Windows Core 验证已通过：217 个 Rust 测试、真实 C# SDK 的 31 个检查与 3 组合同；Python C ABI 执行 218 个用例，216 通过、0 失败、0 错误，2 个既有 Apple URLSession probe 用例仍跳过。原清单失败已经消除；完整证据在 `artifacts/verification/ci-fixes-windows-core`，跳过项不能记为通过。
 
 修复候选尚待完整云端验收，`main` 和旧仓库保持不动；未发布、签名或安装新的正式发行包。
