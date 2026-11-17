@@ -8,7 +8,7 @@
 | 非 squash 历史导入 | 完成 | Apple `14aef05d`、Core `0e595108`、Windows `303c72fc`；三源提交均为当前分支祖先 |
 | 依赖/构建入口 | 已适配，Windows 实际构建通过 | 根 global.json、Windows 默认 Core 路径、统一根脚本；从新检出的固定内核源码完成 Release 原生与 WinUI 构建 |
 | Swift 绑定去重 | 源码检查通过 | 23 份相同内容文件收敛；六个包和 Xcode 引用公共 SDK；706 个其他 Swift 文件及模式不变 |
-| CI/发行适配 | 静态检查通过，平台检查部分通过 | Rust、SwiftPM、macOS/iOS 无发布打包已通过；AppTests 有既有失败，Core-enabled 验收结果待记录 |
+| CI/发行适配 | 静态检查通过，完整平台门禁失败 | Rust、SwiftPM、macOS/iOS 无发布打包已通过；AppTests 有既有失败，Core-enabled 在 DanmakuKit 解析对照中失败 |
 | 双远端候选同步 | 已开始同步 | GitHub gh 登录与推送权限已验证，两个远端均已有 `codex/monorepo-migration`；最终候选 SHA 在收尾时核对 |
 | 平台验收/切换 | 未通过完整门禁，禁止切换 | 不修改两端 main，不归档旧仓库，不安装或发布测试 MSI |
 
@@ -64,11 +64,16 @@ Windows 原生依赖已从新检出的固定 liberika v0.3.7 源码构建，内�
 
 SwiftPM 保留原工作流对需要真实 GPU/Erika presenter 的 suite 的既有跳过范围，不能将其描述为完整 GPU 或 HDR 运行验收。macOS/iOS AppTests 的失败和 Core-enabled parity 结果另行记录，不与编译/打包结果混为一谈。
 
+Core-enabled job 已完成并失败。真实公共 Swift SDK 的 41 个测试、执行到的 Python 领域/传输合同，以及 JellyfinKit、MetadataKit、MoviePilotKit、BangumiKit、PlaybackKit 的测试通过；DanmakuKit 共运行 272 个 XCTest，同一个 `RustDanmakuPolicyTests.testFilenameAndCanonicalPolicyAgainstNativeCorpus` 用例出现 33 次断言失败。示例 `Title.S01E01`：Rust 返回季/集为 1/1，旧 Swift 返回 nil/nil。两个解析实现与这份 Swift 测试的源码均未因迁移改变；本轮不更改解析规则或测试预期来制造通过结果。
+
+完整下载证据在 `artifacts/verification/github-apple-core-initial`。脚本在 DanmakuKit 失败处以非零状态退出，因此后续 DiagnosticsKit、Core-enabled AppTests、嵌入和末尾公共命令清单检查没有执行，不能将它们标成通过。普通 AppTests 的 macOS/iOS 失败在源基线与迁移候选中同为 NativeCastFacts 用例，iOS 对照日志在 `github-ios-baseline.log`、`github-ios-initial.log`。
+
 ## 尚未通过的验收与切换限制
 
 - 既有 Core 命令清单仅列 370 条，生产 routing 有 372 条，缺少 `danmakuCache.clearComments`、`danmakuCache.pruneComments`。原 Core 工作区与迁移候选的差异完全相同，详见 `artifacts/verification/baseline-inventory-diff.json`；本轮不改业务/命令清单、不删除或跳过失败用例。
 - Apple 源基线 `888ccdd8` 的 [既有 Actions 43596895993](https://github.com/1824239290/OcPlayer/actions/runs/43596895993) 已经有 macOS/iOS AppTests 失败。候选 macOS 的失败与基线同为 `CoreRuntimePreferenceParityTests.testAllRuntimePreferencesMatchOriginalPolicyForNativeCastFacts`，该测试要求实际 Rust 库；未修改该 Swift 测试或跳过它。基线元数据和日志在 `artifacts/verification/github-apple-baseline.json`、`github-macos-baseline.log`，候选日志在 `github-macos-initial.log`。
 - 首轮 GitHub Windows job 在根测试阶段遇到 8.3 路径别名差异；`6be4a6f` 已按真实文件系统身份修正并在相同短路径条件下通过。最新候选的 Windows 云端原生验证仍需取得独立结果，不能用首轮未运行的步骤标为通过。
+- Core-enabled DanmakuKit 的 Rust/旧 Swift 解析语料不一致仍未解决。虽然两边源码均与迁移前相同，但这项差异确实阻止行为归属验收，不能仅凭去重或打包成功宣称不存在双后端行为差异。
 - 在取得真实 Apple/Core-enabled、Windows 构建和打包结果，并消除验收失败前，不切换任何远端 `main`，不归档旧 Core/Windows 仓库。迁移分支可以作为候选同步，但不把它描述为已经完成切换。
 
-Core-enabled parity、最新候选 CI 和双远端最终 SHA 在取得证据后补充；尚未执行、失败或被跳过的检查均不标成通过。
+首轮完整 CI 与 Core-enabled parity 均未通过。最新候选 CI 和双远端最终 SHA 在取得证据后补充；尚未执行、失败或被跳过的检查均不标成通过。
