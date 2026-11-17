@@ -141,11 +141,18 @@ internal static partial class Program
             var vault = new global::Windows.Security.Credentials.PasswordVault();
             foreach (var credential in vault.RetrieveAll().Where(x => x.Resource == resource)) vault.Remove(credential);
         }
-        var complete = new TaskCompletionSource<DanmakuPayload>();
+        var complete = new TaskCompletionSource<DanmakuPayload>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var elapsedStatus = new TaskCompletionSource<(int Seconds, string Status)>(TaskCreationOptions.RunContinuationsAsynchronously);
         var context = new DanmakuContext("elapsed", false, "fixture", null, new PlaybackSource("elapsed", "fixture", "https://example.invalid/video"), null, null, "fixture", null, 1, 1, null, null, false, false);
         using var coordinator = new DanmakuCoordinator((_, _, _, _) => complete.Task, () => true, _ => { }, () => { });
-        coordinator.Start(context, true); await Task.Delay(1100);
-        Assert(coordinator.Busy && coordinator.ElapsedSeconds >= 1 && coordinator.Status.Contains("1s"), "live danmaku status exposes elapsed waiting seconds");
+        coordinator.Changed += () =>
+        {
+            if (coordinator.Busy && coordinator.ElapsedSeconds >= 1)
+                elapsedStatus.TrySetResult((coordinator.ElapsedSeconds, coordinator.Status));
+        };
+        coordinator.Start(context, true);
+        var elapsed = await elapsedStatus.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert(coordinator.Busy && elapsed.Seconds >= 1 && elapsed.Status.EndsWith($" · {elapsed.Seconds}s", StringComparison.Ordinal), "live danmaku status exposes elapsed waiting seconds");
         complete.SetResult(new("empty", "fixture", 0, null)); await coordinator.Completion;
         Assert(!coordinator.Busy, "elapsed updates stop when loading completes");
     }

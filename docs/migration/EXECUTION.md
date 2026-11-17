@@ -130,3 +130,11 @@ Core-enabled job 已完成并失败。真实公共 Swift SDK 的 41 个测试、
 `7381c1b` 的 [Actions 44120270775](https://github.com/1824239290/OcPlayer/actions/runs/44120270775) 已完成两端真实 Rust dylib 构建和 AppTests 宿主的 `build-for-testing`，随后在运行测试前失败：`lipo -verify_arch` 会把后面的库路径继续当成架构参数。改为先传库文件，再传 `-verify_arch` 和架构；同样修正原 Core-enabled macOS 嵌入脚本，保留架构检查而非删除它。
 
 回归 fixture 现在严格核对真实 lipo 的参数顺序，不再接受原来错误的调用形状。两端日志在 `artifacts/verification/ci-fixes-macos-failed.log`、`ci-fixes-ios-failed.log`；这轮 AppTests 尚未执行，不能因为宿主编译通过就记录偏好差分已经通过。
+
+### Windows 等待时间用例的事件同步
+
+同一轮云端 Windows 固定内核、Core / WinUI 构建和 124 条存储断言通过；服务器集成在既有 `live danmaku status exposes elapsed waiting seconds` 用例失败。它仅睡 1100ms，然后要求异步 1000ms timer 已执行且文本恰好含 `1s`；线程池调度延迟或第一帧变成 `2s` 都会误判。
+
+用例改为订阅真实 `Changed` 更新，捕获同一次通知的秒数和状态，在 10 秒失败预算内等待，再断言仍在加载、秒数至少为 1、状态包含相同秒数，并保留完成后停止忙碌的断言。生产计时、超时和 UI 行为均不改；没有删除断言或把失败改成 warning。
+
+修改后本机 124 条存储断言通过，三次独立服务器运行均通过 351 条断言，证据在 `artifacts/verification/ci-fixes-windows-integration.log` 和对应 `ci-fixes-windows-*-*` 目录。云端这轮 MSI 和 ABI/SDK 步骤因前序失败未执行，仍须由后续完整候选重新验证。
