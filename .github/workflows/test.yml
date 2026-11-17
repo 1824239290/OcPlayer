@@ -490,6 +490,56 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  apple-packaging:
+    name: Apple package (${{ matrix.platform }})
+    needs: changes
+    if: needs.changes.outputs.apple == 'true' && github.ref == 'refs/heads/codex/monorepo-migration'
+    runs-on: macos-26
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos, ios]
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Resolve Erika version
+        run: |
+          version="$(awk -F= '/^[[:space:]]*ERIKA_VERSION[[:space:]]*=/ {sub(/^[^=]*=[[:space:]]*/, ""); print; exit}' apps/apple/Config/Erika.version)"
+          test -n "$version"
+          echo "ERIKA_VERSION=$version" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/setup-erika
+        with:
+          erika-version: ${{ env.ERIKA_VERSION }}
+      - name: Package the candidate without publishing
+        env:
+          PACKAGE_PLATFORM: ${{ matrix.platform }}
+          SKIP_ERIKA_FETCH: '1'
+          BUILD_ROOT: ${{ github.workspace }}/artifacts/verification/apple-packaging/${{ matrix.platform }}/build
+          DIST_DIR: ${{ github.workspace }}/artifacts/verification/apple-packaging/${{ matrix.platform }}/dist
+        run: |
+          set -euo pipefail
+          mkdir -p "$DIST_DIR"
+          ./scripts/package-${PACKAGE_PLATFORM}.sh 2>&1 | tee "$DIST_DIR/packaging.log"
+          cd "$DIST_DIR"
+          if [[ "$PACKAGE_PLATFORM" == "macos" ]]; then
+            shasum -a 256 -c SHA256SUMS.txt
+          else
+            shasum -a 256 -c SHA256SUMS-ios.txt
+          fi
+      - name: Upload candidate packages and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apple-package-${{ matrix.platform }}
+          path: artifacts/verification/apple-packaging/${{ matrix.platform }}/dist/*
+          retention-days: 7
+          if-no-files-found: ignore
+
   windows:
     name: Windows Core, app and MSI
     needs: changes
@@ -501,7 +551,7 @@ jobs:
   checks:
     name: Monorepo checks
     if: always()
-    needs: [changes, macos-apptests, ios-apptests, spm-packages, rust-core, apple-core, windows]
+    needs: [changes, macos-apptests, ios-apptests, spm-packages, rust-core, apple-core, apple-packaging, windows]
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -510,6 +560,7 @@ jobs:
       - name: Require all affected checks to succeed
         env:
           CHECK_RESULTS: ${{ toJSON(needs) }}
+          VERIFY_MIGRATION: ${{ github.ref == 'refs/heads/codex/monorepo-migration' }}
         run: |
           python3 - <<'PY'
           import json
@@ -523,4 +574,6 @@ jobs:
               if results['changes']['outputs'][platform] == 'true':
                   for job in jobs:
                       assert results[job]['result'] == 'success', f'{job} did not pass'
+          if os.environ['VERIFY_MIGRATION'] == 'true' and results['changes']['outputs']['apple'] == 'true':
+              assert results['apple-packaging']['result'] == 'success', 'Apple migration packages did not pass'
           PY

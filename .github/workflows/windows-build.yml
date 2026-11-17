@@ -68,8 +68,6 @@ jobs:
         run: ./scripts/prepare-kernel.ps1
       - name: Build native Core and WinUI app
         run: ./scripts/build-windows.ps1 -Configuration Release -LibClangPath $env:LIBCLANG_PATH
-      - name: Verify Core ABI and C# SDK
-        run: ./scripts/verify-core.ps1 -Configuration release
       - name: Run isolated Windows storage and server integration
         run: |
           dotnet run --project apps/windows/tests/OcPlayer.Integration -c Release -p:Platform=x64 -- --storage-only artifacts/verification/windows-storage
@@ -80,6 +78,8 @@ jobs:
         env:
           RELEASE_VERSION: ${{ inputs.version }}
         run: ./scripts/package-windows.ps1 -Version $env:RELEASE_VERSION -OutputDirectory artifacts/verification/windows-msi
+      - name: Verify Core ABI and C# SDK
+        run: ./scripts/verify-core.ps1 -Configuration release
       - name: Upload Windows evidence and MSI
         if: always()
         uses: actions/upload-artifact@v4
