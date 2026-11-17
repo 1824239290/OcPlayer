@@ -16,7 +16,7 @@ class WindowsWrapperTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="OcPlayer 中文路径 ")
         self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name)
+        self.root = Path(self.temporary.name).resolve()
         self.caller = self.root / "caller with spaces"
         self.caller.mkdir()
         (self.root / "scripts").mkdir()
@@ -56,7 +56,7 @@ class WindowsWrapperTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", errors="replace"))
         result = json.loads(self.output.read_text(encoding="utf-8-sig"))
-        self.assertEqual(Path(result["directory"]), self.root / component)
+        self.assertEqual(Path(result["directory"]).resolve(), self.root / component)
         return result["parameters"]
 
     def assert_caller_paths(self, parameters, names):
