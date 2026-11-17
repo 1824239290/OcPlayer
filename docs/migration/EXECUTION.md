@@ -1,16 +1,16 @@
 # 单仓库迁移执行记录
 
-开始日期：2026-11-17（Asia/Hong_Kong）。状态：合仓候选已建立，平台验收未全部通过；主分支和旧仓库未切换。
+开始日期：2026-11-17（Asia/Hong_Kong）。状态：合仓候选已通过全部必需平台 CI；既有 GPU/平台条件跳过仍保留，主分支和旧仓库未切换。
 
 | 阶段 | 状态 | 证据 |
 | --- | --- | --- |
 | 冻结/备份 | 完成 | 三个源基线没有变化；三份完整 bundle 均恢复为 bare mirror 并通过 `git fsck --full` |
 | 非 squash 历史导入 | 完成 | Apple `14aef05d`、Core `0e595108`、Windows `303c72fc`；三源提交均为当前分支祖先 |
-| 依赖/构建入口 | 已适配，Windows 实际构建通过 | 根 global.json、Windows 默认 Core 路径、统一根脚本；从新检出的固定内核源码完成 Release 原生与 WinUI 构建 |
-| Swift 绑定去重 | 源码检查通过 | 23 份相同内容文件收敛；六个包和 Xcode 引用公共 SDK；706 个其他 Swift 文件及模式不变 |
-| CI/发行适配 | 已修复业务阻塞，完整平台门禁仍未通过 | `b5797b2` 的两端 AppTests、SwiftPM、Rust、iOS 打包通过；Core-enabled 末尾签名仍失败；Windows 热缓存暴露内核准备顺序问题，macOS 打包因 runner 分配取消 |
-| 双远端候选同步 | 代码候选已同步，继续修复签名与缓存 | 两端候选均包含代码提交 `b5797b2b63b3f133e484c9c354bb18262ece985b`；Core/Windows 历史主分支引用也已同步；后续修复须重新取得完整 CI 证据 |
-| 平台验收/切换 | 未通过完整门禁，禁止切换 | 不修改两端 main，不归档旧仓库，不安装或发布测试 MSI |
+| 依赖/构建入口 | 已适配，各平台实际构建通过 | 根 global.json、默认 Core 路径、统一根脚本；云端两端 AppTests、Apple 打包、Windows 原生与 WinUI 构建均通过 |
+| Swift 绑定去重 | 冻结证明与精确后续修复审计通过 | 23 份 SDK 文件唯一且不变；六个包和 Xcode 引用公共 SDK；冻结快照 706 份 Swift 不变，当前另外 704 份不变、两份授权修复精确匹配 |
+| CI/发行适配 | 全部必需门禁通过，未发行 | `c4f5346` 的 10 个必需 job 全部成功，包含两端 AppTests、Core-enabled 严格签名/最末清单、Windows 热缓存完整构建/MSI/ABI 及 Apple 打包 |
+| 双远端候选同步 | 已验证代码已同步 | 两端候选均包含已验证代码 `c4f53462115f52df47023e629e8766e3ea841ee6`；Core/Windows 历史主分支引用也已同步；收尾记录另作提交 |
+| 平台验收/切换 | 必需 CI 通过，尚未切换 | 既有 GPU/平台条件跳过不计为通过；两端 main、旧仓库和正式发行仍未修改 |
 
 ## 工作区与来源
 
@@ -189,3 +189,28 @@ Core-enabled 的 SDK、全部业务包和 1027 个 AppTests 再次通过，19 �
 本机根回归执行 47 项，46 项通过，新增真实 macOS 签名用例因本机 Windows 而未执行；该用例必须由上述 Apple job 真正执行，不能把本机跳过记为通过。Shell 语法与 actionlint 通过，日志在 `artifacts/verification/ci-fixes-signature-identity-root-tests.log`。
 
 新的签名身份、热缓存顺序、macOS DMG 和最末清单仍须取得新源码 SHA 的完整 CI 结果，冻结快照和已授权的两份 Swift 修复 blob 均保持不变。
+
+## 完整必需 CI 验收（2026-11-18）
+
+完整证据针对代码提交 `c4f53462115f52df47023e629e8766e3ea841ee6`：[Actions 44161047381](https://github.com/1824239290/OcPlayer/actions/runs/44161047381) 的第二次执行整体成功，10 个必需 job 均为 success。第一次执行的 Windows、Rust、布局、普通 macOS AppTests 和 Core-enabled 已通过，其余四项 Apple job 因 hosted runner 未分配而取消；对同一个源码 SHA 补跑取消项并复用已成功 job，未用文档-only CI 覆盖平台证据。
+
+| 检查 | 验收结果 | 说明 |
+| --- | --- | --- |
+| Repository layout | 通过 | 三源历史可达，导入树/模式正确，冻结快照和精确 Swift 后续修复审计通过，SDK 唯一 |
+| Rust Core | 通过 | 格式检查和 217 个 Rust 测试通过 |
+| 普通 macOS / iOS simulator AppTests | 两端通过 | NativeCastFacts 实库及每轮 29 getter 断言明确通过；真实对应平台 dylib 嵌入，保留全局 Core 默认关闭策略 |
+| SwiftPM package tests | 通过 | 保留原有 Erika GPU/presenter suite 排除范围，不代表完整 GPU/HDR 验收 |
+| Apple Core-enabled parity | 完整通过 | 签名入口 12 项回归通过，含 1 项真实 Xcode 框架验签；SDK 41、DanmakuKit 276、DiagnosticsKit 97 项通过；AppTests 执行 1027 项、19 个既有平台条件跳过、0 失败；Core 嵌入 deep/strict 验签及最末 6 项公共合同通过，372 条清单严格匹配生产 routing |
+| Apple package (macos / ios) | 两端通过 | macOS DMG、ZIP、dSYM 和 iOS 未签名 IPA、dSYM 均成功；五个下载文件的 SHA256 再次核对通过，未创建发行 |
+| Windows Core, app and MSI | 完整通过 | 实际命中原 native cache，先固定源码检出再恢复缓存；原生/WinUI、存储 124 条、服务器 351 条、MSI 全通过；真实 C# SDK 31 检查/3 合同，ABI 执行 218 项、216 通过、0 失败/错误、2 个既有 Apple probe 跳过 |
+| Monorepo checks | 通过 | 汇总拒绝 failure/cancelled，全部受影响平台和迁移打包确实成功 |
+
+本轮 Core 嵌入日志明确显示根 app `valid on disk` 且 `satisfies its Designated Requirement`；每个测试框架和 dylib 均已从内向外签名并严格验证，最末公共合同也已实际执行。签名身份修复不是删除验签或压低测试要求，原失效的 Apple framework requirement 不再被错误继承到新的 ad-hoc 签名。
+
+macOS 打包在与 `2ed4af7` 相同的打包代码上复跑成功，DMG 的 SHA256 为 `495E367560AB52B1D1E648C4BB71137C0C79439A12CAEEE2D9A03FB855187402`。此前 `No space left on device` 记录保留；没有修改 image 大小、删除系统文件或取消 DMG 门禁来制造成功。
+
+本轮 Windows 自包含 x64 MSI 的 SHA256 为 `336D3335BC9DD027A08E919C459BEF2C63DD3CB78863F9F4CA8E47C031D63A9D`，receipt 的 Core 提交为上述 `c4f5346`，内核仍为 `a4f829999fe8df0c35561fe1bdf0f5ad0df0c3a5`，CRT 为 `14.51.36247.0`。下载包的哈希、源码与模式均程序化核对；它未安装、未签名、未发行。
+
+完整记录在 `artifacts/verification/ci-fixes-identity-cache-attempt1-results.json`、`ci-fixes-identity-cache-attempt2-results.json` 和 `ci-fixes-identity-cache-final-status.json`。分阶段日志在 `ci-fixes-apple-core-identity-cache`、`ci-fixes-identity-cache-*-passed.log`；Windows 产物与核对记录在 `ci-fixes-windows-identity-cache`、`ci-fixes-identity-cache-msi-verified.json`，两端 Apple 下载包与核对记录在 `ci-fixes-apple-package-*-identity-cache`、`ci-fixes-identity-cache-apple-packages-verified.json`。
+
+此次已满足合仓候选进入主分支切换阶段的必需 CI 门禁，但尚未切换任何远端 main、归档旧 Core/Windows 仓库、安装测试包或创建正式发行。收尾文档提交不改变已验证的代码树；平台证据始终标注实际执行的 `c4f5346`，不将文档专用的布局检查当作再次完成平台验收。
