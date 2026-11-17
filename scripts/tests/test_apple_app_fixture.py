@@ -1,5 +1,6 @@
 import json
 import os
+import plistlib
 import shlex
 import shutil
 import subprocess
@@ -93,6 +94,8 @@ elif tool == "xcrun":
 elif tool == "codesign":
     if failure == "signing":
         sys.exit(11)
+    if failure == "verification" and "--verify" in arguments:
+        sys.exit(12)
     target = Path(arguments[-1]).resolve()
     earlier = [json.loads(line) for line in Path(os.environ["MOCK_LOG"]).read_text(encoding="utf-8").splitlines()][:-1]
     signed = {Path(item["arguments"][-1]).resolve() for item in earlier
@@ -162,7 +165,10 @@ elif tool == "codesign":
         self.assertLess(targets.index(framework), len(targets) - 1)
         self.assertTrue(any(path.name == "libocp_ffi.dylib" for path in targets))
         for command in sealed:
-            self.assertIn("--preserve-metadata=entitlements,requirements,flags", command["arguments"])
+            self.assertIn("--preserve-metadata=identifier,entitlements,flags", command["arguments"])
+            self.assertIn("--generate-entitlement-der", command["arguments"])
+        verified = [Path(record["arguments"][-1]) for record in signing if "--verify" in record["arguments"]]
+        self.assertEqual(set(verified), set(targets))
         self.assertEqual(signing[-1]["arguments"][:3], ["--verify", "--deep", "--strict"])
         self.assertLess(records.index(signing[-1]), records.index(commands[-1]))
 
@@ -194,6 +200,49 @@ elif tool == "codesign":
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(any(record["arguments"][-1] == "test-without-building" for record in records))
 
+    def test_strict_verification_failure_stops_before_tests(self):
+        result, records = self.invoke("ios-simulator", failure="verification")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(any(record["arguments"][-1] == "test-without-building" for record in records))
+
+
+@unittest.skipUnless(sys.platform == "darwin", "Requires real macOS codesign and Xcode test frameworks")
+class AppleAppNativeSigningTests(unittest.TestCase):
+    def test_reseals_xcode_framework_with_requirements_for_the_current_identity(self):
+        platform = Path(subprocess.check_output(
+            ["xcrun", "--sdk", "macosx", "--show-sdk-platform-path"], text=True
+        ).strip())
+        original_framework = platform / "Developer/Library/Frameworks/XCUIAutomation.framework"
+        self.assertTrue(original_framework.is_dir(), "The full Xcode macOS test framework is required")
+        with tempfile.TemporaryDirectory(prefix="OcPlayer native signing 中文路径 ") as temporary:
+            app = Path(temporary) / "OcPlayer.app"
+            executable = app / "Contents/MacOS/OcPlayer"
+            executable.parent.mkdir(parents=True)
+            source = Path(temporary) / "fixture.c"
+            source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+            subprocess.run(["xcrun", "clang", str(source), "-o", str(executable)], check=True)
+            (app / "Contents/Info.plist").write_bytes(plistlib.dumps({
+                "CFBundleExecutable": "OcPlayer",
+                "CFBundleIdentifier": "org.ocplayer.signing-fixture",
+                "CFBundlePackageType": "APPL",
+                "CFBundleVersion": "1",
+            }))
+            framework = app / "Contents/Frameworks/XCUIAutomation.framework"
+            shutil.copytree(original_framework, framework, symlinks=True,
+                            ignore=shutil.ignore_patterns("Headers", "PrivateHeaders", "Modules", "*.tbd"))
+            result = subprocess.run(
+                [BASH, str(ROOT / "core/Scripts/sign-apple-app.sh"), str(app), "-"],
+                text=True, capture_output=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app)], check=True)
+            requirements = subprocess.run(
+                ["codesign", "--display", "--requirements", "-", str(framework)],
+                text=True, capture_output=True, check=True,
+            )
+            self.assertIn("designated =>", requirements.stdout + requirements.stderr)
+            self.assertNotIn("anchor apple", requirements.stdout + requirements.stderr)
+
 
 class AppleAppWorkflowTests(unittest.TestCase):
     def test_embedding_scripts_use_lipo_input_before_architecture_flags(self):
@@ -210,7 +259,13 @@ class AppleAppWorkflowTests(unittest.TestCase):
                 self.assertIn("/Scripts/sign-apple-app.sh", script)
         signer = (ROOT / "core/Scripts/sign-apple-app.sh").read_text(encoding="utf-8")
         self.assertIn('find "$app" -depth', signer)
-        self.assertIn('codesign --verify --deep --strict "$app"', signer)
+        self.assertIn('codesign --verify --deep --strict --verbose=4 "$app"', signer)
+        self.assertIn("--preserve-metadata=identifier,entitlements,flags", signer)
+        self.assertNotIn("entitlements,requirements,flags", signer)
+        workflow = (ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8")
+        apple_core = workflow.split("  apple-core:\n", 1)[1].split("\n  apple-packaging:\n", 1)[0]
+        self.assertLess(apple_core.index("test_apple_app_fixture.py"),
+                        apple_core.index("Verify actual Core activation and Apple parity"))
 
     def test_both_ordinary_app_jobs_supply_the_real_core_fixture(self):
         workflow = (ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8")

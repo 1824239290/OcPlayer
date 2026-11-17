@@ -8,8 +8,8 @@
 | 非 squash 历史导入 | 完成 | Apple `14aef05d`、Core `0e595108`、Windows `303c72fc`；三源提交均为当前分支祖先 |
 | 依赖/构建入口 | 已适配，Windows 实际构建通过 | 根 global.json、Windows 默认 Core 路径、统一根脚本；从新检出的固定内核源码完成 Release 原生与 WinUI 构建 |
 | Swift 绑定去重 | 源码检查通过 | 23 份相同内容文件收敛；六个包和 Xcode 引用公共 SDK；706 个其他 Swift 文件及模式不变 |
-| CI/发行适配 | 已修复业务阻塞，完整平台门禁仍未通过 | `2ed4af7` 的 Windows 完整门禁、Rust、iOS AppTests/打包通过；Core-enabled 业务测试通过，嵌套签名失败；macOS AppTests/SwiftPM 因 runner 分配取消，macOS DMG 报空间不足 |
-| 双远端候选同步 | 代码候选已同步，继续修复签名 | 两端候选均包含已测试的代码提交 `2ed4af70be70142c73d8b3a89a0f6d09dc0fc44a`；Core/Windows 历史主分支引用也已同步；签名修复须重新取得完整 CI 证据 |
+| CI/发行适配 | 已修复业务阻塞，完整平台门禁仍未通过 | `b5797b2` 的两端 AppTests、SwiftPM、Rust、iOS 打包通过；Core-enabled 末尾签名仍失败；Windows 热缓存暴露内核准备顺序问题，macOS 打包因 runner 分配取消 |
+| 双远端候选同步 | 代码候选已同步，继续修复签名与缓存 | 两端候选均包含代码提交 `b5797b2b63b3f133e484c9c354bb18262ece985b`；Core/Windows 历史主分支引用也已同步；后续修复须重新取得完整 CI 证据 |
 | 平台验收/切换 | 未通过完整门禁，禁止切换 | 不修改两端 main，不归档旧仓库，不安装或发布测试 MSI |
 
 ## 工作区与来源
@@ -173,3 +173,19 @@ Core 嵌入日志明确指出 `OcPlayer.app: a sealed resource is missing or inv
 本机 43 个根回归全部通过，包含模拟 `XCUIAutomation.framework`、其嵌套 framework/dylib、xctest 的实际调用顺序和失败门禁；Shell 语法与 actionlint 通过。这些 mock 不能替代真实 Apple codesign 结果，新的代码候选必须重新跑完整 CI。证据在 `artifacts/verification/ci-fixes-signing-root-tests.log`，前轮失败与补跑结果在 `ci-fixes-final-attempt1-results.json`、`ci-fixes-final-attempt2-results.json` 和 `ci-fixes-apple-core-final-attempt2`。
 
 完整签名、macOS 普通 AppTests、SwiftPM、macOS DMG 以及 Core-enabled 最末清单仍待验收；在全部必需门禁成功前保持两端 `main`、旧仓库和正式发行不动。
+
+### 测试框架签名身份与 Windows 热缓存顺序
+
+`b5797b2b63b3f133e484c9c354bb18262ece985b` 的 [Actions 44151076213](https://github.com/1824239290/OcPlayer/actions/runs/44151076213) 已完成，整体失败。普通 macOS / iOS simulator AppTests、SwiftPM、Rust 和 iOS 候选打包均通过；两端 NativeCastFacts 的实库偏好用例明确通过。日志在 `ci-fixes-signing-macos-passed.log`、`ci-fixes-signing-ios-passed.log` 和 `ci-fixes-signing-spm-passed.log`。macOS 打包再次因 hosted runner 无法分配而取消，未执行 DMG 复验。
+
+Core-enabled 的 SDK、全部业务包和 1027 个 AppTests 再次通过，19 个既有平台条件用例仍跳过；共享 helper 已签遍所有测试 framework、xctest 和 dylib，但在最后 app 签名/验签阶段报 `nested code is modified or invalid`，末尾 inventory 仍未执行。详细证据在 `artifacts/verification/ci-fixes-apple-core-signing-attempt1`。与普通 macOS 日志对照发现，Xcode 重签测试框架时使用 `identifier,entitlements,flags` 并重新生成 designated requirement，而首个 helper 还保留了原身份的 `requirements`。
+
+后续 helper 与 Xcode 的做法对齐：保留 identifier、entitlements、flags，生成 entitlement DER，让 designated requirement 根据当前签名身份重新生成；不保留与新身份不匹配的旧 requirement。每个子组件签名后立即严格验证并输出详细诊断，根 app 仍执行 deep/strict 验证。新增仅在真实 macOS 上运行的回归：编译最小 Mach-O app、复制并裁去 Xcode 的 `XCUIAutomation.framework` headers/modules，再调用真实 helper，验证 bundle 严格验签和新的 ad-hoc requirement。这项实机回归在 Apple Core 必需 job 的最前面执行；后续完整业务、偏好、嵌入及 inventory 门禁不删减。
+
+同轮 Windows 在恢复约 872 MiB 的 native cache 后失败，日志为 `Choose a new kernel source directory`。缓存只恢复了 `liberika-v0.3.7/third_party`，因此创建了没有 `.git` 的源码根目录；原准备脚本正确拒绝在未知的已有目录里克隆。工作流改为先用 `-PrepareOnly` 检出固定 SHA 并应用已有补丁，再恢复相同 native cache，最后执行依赖构建。保留原目录保护和固定 SHA 检查，没有删除缓存目录、放宽来源校验或换用旧工作区的 DLL。
+
+独立真实 Git fixture 已验证：只有 cache 目录的源码根仍被拒绝；新检出固定 `a4f829999fe8df0c35561fe1bdf0f5ad0df0c3a5` 的冷准备、恢复 cache 目录后的再次准备及 Windows patch 的 reverse-check 均通过。fixture 仅验证准备顺序，没有运行依赖构建，不能替代云端完整热缓存原生/MSI/ABI 结果。证据在 `artifacts/verification/ci-fixes-kernel-cache-fixture/results.json` 和 `ci-fixes-signing-windows-failed.log`。
+
+本机根回归执行 47 项，46 项通过，新增真实 macOS 签名用例因本机 Windows 而未执行；该用例必须由上述 Apple job 真正执行，不能把本机跳过记为通过。Shell 语法与 actionlint 通过，日志在 `artifacts/verification/ci-fixes-signature-identity-root-tests.log`。
+
+新的签名身份、热缓存顺序、macOS DMG 和最末清单仍须取得新源码 SHA 的完整 CI 结果，冻结快照和已授权的两份 Swift 修复 blob 均保持不变。
