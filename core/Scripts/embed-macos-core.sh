@@ -28,14 +28,5 @@ mkdir -p "$app/Contents/Frameworks"
 cp "$library" "$app/Contents/Frameworks/libocp_ffi.dylib"
 /usr/libexec/PlistBuddy -c 'Delete :OcpCoreEnabled' "$plist" 2>/dev/null || true
 /usr/libexec/PlistBuddy -c 'Add :OcpCoreEnabled bool true' "$plist"
-codesign --force --sign "$identity" --timestamp=none "$app/Contents/Frameworks/libocp_ffi.dylib"
-# Xcode build-for-testing can embed test bundles with incomplete signatures when
-# CODE_SIGNING_ALLOWED=NO. Seal these generated debug components before the app.
-shopt -s nullglob
-for test_bundle in "$app/Contents/PlugIns/"*.xctest; do
-  codesign --force --sign "$identity" --timestamp=none "$test_bundle"
-done
-# Preserve the native app's existing entitlements while sealing the changed bundle.
-codesign --force --sign "$identity" --timestamp=none --preserve-metadata=entitlements,requirements,flags "$app"
-codesign --verify --deep --strict "$app"
+"$repo_root/Scripts/sign-apple-app.sh" "$app" "$identity"
 echo "$app"

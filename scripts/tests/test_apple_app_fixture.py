@@ -29,7 +29,7 @@ class AppleAppFixtureTests(unittest.TestCase):
         self.tools = self.root / "mock tools"
         self.tools.mkdir()
         self.log = self.root / "commands.jsonl"
-        for relative in ["scripts/test-apple-app.sh", "core/Scripts/build-apple-dylib.sh"]:
+        for relative in ["scripts/test-apple-app.sh", "core/Scripts/build-apple-dylib.sh", "core/Scripts/sign-apple-app.sh"]:
             destination = self.root / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / relative, destination)
@@ -68,6 +68,14 @@ elif tool == "xcodebuild":
         executable = app / ("OcPlayer" if simulator else "Contents/MacOS/OcPlayer")
         executable.parent.mkdir(parents=True, exist_ok=True)
         executable.write_text("mock executable")
+        frameworks = app / ("Frameworks" if simulator else "Contents/Frameworks")
+        framework = frameworks / "XCUIAutomation.framework"
+        nested = framework / "Frameworks/Support.framework"
+        nested.mkdir(parents=True)
+        (nested / "Support").write_text("mock nested framework executable")
+        (framework / "libSupport.dylib").write_text("mock framework dependency")
+        test_bundle = app / ("PlugIns/Fixture.xctest" if simulator else "Contents/PlugIns/Fixture.xctest")
+        test_bundle.mkdir(parents=True)
     else:
         library = app / ("Frameworks" if simulator else "Contents/Frameworks") / "libocp_ffi.dylib"
         assert library.is_file(), "Tests ran before Core was bundled"
@@ -82,8 +90,19 @@ elif tool == "xcrun":
         assert arguments[2:] == ["-verify_arch", os.environ.get("MOCK_ARCH", "arm64")]
         if failure == "architecture":
             sys.exit(10)
-elif tool == "codesign" and failure == "signing":
-    sys.exit(11)
+elif tool == "codesign":
+    if failure == "signing":
+        sys.exit(11)
+    target = Path(arguments[-1]).resolve()
+    earlier = [json.loads(line) for line in Path(os.environ["MOCK_LOG"]).read_text(encoding="utf-8").splitlines()][:-1]
+    signed = {Path(item["arguments"][-1]).resolve() for item in earlier
+              if item["tool"] == "codesign" and "--force" in item["arguments"]}
+    if target.is_dir():
+        children = {path.resolve() for path in target.rglob("*")
+                    if path.suffix in (".framework", ".xctest", ".dylib")}
+        assert children <= signed, "Nested code must be sealed before its parent bundle"
+    if "--verify" in arguments:
+        assert target in signed, "The root bundle must be sealed before strict verification"
 ''',
             encoding="utf-8",
         )
@@ -134,8 +153,16 @@ elif tool == "codesign" and failure == "signing":
         self.assertEqual(commands[-1]["enabled"], "0")
         self.assertEqual(commands[-1]["libraryPath"], "")
         signing = [record for record in records if record["tool"] == "codesign"]
-        self.assertEqual(len(signing), 3)
-        self.assertTrue(signing[0]["arguments"][-1].endswith("libocp_ffi.dylib"))
+        sealed = [record for record in signing if "--force" in record["arguments"]]
+        self.assertEqual(len(sealed), 6)
+        targets = [Path(record["arguments"][-1]) for record in sealed]
+        nested = next(path for path in targets if path.name == "Support.framework")
+        framework = next(path for path in targets if path.name == "XCUIAutomation.framework")
+        self.assertLess(targets.index(nested), targets.index(framework))
+        self.assertLess(targets.index(framework), len(targets) - 1)
+        self.assertTrue(any(path.name == "libocp_ffi.dylib" for path in targets))
+        for command in sealed:
+            self.assertIn("--preserve-metadata=entitlements,requirements,flags", command["arguments"])
         self.assertEqual(signing[-1]["arguments"][:3], ["--verify", "--deep", "--strict"])
         self.assertLess(records.index(signing[-1]), records.index(commands[-1]))
 
@@ -175,6 +202,15 @@ class AppleAppWorkflowTests(unittest.TestCase):
             with self.subTest(script=relative):
                 self.assertIn('xcrun lipo "$library" -verify_arch "$architecture"', script)
                 self.assertNotIn('lipo -verify_arch "$architecture" "$library"', script)
+
+    def test_both_embedding_paths_share_bottom_up_signing(self):
+        for relative in ["scripts/test-apple-app.sh", "core/Scripts/embed-macos-core.sh"]:
+            script = (ROOT / relative).read_text(encoding="utf-8")
+            with self.subTest(script=relative):
+                self.assertIn("/Scripts/sign-apple-app.sh", script)
+        signer = (ROOT / "core/Scripts/sign-apple-app.sh").read_text(encoding="utf-8")
+        self.assertIn('find "$app" -depth', signer)
+        self.assertIn('codesign --verify --deep --strict "$app"', signer)
 
     def test_both_ordinary_app_jobs_supply_the_real_core_fixture(self):
         workflow = (ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8")

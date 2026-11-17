@@ -8,8 +8,8 @@
 | 非 squash 历史导入 | 完成 | Apple `14aef05d`、Core `0e595108`、Windows `303c72fc`；三源提交均为当前分支祖先 |
 | 依赖/构建入口 | 已适配，Windows 实际构建通过 | 根 global.json、Windows 默认 Core 路径、统一根脚本；从新检出的固定内核源码完成 Release 原生与 WinUI 构建 |
 | Swift 绑定去重 | 源码检查通过 | 23 份相同内容文件收敛；六个包和 Xcode 引用公共 SDK；706 个其他 Swift 文件及模式不变 |
-| CI/发行适配 | 构建/打包通过，完整平台门禁失败 | `fbb4ccd` 的 Rust、SwiftPM、macOS/iOS 打包、Windows 原生/WinUI/MSI 已通过；命令清单、AppTests 与 DanmakuKit 对照仍失败 |
-| 双远端候选同步 | 代码候选已同步 | 两端候选均包含已测试的代码提交 `fbb4ccd26d97ab79d496fd217b422d8b65d0d361`；Core/Windows 历史主分支引用也已同步；收尾文档另作提交 |
+| CI/发行适配 | 已修复业务阻塞，完整平台门禁仍未通过 | `2ed4af7` 的 Windows 完整门禁、Rust、iOS AppTests/打包通过；Core-enabled 业务测试通过，嵌套签名失败；macOS AppTests/SwiftPM 因 runner 分配取消，macOS DMG 报空间不足 |
+| 双远端候选同步 | 代码候选已同步，继续修复签名 | 两端候选均包含已测试的代码提交 `2ed4af70be70142c73d8b3a89a0f6d09dc0fc44a`；Core/Windows 历史主分支引用也已同步；签名修复须重新取得完整 CI 证据 |
 | 平台验收/切换 | 未通过完整门禁，禁止切换 | 不修改两端 main，不归档旧仓库，不安装或发布测试 MSI |
 
 ## 工作区与来源
@@ -151,3 +151,25 @@ Core-enabled job 已完成并失败。真实公共 Swift SDK 的 41 个测试、
 - 嵌入失败后末尾公共命令清单检查未执行；整体 Core-enabled job 仍是失败，不能以业务用例通过代替完整门禁。
 
 完整分阶段证据在 `artifacts/verification/ci-fixes-apple-core`，run 元数据在 `ci-fixes-github-results.json`。后续候选只继续修正架构校验与 Windows 测试同步，不改变已经通过的 Rust 业务代码、公共 Swift SDK 或 Apple Swift 修复 blob；普通 macOS/iOS AppTests、Core 嵌入、末尾清单与 Windows 完整构建/打包仍全部重跑。
+
+### 第二轮修复候选与嵌套签名
+
+`2ed4af70be70142c73d8b3a89a0f6d09dc0fc44a` 的 [Actions 44133047575](https://github.com/1824239290/OcPlayer/actions/runs/44133047575) 及同 SHA 的失败任务补跑均已结束，整体仍为失败。首次六项 Apple job 因 GitHub hosted macOS runner 无法分配而取消；补跑没有改用文档-only CI，也没有把取消或环境失败记为通过。
+
+| 检查 | 第二轮结果 | 说明 |
+| --- | --- | --- |
+| Repository layout / Rust Core | 通过 | 历史、冻结快照及精确 Swift 修复审计；217 个 Rust 测试 |
+| Windows 完整 job | 通过 | 原生/WinUI、自包含 MSI、存储 124 条和服务器 351 条断言；真实 C# SDK 31 个检查、3 组合同；Python ABI 218 个用例中 216 通过、0 失败、0 错误、2 个既有 probe 跳过 |
+| 普通 iOS simulator AppTests | 通过 | 真实 dylib 嵌入和架构检查通过；NativeCastFacts 实库及每轮 29 getter 断言明确通过，未改变全局 Core 默认关闭策略 |
+| iOS 候选打包 | 通过 | 原有未签名打包与 checksum 门禁通过，未创建发行 |
+| 普通 macOS AppTests / SwiftPM | 未取得结果 | 补跑再次因 hosted runner 未分配而取消，须由后续真实运行补验 |
+| macOS 候选打包 | 失败 | 编译及 ad-hoc 签名完成，创建 DMG 时 `hdiutil` 报 `No space left on device`；先保留相同打包代码复验，不删除系统文件或放松打包门禁 |
+| Core-enabled macOS | 业务测试通过，完整 job 失败 | SDK 41、DanmakuKit 276、DiagnosticsKit 97 个测试通过；AppTests 执行 1027 个 XCTest、19 个既有平台条件跳过、0 失败；最后嵌入严格验签失败，末尾 inventory 未执行 |
+
+下载的 Windows MSI 在 `artifacts/verification/ci-fixes-windows-final/artifacts/verification/windows-msi`，SHA256 为 `EC25CA6A256B12795D56B0F2D4FE075A33C1081A30D7F3B0E76D07B2BCE856DF`；receipt 对应上述源码 SHA、固定内核 `a4f829999fe8df0c35561fe1bdf0f5ad0df0c3a5`，CRT 为 `14.51.36247.0`。来源与哈希核对记录在 `ci-fixes-windows-msi-verified.json`；测试包未安装、签名或发行。
+
+Core 嵌入日志明确指出 `OcPlayer.app: a sealed resource is missing or invalid`，子组件为 `Contents/Frameworks/XCUIAutomation.framework`。旧脚本只重签 Core dylib、xctest 和 app，没有重签 Xcode 拷入的测试框架及其嵌套代码。新增共享 `core/Scripts/sign-apple-app.sh`，按物理目录从内向外重签所有 framework、xctest、dylib，再签根 app；保留 entitlements、requirements、flags，继续执行 `codesign --verify --deep --strict`。普通 AppTests 与 Core-enabled 嵌入入口共同使用此 helper，没有使用 `codesign --deep` 代替显式的签名顺序，也没有删除严格验签。
+
+本机 43 个根回归全部通过，包含模拟 `XCUIAutomation.framework`、其嵌套 framework/dylib、xctest 的实际调用顺序和失败门禁；Shell 语法与 actionlint 通过。这些 mock 不能替代真实 Apple codesign 结果，新的代码候选必须重新跑完整 CI。证据在 `artifacts/verification/ci-fixes-signing-root-tests.log`，前轮失败与补跑结果在 `ci-fixes-final-attempt1-results.json`、`ci-fixes-final-attempt2-results.json` 和 `ci-fixes-apple-core-final-attempt2`。
+
+完整签名、macOS 普通 AppTests、SwiftPM、macOS DMG 以及 Core-enabled 最末清单仍待验收；在全部必需门禁成功前保持两端 `main`、旧仓库和正式发行不动。

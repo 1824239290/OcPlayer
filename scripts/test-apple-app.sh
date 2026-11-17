@@ -60,9 +60,7 @@ for architecture in $(xcrun lipo -archs "$executable"); do
 done
 mkdir -p "$app/$frameworks_relative"
 cp "$library" "$app/$frameworks_relative/libocp_ffi.dylib"
-codesign --force --sign - --timestamp=none "$app/$frameworks_relative/libocp_ffi.dylib"
-codesign --force --sign - --timestamp=none --preserve-metadata=entitlements,requirements,flags "$app"
-codesign --verify --deep --strict "$app"
+"$repo_root/core/Scripts/sign-apple-app.sh" "$app" -
 
 TEST_RUNNER_OCP_CORE_ENABLED=0 TEST_RUNNER_OCP_CORE_LIBRARY_PATH='' \
   xcodebuild "${build_arguments[@]}" test-without-building
