@@ -18,7 +18,7 @@ let package = Package(
         // `MediaRepository` 直接持有 `MediaServer`，故依赖 JellyfinKit（连带
         // jellyfin-sdk-swift，已在 SwiftPM 缓存里），仓储可在包内离线测试。
         .package(path: "../JellyfinKit"),
-        .package(path: "../OcPlayerCore"),
+        .package(path: "../../../../core/bindings/apple/OcPlayerCore"),
     ],
     targets: [
         .target(

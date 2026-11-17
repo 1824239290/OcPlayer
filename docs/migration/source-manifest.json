@@ -1,0 +1,48 @@
+{
+  "date": "2026-11-17",
+  "branch": "codex/monorepo-migration",
+  "backupDirectory": "D:\\OcPlayer-Migration-Backups\\20261117-monorepo",
+  "appleRetainedRoots": [".agents", ".github", ".gitignore", "LICENSE", "skills-lock.json"],
+  "sources": {
+    "apple": {
+      "repository": "https://github.com/1824239290/OcPlayer.git",
+      "commit": "888ccdd8a1098b4426166bb4b09b2f7dca3d8720",
+      "tree": "3edbe47660f57798ff60b51a7ec5dc29d738c188",
+      "prefix": "apps/apple",
+      "importCommit": "14aef05d28c14211534aacdcd2dfb0bd9ad52d0d",
+      "fileCount": 1050,
+      "bundleSha256": "D9AF64FCB86F25DF7840B276587C99BC6FEAF0EAEA3CA5ADE8600A1BD6E18571"
+    },
+    "core": {
+      "repository": "http://192.168.5.107:8418/jumusu/OcPlayer-Core.git",
+      "commit": "7e3968e2c6106d87a5d0fa17602a6972905cf19f",
+      "tree": "8b1ed8a6b6339ec20bcf4781b0ae13a05a918627",
+      "prefix": "core",
+      "importCommit": "0e595108a64443b6480b60f59d071e4282a2a939",
+      "bundleSha256": "0D096ECC38B69E3AF6F067D5B0B981B07F5092588AF6B2BEDC9294BF2C8EBECA"
+    },
+    "windows": {
+      "repository": "http://192.168.5.107:8418/jumusu/OcPlayer-Windows.git",
+      "commit": "49e9e21f24b1ba580580a1129d51a95306bde865",
+      "tree": "ebaa0be99add550529f63b91d0b5da652e37ff77",
+      "prefix": "apps/windows",
+      "importCommit": "303c72fc9303f2f11263ec5122df8981c86acc9e",
+      "bundleSha256": "AA41E7908CC44E424547348B7C71B2398DF66425D4A2EFC64C42BBAEFC861A1C"
+    }
+  },
+  "swiftBinding": {
+    "originalApplePath": "Packages/OcPlayerCore",
+    "canonicalPath": "core/bindings/apple/OcPlayerCore",
+    "identicalContentFiles": 23,
+    "canonicalFileModes": "core"
+  },
+  "kernelPins": {
+    "apple": "v0.3.6",
+    "windows": "v0.3.7",
+    "windowsCommit": "a4f829999fe8df0c35561fe1bdf0f5ad0df0c3a5"
+  },
+  "excludedWorkingFiles": [
+    "OcPlayer-Core/tests/windows-video/extract_frame.c",
+    "OcPlayer-Windows/docs/MONOREPO-MIGRATION-PLAN.md"
+  ]
+}

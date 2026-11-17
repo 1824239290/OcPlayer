@@ -7,7 +7,7 @@ output_dir="${2:-$repo_root/artifacts/macos-verification}"
 [[ -f "$apple_root/OcPlayer.xcodeproj/project.pbxproj" ]] || { echo 'OcPlayer Apple source checkout is required' >&2; exit 1; }
 mkdir -p "$output_dir"
 output_dir="$(cd "$output_dir" && pwd)"
-export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/tmp/ocplayer-target}"
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$repo_root/target}"
 cd "$repo_root"
 cargo fmt --all -- --check > "$output_dir/rust-format.log" 2>&1
 cargo test --workspace --locked > "$output_dir/rust-tests.log" 2>&1
@@ -23,12 +23,12 @@ export OCP_NATIVE_HTTP_PROBE_PATH="$output_dir/native-http-probe"
 export OCP_CORE_ECHO_LIBRARY_PATH="$output_dir/apple-boundary-echo.dylib"
 python3 tests/public_command_contract.py > "$output_dir/public-command-contract-tests.log" 2>&1
 python3 tests/transport_fidelity_contract.py > "$output_dir/transport-fidelity-contract-tests.log" 2>&1
-Scripts/check-apple-binding.sh "$apple_root" > "$output_dir/apple-binding-equivalence.log" 2>&1
+Scripts/check-apple-binding.sh "$apple_root" > "$output_dir/apple-binding-layout.log" 2>&1
 cmp tests/media_projection_server.py "$apple_root/Packages/JellyfinKit/Tests/JellyfinKitTests/Fixtures/media_projection_server.py" > "$output_dir/media-projection-fixture-equivalence.log" 2>&1
 cmp tests/media_nullable_server.py "$apple_root/Packages/JellyfinKit/Tests/JellyfinKitTests/Fixtures/media_nullable_server.py" > "$output_dir/media-nullable-fixture-equivalence.log" 2>&1
 cmp tests/playback_preparation_server.py "$apple_root/Packages/JellyfinKit/Tests/JellyfinKitTests/Fixtures/playback_preparation_server.py" > "$output_dir/playback-preparation-fixture-equivalence.log" 2>&1
 cmp tests/intro_provider_server.py "$apple_root/Packages/DanmakuKit/Tests/DanmakuKitTests/Fixtures/intro_provider_server.py" > "$output_dir/intro-provider-fixture-equivalence.log" 2>&1
-cmp tests/standalone_danmaku_server.py "$apple_root/Packages/OcPlayerCore/Tests/OcPlayerCoreTests/Fixtures/standalone_danmaku_server.py" > "$output_dir/standalone-fixture-equivalence.log" 2>&1
+cmp tests/standalone_danmaku_server.py bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/Fixtures/standalone_danmaku_server.py > "$output_dir/standalone-fixture-equivalence.log" 2>&1
 cmp tests/tmdb_wire_server.py bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/Fixtures/tmdb_wire_server.py > "$output_dir/tmdb-wire-fixture-equivalence.log" 2>&1
 cmp tests/tmdb_wire_server.py "$apple_root/Packages/MetadataKit/Tests/MetadataKitTests/Fixtures/tmdb_wire_server.py" >> "$output_dir/tmdb-wire-fixture-equivalence.log" 2>&1
 cmp tests/tmdb_enrichment_server.py "$apple_root/Packages/MetadataKit/Tests/MetadataKitTests/Fixtures/tmdb_enrichment_server.py" > "$output_dir/tmdb-enrichment-fixture-equivalence.log" 2>&1
@@ -64,7 +64,7 @@ python3 tests/media_repository_contract.py > "$output_dir/media-repository-contr
 python3 tests/repository_progress_contract.py > "$output_dir/repository-progress-contract-tests.log" 2>&1
 python3 tests/repository_composition_contract.py > "$output_dir/repository-composition-contract-tests.log" 2>&1
 python3 tests/repository_flow_contract.py > "$output_dir/repository-flow-contract-tests.log" 2>&1
-for package in OcPlayerCore JellyfinKit MetadataKit MoviePilotKit BangumiKit PlaybackKit DanmakuKit DiagnosticsKit; do
+for package in JellyfinKit MetadataKit MoviePilotKit BangumiKit PlaybackKit DanmakuKit DiagnosticsKit; do
   swift test --package-path "$apple_root/Packages/$package" --skip-update > "$output_dir/$package-tests.log" 2>&1
 done
 xcodebuild -project "$apple_root/OcPlayer.xcodeproj" -scheme OcPlayer-macOS \

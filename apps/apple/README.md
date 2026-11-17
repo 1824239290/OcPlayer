@@ -1,5 +1,7 @@
 # OcPlayer · 橘猫播放器
 
+Apple 客户端现在位于单仓库 `apps/apple`；下列组件命令从本目录运行，公共 Swift Core 绑定直接引用 `../../core/bindings/apple/OcPlayerCore`。仓库根入口见 [统一开发说明](../../docs/DEVELOPMENT.md)。
+
 <p align="center">
   <img src="Docs/images/home.jpg" alt="OcPlayer 首页:媒体库、继续观看与海报氛围背景" width="880">
 </p>
@@ -31,7 +33,7 @@ Bangumi / MoviePilot 不用可在设置里停用,入口会全部隐藏。
 
 ## 下载
 
-预编译版本见 [Releases](../../releases),各附 SHA256 校验文件:
+预编译版本见 [Releases](https://github.com/1824239290/OcPlayer/releases),各附 SHA256 校验文件:
 
 - **macOS**:`OcPlayer-<版本>-macOS-arm64.dmg`,打开把 App 拖进「应用程序」
 - **iOS / iPadOS**:`OcPlayer-<版本>-ios-unsigned.ipa`,未签名,用 [AltStore](https://altstore.io/) / [Sideloadly](https://sideloadly.io/) / TrollStore 等工具重签安装

@@ -10,7 +10,7 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "../DiagnosticsKit"),
-        .package(path: "../OcPlayerCore"),
+        .package(path: "../../../../core/bindings/apple/OcPlayerCore"),
     ],
     targets: [
         .target(name: "PlaybackKit", dependencies: ["DiagnosticsKit", "OcPlayerCore"]),

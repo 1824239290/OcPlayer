@@ -107,6 +107,15 @@ internal static partial class Program
             Environment.SetEnvironmentVariable("OCP_UPDATE_FEED", fixture.Url + "release");
             var release = await AppReleaseService.Check(); Assert(release is { IsNewer: true, Notes: "Fixture changes" } && release.DownloadUrl == fixture.Url + "download", "manual update request reads version, date, notes and release URL from actual HTTP response");
             AppReleaseService.Ignore(release!.Version); Assert(AppReleaseService.IgnoredVersion == release.Version, "ignored release version survives storage readback");
+            Environment.SetEnvironmentVariable("OCP_UPDATE_FEED", fixture.Url + "releases");
+            var windowsRelease = await AppReleaseService.Check();
+            Assert(windowsRelease is { Version: "v1001.0.0", Notes: "Windows fixture" } && windowsRelease.DownloadUrl == fixture.Url + "windows-download",
+                "shared repository update feed selects the newest stable Windows tag and excludes Apple, Core, drafts and prereleases");
+            Assert(AppReleaseService.CompareVersions("windows/v1001.0.0", "v1000.0.0") > 0, "Windows tag namespace preserves numeric version comparison");
+            Environment.SetEnvironmentVariable("OCP_UPDATE_FEED", fixture.Url + "release-page-one");
+            Assert((await AppReleaseService.Check())?.Version == "v1001.0.0", "update lookup follows same-origin pagination when Apple releases fill the first page");
+            Environment.SetEnvironmentVariable("OCP_UPDATE_FEED", fixture.Url + "non-windows-releases");
+            Assert(await AppReleaseService.Check() is null, "Apple-only release pages do not offer an incompatible Windows update");
             await runtime.Tmdb.Clear(); Assert(runtime.Tmdb.EnrichedCount == 0 && runtime.Tmdb.MatchKey(media, "fixture") is null, "clear TMDB removes both mappings and payload data");
             string? danmakuJson = null;
             var danmakuSettings = new DanmakuSettings(() => danmakuJson, value => danmakuJson = value);
@@ -196,10 +205,19 @@ internal static partial class Program
                         ? new object[] { new { animeId = 91, animeTitle = "Alias title", type = "tvseries", episodes = new[] { new { episodeId = 91001, episodeTitle = "第1集" } } } } : [] },
                     "/v1/comment/91001" or "/v1/comments/91001" => new { count = 1, comments = new[] { new { p = "1,1,16777215", m = "alias fixture" } } },
                     "/release" => new { tag_name = "v999.0.0", published_at = "2026-11-16T00:00:00Z", body = "Fixture changes", html_url = Url + "download" },
+                    "/releases" or "/release-page-two" => new[] {
+                        new { tag_name = "v9999.0.0", published_at = "2026-11-17T00:00:00Z", body = "Apple fixture", html_url = Url + "apple-download", draft = false, prerelease = false },
+                        new { tag_name = "core/v9999.0.0", published_at = "2026-11-17T00:00:00Z", body = "Core fixture", html_url = Url + "core-download", draft = false, prerelease = false },
+                        new { tag_name = "windows/v1000.0.0", published_at = "2026-11-17T00:00:00Z", body = "Older fixture", html_url = Url + "older-download", draft = false, prerelease = false },
+                        new { tag_name = "windows/v1001.0.0", published_at = "2026-11-16T00:00:00Z", body = "Windows fixture", html_url = Url + "windows-download", draft = false, prerelease = false },
+                        new { tag_name = "windows/v1002.0.0", published_at = "2026-11-17T00:00:00Z", body = "Draft fixture", html_url = Url + "draft-download", draft = true, prerelease = false },
+                        new { tag_name = "windows/v1003.0.0", published_at = "2026-11-17T00:00:00Z", body = "Prerelease fixture", html_url = Url + "prerelease-download", draft = false, prerelease = true } },
+                    "/non-windows-releases" or "/release-page-one" => new[] { new { tag_name = "v9999.0.0", published_at = "2026-11-17T00:00:00Z", body = "Apple fixture", html_url = Url + "apple-download" } },
                     _ => new { ok = true }
                 };
                 var bytes = path == "/poster.jpg" ? new byte[] { 1, 2, 3, 4 } : Encoding.UTF8.GetBytes(JsonSerializer.Serialize(response));
-                var header = Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Type: {(path == "/poster.jpg" ? "image/jpeg" : "application/json")}\r\nContent-Length: {bytes.Length}\r\nConnection: close\r\n\r\n");
+                var pagination = path == "/release-page-one" ? $"Link: <{Url}release-page-two>; rel=\"next\"\r\n" : "";
+                var header = Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Type: {(path == "/poster.jpg" ? "image/jpeg" : "application/json")}\r\nContent-Length: {bytes.Length}\r\n{pagination}Connection: close\r\n\r\n");
                 await stream.WriteAsync(header, _stop.Token); await stream.WriteAsync(bytes, _stop.Token);
             }
             catch (Exception ex) when (ex is OperationCanceledException or IOException or SocketException) { }

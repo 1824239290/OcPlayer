@@ -1,5 +1,8 @@
 # OcPlayer-Windows
 
+本组件现在在 OcPlayer 单仓库的 `apps/windows` 维护，共享 Core 位于 `../../core`。
+下列组件命令从本目录运行；[统一开发入口](../../docs/DEVELOPMENT.md) 提供仓库根命令。
+
 OcPlayer 的 Windows 移植版本。项目目标是在保留 OcPlayer 媒体库、Jellyfin / Emby、弹幕和本地播放能力的基础上，提供符合 Windows 设计语言的桌面体验。
 
 ## 当前状态

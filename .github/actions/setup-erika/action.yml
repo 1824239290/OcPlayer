@@ -14,21 +14,24 @@ runs:
     - name: Resolve Erika version
       id: erika
       shell: bash
+      working-directory: ${{ github.workspace }}/apps/apple
       run: |
         set -euo pipefail
         resolved_version="$(Scripts/fetch-erika.sh --resolve-version "${{ inputs.erika-version }}")"
         echo "version=$resolved_version" >> "$GITHUB_OUTPUT"
         echo "ERIKA_VERSION=$resolved_version" >> "$GITHUB_ENV"
+        echo "APPLE_TOOLCHAIN=$(xcodebuild -version | tr '\n' '-' | tr ' ' '_')" >> "$GITHUB_ENV"
 
     - name: Cache Erika binaries
       uses: actions/cache@v4
       with:
         path: |
-          Vendor/downloads
-          Vendor/extracted
-          Packages/ErikaKit/Vendor/Erika.xcframework
-        key: erika-${{ runner.os }}-${{ runner.arch }}-${{ steps.erika.outputs.version }}
+          apps/apple/Vendor/downloads
+          apps/apple/Vendor/extracted
+          apps/apple/Packages/ErikaKit/Vendor/Erika.xcframework
+        key: monorepo-erika-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.erika.outputs.version }}
 
     - name: Fetch Erika kernel
       shell: bash
+      working-directory: ${{ github.workspace }}/apps/apple
       run: Scripts/fetch-erika.sh "$ERIKA_VERSION"

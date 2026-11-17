@@ -2,6 +2,11 @@
 
 Shared GPL-3.0 Rust core for OcPlayer on macOS, iOS, and Windows.
 
+This component is maintained in the OcPlayer monorepo under `core/`. Run the
+component commands below from that directory; see [the development entry points](../docs/DEVELOPMENT.md)
+for commands from the repository root. Apple consumers use the single Swift SDK
+in `bindings/apple/OcPlayerCore`; no application-side copy is maintained.
+
 The workspace contains the stable C ABI, JSON command/response envelope,
 snapshots, FIFO events, playback session primitives, and domain crates
 for HTTP, Jellyfin/Emby, SQLite, TMDB, danmaku, Bangumi, and MoviePilot. Platform

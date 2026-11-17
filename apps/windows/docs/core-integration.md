@@ -1,8 +1,8 @@
 # Windows / Core 组合构建
 
-2026-11-15，Windows 前端开始默认使用真实 Core。两个仓库保持独立：Windows 的
+2026-11-15，Windows 前端开始默认使用真实 Core。现在三端在 OcPlayer 单仓库维护：Windows 的
 `OcPlayer.CoreAdapter` 直接编译引用 Core 的 C# SDK 源码，不再保存一份手工复制的绑定代码，
-所有生成输出留在 Windows 仓库内。
+所有生成输出留在 `apps/windows` 组件内。下列组件命令从 `apps/windows` 运行，根入口见 [统一开发说明](../../../docs/DEVELOPMENT.md)。
 Rust Core 负责业务、播放状态和 SQLite 进度；Windows 适配器把实际解码事件反馈到 Core，
 Erika 负责 FFmpeg 解码、WASAPI 音频、字幕 / 弹幕与 D3D11 渲染。
 
@@ -11,8 +11,8 @@ Erika 负责 FFmpeg 解码、WASAPI 音频、字幕 / 弹幕与 D3D11 渲染。
 默认目录：
 
 ```text
-D:/OcPlayer-Core/
-D:/OcPlayer-Windows/
+OcPlayer/core/
+OcPlayer/apps/windows/
 ```
 
 内核版本固定在 `Config/Kernel.version.json`：官方 `AimesSoft/liberika` 的 **v0.3.7**，

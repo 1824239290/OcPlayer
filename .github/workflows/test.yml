@@ -2,11 +2,17 @@ name: Test
 
 on:
   push:
-    branches: [main]
+    branches: [main, codex/monorepo-migration]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+defaults:
+  run:
+    shell: bash
+    working-directory: apps/apple
 
 concurrency:
   group: test-${{ github.ref }}
@@ -44,9 +50,46 @@ concurrency:
 #    比串行时多约 3 分钟，但墙钟少 18 分钟；公开仓库 runner 免费，只有并发额度成本。
 
 jobs:
+  changes:
+    name: Repository layout
+    runs-on: ubuntu-latest
+    outputs:
+      core: ${{ steps.paths.outputs.core }}
+      apple: ${{ steps.paths.outputs.apple }}
+      windows: ${{ steps.paths.outputs.windows }}
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Select affected platforms
+        id: paths
+        env:
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python scripts/ci_paths.py
+      - name: Verify history, bindings and unchanged Swift behavior
+        env:
+          VERIFY_MIGRATION: ${{ github.ref == 'refs/heads/codex/monorepo-migration' }}
+        run: |
+          python -B -m unittest discover -s scripts/tests
+          options=()
+          if [[ "$VERIFY_MIGRATION" == "true" ]]; then options+=(--migration); fi
+          python scripts/verify-monorepo.py "${options[@]}" --output artifacts/verification/layout.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: repository-layout
+          path: artifacts/verification/layout.json
+
   # ── 1/3  macOS AppTests ────────────────────────────────────────────────────
   macos-apptests:
     name: App tests (macOS)
+    needs: changes
+    if: needs.changes.outputs.apple == 'true'
     runs-on: macos-26
     timeout-minutes: 30
     steps:
@@ -93,10 +136,10 @@ jobs:
       - name: Cache macOS DerivedData
         uses: actions/cache@v4
         with:
-          path: .local-build/ci-test
-          key: mac-dd-v1-${{ runner.os }}-${{ hashFiles('OcPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Packages/*/Package.resolved') }}
+          path: apps/apple/.local-build/ci-test
+          key: monorepo-mac-dd-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.APPLE_TOOLCHAIN }}-${{ hashFiles('apps/apple/OcPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'apps/apple/Packages/*/Package.resolved', 'core/bindings/apple/OcPlayerCore/Package.swift') }}
           restore-keys: |
-            mac-dd-v1-${{ runner.os }}-
+            monorepo-mac-dd-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.APPLE_TOOLCHAIN }}-
 
       # ## `BLD-03`：给 release 打包 job「播种」SPM checkouts
       #
@@ -145,11 +188,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            .local-build/release/DerivedData/SourcePackages
-            .local-build/release-ios/DerivedData/SourcePackages
-          key: spm-pkg-v1-${{ runner.os }}-${{ hashFiles('OcPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Packages/*/Package.resolved') }}
+            apps/apple/.local-build/release/DerivedData/SourcePackages
+            apps/apple/.local-build/release-ios/DerivedData/SourcePackages
+          key: monorepo-spm-pkg-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.APPLE_TOOLCHAIN }}-${{ hashFiles('apps/apple/OcPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'apps/apple/Packages/*/Package.resolved') }}
           restore-keys: |
-            spm-pkg-v1-${{ runner.os }}-
+            monorepo-spm-pkg-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.APPLE_TOOLCHAIN }}-
 
       # OcPlayer-macOS scheme 的 TestAction 只挂 OcPlayerTests（纯逻辑，不依赖内核/网络/GPU）；
       # 渲染集成测试在 SPM 包内，由 `spm-packages` job 单独跑。
@@ -171,13 +214,15 @@ jobs:
         with:
           name: test-logs-macos
           path: |
-            .local-build/ci-test/Logs
-            .local-build/ci-test/Logs/Test/*.xcresult
+            apps/apple/.local-build/ci-test/Logs
+            apps/apple/.local-build/ci-test/Logs/Test/*.xcresult
           if-no-files-found: ignore
 
   # ── 2/3  iOS 模拟器 AppTests ──────────────────────────────────────────────
   ios-apptests:
     name: App tests (iOS simulator)
+    needs: changes
+    if: needs.changes.outputs.apple == 'true'
     runs-on: macos-26
     timeout-minutes: 40
     steps:
@@ -216,10 +261,10 @@ jobs:
       - name: Cache iOS DerivedData
         uses: actions/cache@v4
         with:
-          path: .local-build/ci-test-ios
-          key: ios-dd-v1-${{ runner.os }}-${{ hashFiles('OcPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Packages/*/Package.resolved') }}
+          path: apps/apple/.local-build/ci-test-ios
+          key: monorepo-ios-dd-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.APPLE_TOOLCHAIN }}-${{ hashFiles('apps/apple/OcPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'apps/apple/Packages/*/Package.resolved', 'core/bindings/apple/OcPlayerCore/Package.swift') }}
           restore-keys: |
-            ios-dd-v1-${{ runner.os }}-
+            monorepo-ios-dd-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.APPLE_TOOLCHAIN }}-
 
       # iOS 与 macOS 共用同一份 OcPlayerTests 源码（OcPlayerTests-iOS target +
       # OcPlayer-iOS.xcscheme 早已存在），此前 CI 只跑 macOS destination，iOS 独有
@@ -290,13 +335,15 @@ jobs:
         with:
           name: test-logs-ios
           path: |
-            .local-build/ci-test-ios/Logs
-            .local-build/ci-test-ios/Logs/Test/*.xcresult
+            apps/apple/.local-build/ci-test-ios/Logs
+            apps/apple/.local-build/ci-test-ios/Logs/Test/*.xcresult
           if-no-files-found: ignore
 
   # ── 3/3  SwiftPM 包测试 ───────────────────────────────────────────────────
   spm-packages:
     name: SwiftPM package tests
+    needs: changes
+    if: needs.changes.outputs.apple == 'true'
     runs-on: macos-26
     timeout-minutes: 40
     steps:
@@ -340,16 +387,19 @@ jobs:
       - name: Cache SwiftPM builds
         uses: actions/cache@v4
         with:
-          path: Packages/*/.build
-          key: spm-test-v2-${{ runner.os }}-${{ hashFiles('OcPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Packages/*/Package.resolved') }}
+          path: |
+            apps/apple/Packages/*/.build
+            core/bindings/apple/OcPlayerCore/.build
+          key: monorepo-spm-test-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.APPLE_TOOLCHAIN }}-${{ hashFiles('apps/apple/OcPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'apps/apple/Packages/*/Package.resolved', 'core/bindings/apple/OcPlayerCore/Package.swift') }}
           restore-keys: |
-            spm-test-v2-${{ runner.os }}-
+            monorepo-spm-test-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.APPLE_TOOLCHAIN }}-
 
       - name: Run SwiftPM package tests
         shell: bash
         run: |
           set -euo pipefail
           python3 -B -m unittest discover -s Scripts/tests
+          swift test --package-path ../../core/bindings/apple/OcPlayerCore
           for pkg in \
               Packages/AppDesignKit \
               Packages/CoreModel \
@@ -374,3 +424,103 @@ jobs:
             --skip ErikaRenderTests --skip ErikaSmokeTests --skip ErikaOpenFileTests \
             --skip ErikaHTTPHeaderTests --skip ErikaLifecycleTests --skip ErikaMemorySnapshotTests \
             --skip ErikaReadAheadBehaviorTests
+
+  rust-core:
+    name: Rust Core
+    needs: changes
+    if: needs.changes.outputs.core == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        id: rust
+        with:
+          components: rustfmt
+      - uses: actions/cache@v4
+        with:
+          path: core/target
+          key: monorepo-core-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.cachekey }}-${{ hashFiles('core/Cargo.lock') }}
+      - run: cargo fmt --manifest-path core/Cargo.toml --all -- --check
+      - run: cargo test --manifest-path core/Cargo.toml --workspace --locked
+
+  apple-core:
+    name: Apple Core-enabled parity
+    needs: changes
+    if: needs.changes.outputs.apple == 'true'
+    runs-on: macos-26
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        id: rust
+        with:
+          components: rustfmt
+      - name: Resolve Erika version
+        run: |
+          version="$(awk -F= '/^[[:space:]]*ERIKA_VERSION[[:space:]]*=/ {sub(/^[^=]*=[[:space:]]*/, ""); print; exit}' apps/apple/Config/Erika.version)"
+          test -n "$version"
+          echo "ERIKA_VERSION=$version" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/setup-erika
+        with:
+          erika-version: ${{ env.ERIKA_VERSION }}
+      - uses: actions/cache@v4
+        with:
+          path: core/target
+          key: monorepo-apple-core-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.cachekey }}-${{ hashFiles('core/Cargo.lock') }}
+      - name: Verify actual Core activation and Apple parity
+        run: ./scripts/verify-macos-core.sh
+      - name: Upload Core parity evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apple-core-parity
+          path: |
+            artifacts/verification/apple-core/*.log
+            artifacts/verification/apple-core/*.json
+            artifacts/verification/apple-core/DerivedData/Logs/Test/*.xcresult
+          retention-days: 7
+          if-no-files-found: ignore
+
+  windows:
+    name: Windows Core, app and MSI
+    needs: changes
+    if: needs.changes.outputs.windows == 'true'
+    uses: ./.github/workflows/windows-build.yml
+    with:
+      ref: ${{ github.sha }}
+
+  checks:
+    name: Monorepo checks
+    if: always()
+    needs: [changes, macos-apptests, ios-apptests, spm-packages, rust-core, apple-core, windows]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: Require all affected checks to succeed
+        env:
+          CHECK_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          results = json.loads(os.environ['CHECK_RESULTS'])
+          assert results['changes']['result'] == 'success', 'Layout/selection check failed'
+          groups = {'apple': ['macos-apptests', 'ios-apptests', 'spm-packages', 'apple-core'], 'core': ['rust-core'], 'windows': ['windows']}
+          for name, result in results.items():
+              assert result['result'] in ('success', 'skipped'), f"{name}: {result['result']}"
+          for platform, jobs in groups.items():
+              if results['changes']['outputs'][platform] == 'true':
+                  for job in jobs:
+                      assert results[job]['result'] == 'success', f'{job} did not pass'
+          PY

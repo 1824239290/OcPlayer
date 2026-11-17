@@ -19,7 +19,7 @@ members = [
 version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0-only"
-repository = "http://192.168.5.107:8418/jumusu/OcPlayer-Core"
+repository = "http://192.168.5.107:8418/jumusu/OcPlayer"
 
 [workspace.dependencies]
 ocp-model = { path = "crates/ocp-model" }

@@ -67,7 +67,7 @@ echo "Checking Erika core ($ERIKA_VERSION)..."
 if [[ "${SKIP_ERIKA_FETCH:-0}" != "1" ]]; then
     "$ROOT/Scripts/fetch-erika.sh" "$ERIKA_VERSION"
 else
-    if ! grep -q "ErikaOpenOptions" Packages/ErikaKit/Sources/CErika/include/erika.h; then
+    if ! grep -q "ErikaOpenOptions" "$ROOT/Packages/ErikaKit/Sources/CErika/include/erika.h"; then
         echo "SKIP_ERIKA_FETCH=1 but shim header looks stale (missing ErikaOpenOptions)" >&2
         exit 1
     fi

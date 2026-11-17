@@ -29,7 +29,7 @@ internal sealed partial class RuntimeSettingsPages
         view = AsyncAction("查看新版说明", async () => { if (AppReleaseService.Latest is { } release) await ShowRelease(page.XamlRoot, release); });
         view.Visibility = AppReleaseService.Latest?.IsNewer == true ? Visibility.Visible : Visibility.Collapsed; page.Children.Add(view);
         page.Children.Add(Action($"开源许可证 · {OpenSourceCatalog.Entries.Length} 项", () => navigate("settings:开源许可证")));
-        page.Children.Add(AsyncAction("项目主页", async () => { await global::Windows.System.Launcher.LaunchUriAsync(new Uri("http://192.168.5.107:8418/jumusu/OcPlayer-Windows")); }));
+        page.Children.Add(AsyncAction("项目主页", async () => { await global::Windows.System.Launcher.LaunchUriAsync(new Uri("http://192.168.5.107:8418/jumusu/OcPlayer")); }));
         page.Children.Add(Note("This product uses the TMDB API but is not endorsed or certified by TMDB."));
     }
     public static async Task CheckAutomaticUpdate(FrameworkElement owner)

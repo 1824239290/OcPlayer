@@ -14,7 +14,7 @@ let package = Package(
         .package(url: "https://github.com/jellyfin/jellyfin-sdk-swift", from: "3.3.0"),
         .package(path: "../CoreModel"),
         .package(path: "../DiagnosticsKit"),
-        .package(path: "../OcPlayerCore"),
+        .package(path: "../../../../core/bindings/apple/OcPlayerCore"),
     ],
     targets: [
         .target(

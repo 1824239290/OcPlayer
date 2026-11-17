@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <OcpCoreRoot Condition="'$(OcpCoreRoot)' == ''">$(MSBuildThisFileDirectory)..\OcPlayer-Core\</OcpCoreRoot>
+    <OcpCoreRoot Condition="'$(OcpCoreRoot)' == ''">$(MSBuildThisFileDirectory)..\..\core\</OcpCoreRoot>
     <OcpNativeDirectory Condition="'$(OcpNativeDirectory)' == ''">$(MSBuildThisFileDirectory)native\OcPlayerCore\$(Platform)\</OcpNativeDirectory>
   </PropertyGroup>
 </Project>

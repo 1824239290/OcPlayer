@@ -327,7 +327,7 @@
 				1A00000000000000000000C0 /* XCLocalSwiftPackageReference "Packages/MetadataKit" */,
 				1A0000000000000000000072 /* XCLocalSwiftPackageReference "Packages/DanmakuRenderKit" */,
 				1A00000000000000000000B0 /* XCLocalSwiftPackageReference "Packages/AppDesignKit" */,
-				1A00000000000000000000D3 /* XCLocalSwiftPackageReference "Packages/OcPlayerCore" */,
+				1A00000000000000000000D3 /* XCLocalSwiftPackageReference "../../core/bindings/apple/OcPlayerCore" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 1A0000000000000000000003 /* Products */;
@@ -745,9 +745,9 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/MoviePilotKit;
 		};
-		1A00000000000000000000D3 /* XCLocalSwiftPackageReference "Packages/OcPlayerCore" */ = {
+		1A00000000000000000000D3 /* XCLocalSwiftPackageReference "../../core/bindings/apple/OcPlayerCore" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = Packages/OcPlayerCore;
+			relativePath = "../../core/bindings/apple/OcPlayerCore";
 		};
 /* End XCLocalSwiftPackageReference section */
 

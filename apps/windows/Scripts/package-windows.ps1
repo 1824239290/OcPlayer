@@ -2,7 +2,7 @@
 param(
     [ValidateSet('x64', 'ARM64')][string]$Platform = 'x64',
     [ValidatePattern('^\d+\.\d+\.\d+(\.\d+)?$')][string]$Version = '1.0.0',
-    [string]$CoreRoot = (Join-Path $PSScriptRoot '..\..\OcPlayer-Core'),
+    [string]$CoreRoot = (Join-Path $PSScriptRoot '..\..\..\core'),
     [string]$VcRuntimeDirectory,
     [string]$OutputDirectory,
     [string]$CertificateThumbprint,

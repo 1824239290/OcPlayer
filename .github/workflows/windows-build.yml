@@ -1,0 +1,94 @@
+name: Windows build and verification
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: true
+      version:
+        type: string
+        default: '1.0.0'
+      artifact-name:
+        type: string
+        default: windows-verification
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify root Windows entry points
+        run: |
+          python -B -m unittest discover -s scripts/tests -v
+          if ($LASTEXITCODE -ne 0) { throw 'Root entry point tests failed' }
+      - uses: dtolnay/rust-toolchain@stable
+        id: rust
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: Prepare native tools
+        run: |
+          choco install make nasm --no-progress -y
+          if ($LASTEXITCODE -ne 0) { throw 'Native tool installation failed' }
+          Import-Module "$env:ChocolateyInstall/helpers/chocolateyProfile.psm1"
+          Update-SessionEnvironment
+          $clang = 'C:\Program Files\LLVM\bin'
+          if (!(Test-Path -LiteralPath "$clang\libclang.dll")) { throw 'LLVM libclang.dll is required' }
+          "$clang" >> $env:GITHUB_PATH
+          "LIBCLANG_PATH=$clang" >> $env:GITHUB_ENV
+          if (Test-Path -LiteralPath 'C:\Program Files\NASM') { 'C:\Program Files\NASM' >> $env:GITHUB_PATH }
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - uses: actions/cache@v4
+        with:
+          path: |
+            core/target
+            apps/windows/artifacts/core-target
+            apps/windows/artifacts/kernel-target
+            apps/windows/artifacts/liberika-v0.3.7/third_party
+          key: monorepo-windows-native-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.cachekey }}-${{ hashFiles('core/Cargo.lock', 'apps/windows/Config/Kernel.version.json', 'apps/windows/Scripts/patches/*.patch') }}
+      - name: Prepare pinned liberika
+        run: ./scripts/prepare-kernel.ps1
+      - name: Build native Core and WinUI app
+        run: ./scripts/build-windows.ps1 -Configuration Release -LibClangPath $env:LIBCLANG_PATH
+      - name: Verify Core ABI and C# SDK
+        run: ./scripts/verify-core.ps1 -Configuration release
+      - name: Run isolated Windows storage and server integration
+        run: |
+          dotnet run --project apps/windows/tests/OcPlayer.Integration -c Release -p:Platform=x64 -- --storage-only artifacts/verification/windows-storage
+          if ($LASTEXITCODE -ne 0) { throw 'Windows storage integration failed' }
+          dotnet run --project apps/windows/tests/OcPlayer.Integration -c Release -p:Platform=x64 -- --server-only artifacts/verification/windows-server
+          if ($LASTEXITCODE -ne 0) { throw 'Windows server integration failed' }
+      - name: Verify self-contained MSI packaging
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: ./scripts/package-windows.ps1 -Version $env:RELEASE_VERSION -OutputDirectory artifacts/verification/windows-msi
+      - name: Upload Windows evidence and MSI
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: |
+            artifacts/verification/**/*.json
+            artifacts/verification/**/*.log
+            artifacts/verification/windows-msi/*.msi
+            apps/windows/native/OcPlayerCore/x64/build-receipt.json
+          retention-days: 7
+          if-no-files-found: ignore

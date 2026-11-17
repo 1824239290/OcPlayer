@@ -7,11 +7,16 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag, for example v0.1.0"
+        description: "Apple release tag, for example v0.3.1 (Windows uses its separate workflow)"
         required: true
 
 permissions:
   contents: write
+
+defaults:
+  run:
+    shell: bash
+    working-directory: apps/apple
 
 concurrency:
   group: release-${{ github.ref }}
@@ -25,6 +30,9 @@ jobs:
     name: Tests (AppTests + SwiftPM packages)
     runs-on: macos-26
     timeout-minutes: 45
+    outputs:
+      commit: ${{ steps.release-source.outputs.commit }}
+      tag: ${{ steps.release-source.outputs.tag }}
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
@@ -44,15 +52,22 @@ jobs:
       # 连一条用例都没跑就死。发布 v0.2.1 时实测踩到——本步骤是 daf9e32 新加的，
       # 此前只在没有它的 v0.2.0 workflow 上发过版，等于从未在 tag push 上验证过。
       - name: Check out release commit
+        id: release-source
         shell: bash
+        working-directory: .
         run: |
           set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][A-Za-z0-9.-]+)?$ ]] || { echo 'Invalid Apple release tag' >&2; exit 2; }
           git fetch --tags --force origin
           if ! git rev-parse -q --verify "refs/tags/$RELEASE_TAG" >/dev/null; then
             echo "Tag $RELEASE_TAG does not exist; push it first or create it on the commit to release" >&2
             exit 2
           fi
-          git checkout "$RELEASE_TAG"
+          release_commit="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          git checkout --detach "$release_commit"
+          test -d apps/apple || { echo 'Use the historical tag workflow for pre-monorepo releases' >&2; exit 2; }
+          echo "commit=$release_commit" >> "$GITHUB_OUTPUT"
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Resolve Erika version
         id: erika-version
@@ -78,11 +93,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            .local-build/ci-release-test
-            Packages/*/.build
-          key: spm-release-v1-${{ runner.os }}-${{ hashFiles('OcPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Packages/*/Package.resolved') }}
+            apps/apple/.local-build/ci-release-test
+            apps/apple/Packages/*/.build
+            core/bindings/apple/OcPlayerCore/.build
+          key: monorepo-spm-release-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.APPLE_TOOLCHAIN }}-${{ hashFiles('apps/apple/OcPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'apps/apple/Packages/*/Package.resolved', 'core/bindings/apple/OcPlayerCore/Package.swift') }}
           restore-keys: |
-            spm-release-v1-${{ runner.os }}-
+            monorepo-spm-release-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.APPLE_TOOLCHAIN }}-
 
       - name: Run App tests (macOS scheme)
         shell: bash
@@ -124,6 +140,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -B -m unittest discover -s Scripts/tests
+          swift test --package-path ../../core/bindings/apple/OcPlayerCore
           for pkg in \
               Packages/AppDesignKit \
               Packages/CoreModel \
@@ -150,27 +167,14 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 60
     env:
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      RELEASE_TAG: ${{ needs.tests.outputs.tag }}
 
     steps:
       - name: Check out source
         uses: actions/checkout@v4
         with:
+          ref: ${{ needs.tests.outputs.commit }}
           fetch-depth: 0
-
-      # --force 的理由同 tests job 的 checkout：tag push 时该 ref 已被 actions/checkout
-      # 改写成 commit，非强制 fetch 会被拒。
-      - name: Check out dispatch tag
-        if: github.event_name == 'workflow_dispatch'
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch --tags --force origin
-          if ! git rev-parse -q --verify "refs/tags/$RELEASE_TAG" >/dev/null; then
-            echo "Tag $RELEASE_TAG does not exist; push it first or create it on the commit to release" >&2
-            exit 2
-          fi
-          git checkout "$RELEASE_TAG"
 
       - name: Validate release environment
         shell: bash
@@ -229,11 +233,11 @@ jobs:
           # 全不同 → 两个 job **静默 miss**（不是「互相顶掉」，是各查各的、都查不到）。
           # 所以三个地方都列**同样这两条**，version 才一致。
           path: |
-            .local-build/release/DerivedData/SourcePackages
-            .local-build/release-ios/DerivedData/SourcePackages
-          key: spm-pkg-v1-${{ runner.os }}-${{ hashFiles('OcPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Packages/*/Package.resolved') }}
+            apps/apple/.local-build/release/DerivedData/SourcePackages
+            apps/apple/.local-build/release-ios/DerivedData/SourcePackages
+          key: monorepo-spm-pkg-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.APPLE_TOOLCHAIN }}-${{ hashFiles('apps/apple/OcPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'apps/apple/Packages/*/Package.resolved') }}
           restore-keys: |
-            spm-pkg-v1-${{ runner.os }}-
+            monorepo-spm-pkg-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.APPLE_TOOLCHAIN }}-
 
       - name: Free disk space for packaging
         shell: bash
@@ -260,7 +264,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: OcPlayer-${{ env.RELEASE_TAG }}-macOS-arm64
-          path: dist/*
+          path: apps/apple/dist/*
           if-no-files-found: error
 
       - name: Create or update GitHub Release
@@ -283,31 +287,18 @@ jobs:
   ios:
     name: Build iOS (iPhone + iPad)
     # 排在 macOS 之后：Release 由 macOS job 创建，这里只上传，避免并发建 release 竞态。
-    needs: macos
+    needs: [tests, macos]
     runs-on: macos-26
     timeout-minutes: 60
     env:
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      RELEASE_TAG: ${{ needs.tests.outputs.tag }}
 
     steps:
       - name: Check out source
         uses: actions/checkout@v4
         with:
+          ref: ${{ needs.tests.outputs.commit }}
           fetch-depth: 0
-
-      # --force 的理由同 tests job 的 checkout：tag push 时该 ref 已被 actions/checkout
-      # 改写成 commit，非强制 fetch 会被拒。
-      - name: Check out dispatch tag
-        if: github.event_name == 'workflow_dispatch'
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch --tags --force origin
-          if ! git rev-parse -q --verify "refs/tags/$RELEASE_TAG" >/dev/null; then
-            echo "Tag $RELEASE_TAG does not exist; push it first or create it on the commit to release" >&2
-            exit 2
-          fi
-          git checkout "$RELEASE_TAG"
 
       - name: Validate release environment
         shell: bash
@@ -345,11 +336,11 @@ jobs:
           # path 列表与 macos job / 播种步骤**逐字一致**（见 macos job 那段注释：
           # version 是 path 列表的哈希，不一致就必然 miss）。
           path: |
-            .local-build/release/DerivedData/SourcePackages
-            .local-build/release-ios/DerivedData/SourcePackages
-          key: spm-pkg-v1-${{ runner.os }}-${{ hashFiles('OcPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Packages/*/Package.resolved') }}
+            apps/apple/.local-build/release/DerivedData/SourcePackages
+            apps/apple/.local-build/release-ios/DerivedData/SourcePackages
+          key: monorepo-spm-pkg-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.APPLE_TOOLCHAIN }}-${{ hashFiles('apps/apple/OcPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'apps/apple/Packages/*/Package.resolved') }}
           restore-keys: |
-            spm-pkg-v1-${{ runner.os }}-
+            monorepo-spm-pkg-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.APPLE_TOOLCHAIN }}-
 
       - name: Free disk space for packaging
         shell: bash
@@ -374,7 +365,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: OcPlayer-${{ env.RELEASE_TAG }}-iOS
-          path: dist/*
+          path: apps/apple/dist/*
           if-no-files-found: error
 
       - name: Upload to GitHub Release

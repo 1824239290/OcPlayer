@@ -6,7 +6,7 @@ the same adapter source and tests used by the OcPlayer Apple application;
 Update both copies together when changing the ABI adapter.
 
 Consumers can declare a local Swift package dependency on
-`/path/to/OcPlayer-Core/bindings/apple/OcPlayerCore` and import `OcPlayerCore`.
+`/path/to/OcPlayer/core/bindings/apple/OcPlayerCore` and import `OcPlayerCore`.
 The host must embed the matching dylib (or provide `OCP_CORE_LIBRARY_PATH` in
 development). The package discovers the library at runtime and checks its
 exports; no third-party Swift package dependency is needed.

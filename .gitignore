@@ -48,3 +48,9 @@ Reports/
 
 # CodeGraph 本地索引库，不入库
 .codegraph/
+
+/artifacts/
+**/__pycache__/
+/.vs/
+/.vscode/
+/.idea/

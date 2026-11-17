@@ -12,6 +12,6 @@
   </ItemGroup>
   <Target Name="CheckSharedCore" BeforeTargets="PrepareForBuild">
     <Error Condition="!Exists('$(OcpCoreRoot)bindings\windows\OcPlayerCore\OcPlayerCore.csproj')"
-           Text="OcPlayer-Core SDK not found. Check out OcPlayer-Core beside OcPlayer-Windows or set -p:OcpCoreRoot=absolute-path." />
+           Text="Shared Core SDK not found at core/bindings/windows. Use a complete OcPlayer checkout or set -p:OcpCoreRoot=absolute-path." />
   </Target>
 </Project>

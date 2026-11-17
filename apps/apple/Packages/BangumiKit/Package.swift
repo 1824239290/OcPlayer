@@ -11,7 +11,7 @@ let package = Package(
         // 本地 SQLite 缓存（进度/收藏/章节的本地层），与 Bangumi-iOS 同版本线。
         .package(url: "https://github.com/groue/GRDB.swift", from: "7.11.0"),
         .package(path: "../DiagnosticsKit"),
-        .package(path: "../OcPlayerCore"),
+        .package(path: "../../../../core/bindings/apple/OcPlayerCore"),
     ],
     targets: [
         .target(

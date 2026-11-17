@@ -1,0 +1,74 @@
+name: Windows release
+
+on:
+  push:
+    tags: ['windows/v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Windows tag, for example windows/v1.0.0'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
+      version: ${{ steps.source.outputs.version }}
+      tag: ${{ steps.source.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: source
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^windows/v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || { echo 'Invalid Windows release tag' >&2; exit 2; }
+          commit="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "version=${RELEASE_TAG#windows/v}" >> "$GITHUB_OUTPUT"
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+  build:
+    needs: source
+    uses: ./.github/workflows/windows-build.yml
+    with:
+      ref: ${{ needs.source.outputs.commit }}
+      version: ${{ needs.source.outputs.version }}
+      artifact-name: windows-release
+  publish:
+    needs: [source, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-release
+          path: artifacts
+      - name: Publish verified Windows MSI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.source.outputs.tag }}
+          SOURCE_COMMIT: ${{ needs.source.outputs.commit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t installers < <(find artifacts -name '*.msi' -type f)
+          [[ "${#installers[@]}" == 1 ]] || { echo 'Expected one verified MSI' >&2; exit 1; }
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --latest=false
+            gh release upload "$RELEASE_TAG" "${installers[0]}" --clobber
+          else
+            gh release create "$RELEASE_TAG" "${installers[0]}" --verify-tag --target "$SOURCE_COMMIT" --title "OcPlayer Windows ${RELEASE_TAG#windows/}" --generate-notes --latest=false
+          fi

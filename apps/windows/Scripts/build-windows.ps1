@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$CoreRoot = (Join-Path $PSScriptRoot '..\..\OcPlayer-Core'),
+    [string]$CoreRoot = (Join-Path $PSScriptRoot '..\..\..\core'),
     [string]$KernelRoot = $env:OCP_ERIKA_ROOT,
     [ValidateSet('Debug', 'Release')][string]$Configuration = 'Debug',
     [ValidateSet('x64', 'ARM64')][string]$Platform = 'x64',

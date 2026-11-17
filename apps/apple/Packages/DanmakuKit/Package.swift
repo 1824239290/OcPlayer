@@ -10,7 +10,7 @@ let package = Package(
     dependencies: [
         // 统一诊断日志（JSONL + OSLog，敏感字段自动脱敏），沿用 JellyfinKit / ErikaKit 的模式。
         .package(path: "../DiagnosticsKit"),
-        .package(path: "../OcPlayerCore"),
+        .package(path: "../../../../core/bindings/apple/OcPlayerCore"),
     ],
     targets: [
         .target(

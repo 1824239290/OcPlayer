@@ -75,8 +75,8 @@
 ## 验证
 
 ```powershell
-dotnet build src/OcPlayer.Windows/OcPlayer.Windows.csproj -p:Platform=x64 -p:OutputPath=D:/OcPlayer-Windows/artifacts/viewing-build/
-dotnet build tests/OcPlayer.Integration/OcPlayer.Integration.csproj -p:Platform=x64 -p:OutputPath=D:/OcPlayer-Windows/artifacts/viewing-tests/
+dotnet build src/OcPlayer.Windows/OcPlayer.Windows.csproj -p:Platform=x64 "-p:OutputPath=$PWD/artifacts/viewing-build/"
+dotnet build tests/OcPlayer.Integration/OcPlayer.Integration.csproj -p:Platform=x64 "-p:OutputPath=$PWD/artifacts/viewing-tests/"
 ./artifacts/viewing-tests/OcPlayer.Integration.exe --server-only artifacts/viewing-verification-final
 ```
 
