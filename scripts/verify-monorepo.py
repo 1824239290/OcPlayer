@@ -57,7 +57,27 @@ def verify_history(manifest):
     return counts
 
 
-def verify_unchanged_swift(manifest, revision=None):
+def approved_swift_repairs(manifest, follow_up):
+    assert follow_up["validationCommit"] == manifest["validationCommit"], "Swift repair audit changed the frozen migration snapshot"
+    assert follow_up["authorization"].strip(), "Swift repairs require an explicit authorization record"
+    repairs = {}
+    for repair in follow_up["swiftRepairs"]:
+        path = repair["path"]
+        assert path.startswith("apps/apple/"), f"Swift repair is outside the Apple application: {path}"
+        relative = path.removeprefix("apps/apple/")
+        assert relative.endswith(".swift") and not relative.endswith("/Package.swift"), f"Not an Apple business/test Swift repair: {path}"
+        assert not relative.startswith(manifest["swiftBinding"]["originalApplePath"] + "/"), f"Duplicate bindings cannot be approved as repairs: {path}"
+        assert relative not in repairs, f"Duplicate Swift repair: {path}"
+        for field in ["before", "after"]:
+            assert re.fullmatch(r"100(?:644|755) blob [0-9a-f]{40}", repair[field]), f"Invalid Swift repair metadata: {path} ({field})"
+        assert repair["before"].split()[0] == repair["after"].split()[0], f"Swift repair changed the file mode: {path}"
+        assert repair["before"] != repair["after"], f"Swift repair has no content change: {path}"
+        assert repair["reason"].strip(), f"Swift repair has no rationale: {path}"
+        repairs[relative] = repair
+    return repairs
+
+
+def verify_unchanged_swift(manifest, revision=None, repairs=None):
     current = tree_entries(revision) if revision else index_entries()
     apple = tree_entries(manifest["sources"]["apple"]["commit"])
     core = tree_entries(manifest["sources"]["core"]["commit"])
@@ -65,6 +85,8 @@ def verify_unchanged_swift(manifest, revision=None):
     canonical_prefix = manifest["swiftBinding"]["canonicalPath"] + "/"
     unchanged = 0
     binding_files = 0
+    repairs = repairs or {}
+    applied_repairs = []
     for path, metadata in apple.items():
         if path.startswith(binding_prefix):
             relative = path[len(binding_prefix):]
@@ -75,10 +97,21 @@ def verify_unchanged_swift(manifest, revision=None):
             assert "apps/apple/" + path not in current, f"Duplicate binding remains: {path}"
             binding_files += 1
         elif path.endswith(".swift") and not path.endswith("/Package.swift"):
-            assert current.get("apps/apple/" + path) == metadata, f"Apple business/platform Swift changed: {path}"
-            unchanged += 1
+            expected = metadata
+            if path in repairs:
+                repair = repairs[path]
+                assert repair["before"] == metadata, f"Swift repair does not match the original Apple source: {path}"
+                expected = repair["after"]
+                applied_repairs.append(repair)
+            else:
+                unchanged += 1
+            assert current.get("apps/apple/" + path) == expected, f"Apple business/platform Swift differs from its baseline or exact audited repair: {path}"
     assert binding_files == manifest["swiftBinding"]["identicalContentFiles"]
-    return {"unchangedAppleSwiftFiles": unchanged, "deduplicatedBindingFiles": binding_files}
+    assert len(applied_repairs) == len(repairs), "Swift repair audit includes files outside the preserved Apple Swift sources"
+    result = {"unchangedAppleSwiftFiles": unchanged, "deduplicatedBindingFiles": binding_files}
+    if repairs:
+        result["authorizedAppleSwiftRepairs"] = applied_repairs
+    return result
 
 
 def verify_dependencies():
@@ -145,19 +178,24 @@ def verify_ignores():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Verify OcPlayer history, layout, bindings and unchanged Apple Swift behavior")
+    parser = argparse.ArgumentParser(description="Verify OcPlayer history, layout, bindings, frozen Swift sources and audited follow-up repairs")
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--migration", action="store_true", help="Require the current candidate's Swift sources and kernel pins to match the original baselines")
+    parser.add_argument("--migration", action="store_true", help="Also require current Swift sources to match the original baselines or exact audited follow-up repairs, and preserve kernel pins")
     arguments = parser.parse_args()
     manifest = json.loads((ROOT / "docs/migration/source-manifest.json").read_text(encoding="utf-8"))
     report = {"commit": git("rev-parse", "HEAD"), "sourceFileCounts": verify_history(manifest)}
-    comparison_revision = None if arguments.migration else manifest.get("validationCommit")
-    if arguments.migration or comparison_revision:
-        if comparison_revision:
-            git("merge-base", "--is-ancestor", comparison_revision, "HEAD")
+    comparison_revision = manifest.get("validationCommit")
+    if comparison_revision:
+        git("merge-base", "--is-ancestor", comparison_revision, "HEAD")
         report.update(verify_unchanged_swift(manifest, comparison_revision))
         verify_pins(manifest, comparison_revision)
-        report["swiftComparisonRevision"] = comparison_revision or "index"
+        report["swiftComparisonRevision"] = comparison_revision
+    if arguments.migration:
+        repair_path = ROOT / "docs/migration/follow-up-repairs.json"
+        repairs = approved_swift_repairs(manifest, json.loads(repair_path.read_text(encoding="utf-8"))) if repair_path.is_file() else {}
+        report["candidateSwiftAudit"] = verify_unchanged_swift(manifest, repairs=repairs)
+        report["candidateSwiftComparisonRevision"] = "index"
+        verify_pins(manifest)
     report["swiftBindingConsumers"] = verify_dependencies()
     verify_ignores()
     report["status"] = "passed"

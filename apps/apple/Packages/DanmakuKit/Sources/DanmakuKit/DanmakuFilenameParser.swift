@@ -87,6 +87,11 @@ public enum DanmakuFilenameParser {
         "(?i)(?:the\\s+)?final\\s+season|最终季|完结篇",
     ].map { compiled($0) }
 
+    private static let mediaExtensions: Set<String> = [
+        "mkv", "mp4", "avi", "mov", "wmv", "webm", "ts", "m2ts",
+        "flv", "m4v", "mpg", "mpeg", "rmvb", "rm", "vob", "iso",
+    ]
+
     /// 全角字符转半角。
     public static func normalizeFullWidth(_ str: String) -> String {
         var result = ""
@@ -213,7 +218,10 @@ public enum DanmakuFilenameParser {
         let normalized = normalizeFullWidth(raw)
             .replacingOccurrences(of: "\\", with: "/")
         let filenameWithExt = normalized.split(separator: "/").last.map(String.init) ?? normalized
-        let filename = (filenameWithExt as NSString).deletingPathExtension
+        let filenamePath = filenameWithExt as NSString
+        let withoutExtension = filenamePath.deletingPathExtension
+        let filename = mediaExtensions.contains(filenamePath.pathExtension.lowercased()) && !withoutExtension.isEmpty
+            ? withoutExtension : filenameWithExt
 
         let working = filename
 
@@ -244,16 +252,18 @@ public enum DanmakuFilenameParser {
 
         // 3. 识别集数
         var detectedEpisode: Int? = nil
-        for regex in episodeRegexes {
+        for (patternIndex, regex) in episodeRegexes.enumerated() {
             let matches = regex.matches(in: working, range: NSRange(working.startIndex..., in: working))
             for match in matches {
                 if let range = Range(match.range(at: 1), in: working),
                    let num = Int(working[range]) {
-                    if num == 1080 || num == 720 || num == 2160 || (num >= 1970 && num <= 2050) {
-                        continue
-                    }
-                    if let s = detectedSeason, num == s {
-                        continue
+                    if patternIndex == 2 {
+                        if num == 1080 || num == 720 || num == 2160 || (1970...2050).contains(num) {
+                            continue
+                        }
+                        if let season = detectedSeason, num == season {
+                            continue
+                        }
                     }
                     detectedEpisode = num
                     break

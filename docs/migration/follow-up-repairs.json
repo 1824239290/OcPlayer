@@ -1,0 +1,18 @@
+{
+  "validationCommit": "6be4a6f380e77aa951fe47c4b0eeb9fb82265316",
+  "authorization": "用户在完整候选 CI 失败后明确要求“接着修吧”；以下是独立的基线问题修复，不修改已冻结的结构迁移快照。",
+  "swiftRepairs": [
+    {
+      "path": "apps/apple/Packages/DanmakuKit/Sources/DanmakuKit/DanmakuFilenameParser.swift",
+      "before": "100644 blob f0f796ac2eef2c6c502066e62b8a1c9233ac5470",
+      "after": "100644 blob b025d805698f4db0ab8968ecba13e9a83bc8b901",
+      "reason": "原生兜底只剥已知媒体后缀，且季数、年份、分辨率排除仅作用于裸数字；保留无后缀季集、点号标题及显式集数，与已有 Rust 合同一致。"
+    },
+    {
+      "path": "apps/apple/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuFilenameParserTests.swift",
+      "before": "100644 blob 66688ce565d0ab3f2682b57599bc4811460a5bb7",
+      "after": "100644 blob ed94436cea107edb0b386d27c5b727e41eeb6952",
+      "reason": "增加固定预期的解析边界回归，对原生兜底和公共入口均检查；原有 Rust/Swift 差分 corpus 与全部断言不变。"
+    }
+  ]
+}

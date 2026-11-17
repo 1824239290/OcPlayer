@@ -59,6 +59,61 @@ final class DanmakuFilenameParserTests: XCTestCase {
         XCTAssertEqual(r2.episodeNumber, 12)
     }
 
+    func testExtensionlessDottedNamesKeepEpisodeAndTitle() {
+        let cases: [(raw: String, title: String, episode: Int?, season: Int?)] = [
+            ("Frieren.S01E05", "Frieren", 5, 1),
+            ("葬送的芙莉莲.S01E01", "葬送的芙莉莲", 1, 1),
+            ("Dr. Stone", "Dr Stone", nil, nil),
+            ("C:\\media\\Show.E12.MKV", "Show", 12, nil),
+            ("Title.Suffix", "Title Suffix", nil, nil),
+        ]
+        for testCase in cases {
+            let expected = ParsedAnimeInfo(
+                rawName: testCase.raw, title: testCase.title,
+                episodeNumber: testCase.episode, seasonNumber: testCase.season
+            )
+            XCTAssertEqual(DanmakuFilenameParser.parseNative(testCase.raw), expected, testCase.raw)
+            XCTAssertEqual(DanmakuFilenameParser.parse(testCase.raw), expected, testCase.raw)
+        }
+    }
+
+    func testKnownMediaExtensionsAreRemovedCaseInsensitively() {
+        for suffix in ["mkv", "mp4", "avi", "mov", "wmv", "webm", "ts", "m2ts",
+                       "flv", "m4v", "mpg", "mpeg", "rmvb", "rm", "vob", "iso"] {
+            let raw = "Show.E12." + suffix.uppercased()
+            let expected = ParsedAnimeInfo(rawName: raw, title: "Show", episodeNumber: 12)
+            XCTAssertEqual(DanmakuFilenameParser.parseNative(raw), expected, raw)
+            XCTAssertEqual(DanmakuFilenameParser.parse(raw), expected, raw)
+        }
+    }
+
+    func testExplicitEpisodeNumbersAreNotFilteredAsBareNumbers() {
+        let cases: [(raw: String, episode: Int, season: Int?)] = [
+            ("Show.S01E01.mkv", 1, 1),
+            ("Show.S02E02", 2, 2),
+            ("番剧 第2季 第2集.mp4", 2, 2),
+            ("Show E720", 720, nil),
+            ("Show S01E1080", 1080, 1),
+            ("Show E2160", 2160, nil),
+            ("番剧 第1970集", 1970, nil),
+            ("Show E2050", 2050, nil),
+        ]
+        for testCase in cases {
+            let native = DanmakuFilenameParser.parseNative(testCase.raw)
+            XCTAssertEqual(native.episodeNumber, testCase.episode, testCase.raw)
+            XCTAssertEqual(native.seasonNumber, testCase.season, testCase.raw)
+            XCTAssertEqual(DanmakuFilenameParser.parse(testCase.raw), native, testCase.raw)
+        }
+    }
+
+    func testBareSeasonYearAndResolutionNumbersAreNotEpisodes() {
+        for raw in ["Show Season 2", "Show Season 2 02", "Show 720", "Show 1080",
+                    "Show 2160", "Show 1970", "Show 2050", "Show Season 2 1080p"] {
+            XCTAssertNil(DanmakuFilenameParser.parseNative(raw).episodeNumber, raw)
+            XCTAssertNil(DanmakuFilenameParser.parse(raw).episodeNumber, raw)
+        }
+    }
+
     /// 枚举外发布组（VCB-Studio）：行首方括号 + 全名另有括号组 → 按发布组位剥除。
     func testUnlistedReleaseGroupLeadingSlotIsStripped() {
         let r = DanmakuFilenameParser.parse("[VCB-Studio] 葬送的芙莉莲 - 01 [Ma10p][1080p].mkv")
