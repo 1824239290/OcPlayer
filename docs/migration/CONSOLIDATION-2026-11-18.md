@@ -69,4 +69,14 @@ Mac 修复提交的 Apple tree 为 `7ca694ed3a49d1b0956a583b75070ba27730ff6a`；
 
 完整 CI 结果、失败及补跑日志、原始 `.xcresult`、下载归档、产物和复验 JSON 保存在上述 `consolidation-*` 证据目录。`candidate-final-verdict.json` 核对实际 SHA 与十个 job 的 success；各平台包复验分别为 `ci-macos-package-verification.json`、`ci-ios-package-verification.json`、`ci-windows-package-verification.json`，Core 为 `ci-core-verification.json`。合仓后的主分支自动检查单独保留。
 
+## 合仓后的主分支检查
+
+两端 main 统一快进到 `10194d132cfbc6d73248b75c57fc3863db8c0ea9` 后，[Actions 44292707241](https://github.com/1824239290/OcPlayer/actions/runs/44292707241) 整体成功。布局、Rust、普通 macOS／iOS AppTests、SwiftPM、Core-enabled、Windows Core／app／MSI 与汇总共八个必需 job 均通过。候选 Apple 打包仅在迁移分支运行，主分支按既定条件跳过；前述候选的两端打包证据仍有效。
+
+main 专用的 release SwiftPM 缓存初始化已实际执行成功，两端 NativeCastFacts 实库偏好用例通过。Windows 在 main 重新构建固定内核依赖、Core 和 WinUI，再通过集成、MSI、ABI 和 SDK；此轮 MSI SHA256 为 `4a620b9fd62e8a57f7c058c40880d34cfbe32a25b6ce600df5c04bb5a02ab69a`，下载哈希与 manifest 一致，receipt 指向上述 `10194d1` 与固定 v0.3.7 内核。
+
+原工作区 `/Users/jumusu/Documents/project/OcPlayer` 已快进到同一 main，并重新通过迁移守卫。原未跟踪的 `Docs/REX-LOCAL-MEDIA-LIBRARY.md` 内容哈希保持相同；原本地配置复制到 `apps/apple/Secrets.xcconfig` 并保留旧文件，配置没有进入 Git，原有缓存保留，tracked working tree 干净。
+
+`main-final-verdict.json`、`main-windows-package-verification.json`、`main-promotion-receipt.json` 和 `original-main-transition.json` 保存上述实际结果。最后的验收说明提交仅补充 Markdown，生产源码、脚本和工作流与这份已通过主分支 CI 的提交一致；最终远端对象 ID 再次单独核对。
+
 当前工作不包含正式发行、旧仓库归档或覆盖安装。Windows ARM64、安装升级卸载、真实账号、长片、完整 HDR / Dolby Vision，以及 Mac 外接屏、Intel / Rosetta、系统深浅色切换等范围仍按各自报告保留为未实测。

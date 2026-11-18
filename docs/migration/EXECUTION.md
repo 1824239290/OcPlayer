@@ -238,3 +238,9 @@ Core-enabled 已执行至最末：SDK 41，AppTests 1027／1008 通过／19 跳�
 下载的 Mac ZIP／DMG 40 文件相同，严格验签及 app／dSYM UUID 一致；Apple 五个文件的校验和通过。Windows MSI 的哈希、源码 receipt 与固定内核钉点通过核对。[收尾记录](CONSOLIDATION-2026-11-18.md) 保存完整结论和产物哈希，原始数据在 `artifacts/verification/consolidation-20261118T095735Z`。
 
 用户授权检查后统一合并，两端 main 按快进方式接收相同的源码与收尾记录，保留全部导入及平台修复历史。收尾说明仅改 Markdown，生产源码树仍与已验收的 `91017b0` 相同；主分支自动检查另行保留。正式发行、旧分仓归档、安装升级及各报告未实测的设备／账号／HDR 范围没有扩展为本轮通过项。
+
+### 合仓后 main 的完整检查通过
+
+GitHub／Gitea main 均已快进到 `10194d132cfbc6d73248b75c57fc3863db8c0ea9`。[Actions 44292707241](https://github.com/1824239290/OcPlayer/actions/runs/44292707241) 整体成功，八个主分支必需 job 全部通过，包括实际 main release 缓存播种、两端实库 AppTests、Core-enabled、Windows 固定依赖／原生／WinUI／MSI／SDK 与最终汇总。迁移候选专用 Apple 打包在 main 按条件跳过，实际源码候选 `91017b0` 的双平台包和十项完整验收仍分别保留。
+
+本机原检出也已快进并通过迁移守卫。原文档内容、缓存和本地配置保留；新目录配置衔接没有提交私有信息。原始证据、产物、两轮主分支／候选 CI 和最终对象 ID 核对收据都在 `consolidation-20261118T095735Z`。最后的文档补充不改变这轮已通过的生产源码、脚本或工作流。
