@@ -1,6 +1,6 @@
 # 合仓收尾接收记录（2026-11-18）
 
-macOS 与 Windows 追加修复均已接收并合入最终候选。Windows 修复的 Git blob 与本机实测报告一致；候选正在完成新提交的必需 CI，main 尚未切换。
+macOS 与 Windows 追加修复均已接收并合入最终候选，完整必需 CI 已通过。GitHub 与 Gitea 的 main 统一快进到包含两边修复和本收尾记录的提交；收尾文档没有改变已验收的生产源码树。
 
 ## 已落入 Git 的内容
 
@@ -33,10 +33,40 @@ Mac 修复提交的 Apple tree 为 `7ca694ed3a49d1b0956a583b75070ba27730ff6a`；
 
 完整接收与检查证据位于 `artifacts/verification/consolidation-20261118T095735Z`。首次根测试失败保留为 `root-tests-combined.log`，修复后的复跑另存；Windows 已提交修复保存为 `windows-committed-repair.patch`。
 
-## 最终候选门禁
+## 最终候选验收
 
-1. 候选包含 Mac 修复与 Windows 已实测的精确修复，保留冻结迁移快照、公共绑定唯一性和两端独立 liberika 钉点。
-2. 对组合后的实际候选提交运行迁移守卫与必需 CI；此前 `c4f53462115f52df47023e629e8766e3ea841ee6` / Actions `44161047381` 的十个成功 job 不能冒充这份新源码的 CI。
-3. 同步两端候选并核对对象 ID，所有必需 job 成功后才具备主分支切换的验证依据。
+1. 候选包含 Mac 修复与 Windows 已实测的精确修复，冻结迁移快照、公共绑定唯一性和两端独立 liberika 钉点均保留。
+2. 实际源码候选 `91017b0c2caf8a526b967e29011a8b8ba82fb9ec` 的 [Actions 44281243934](https://github.com/1824239290/OcPlayer/actions/runs/44281243934) 第二次执行整体成功，十个必需 job 均通过。此前 `c4f5346` 的 CI 继续保留为历史证据。
+3. 两端候选已同步，随后按用户授权快进两端 main。最终对象 ID 和原工作区检查另存本机收据；后续说明提交仅修改 Markdown，生产源码树与上述验收提交一致。
+
+首轮 iOS 在构建测试用 Rust 库前无法解析 `index.crates.io`，依赖下载失败；这轮 AppTests 尚未执行。保留首轮失败与汇总门禁拒绝记录，在同一源码 SHA 上仅补跑失败项，iOS AppTests 和汇总随后成功；没有修改源代码、切换依赖镜像或删除用例。其余八个成功 job 的证据复用同一源码输入。
+
+| 必需检查 | 最终结果 |
+| --- | --- |
+| Repository layout | 通过；冻结 706 份 Swift，当前 699 份原 blob、7 份精确审计修复，公共绑定 23 份唯一 |
+| Rust Core | 格式检查与 217 项 Rust 测试通过 |
+| 普通 macOS / iOS simulator AppTests | 两端通过，NativeCastFacts 实库偏好差分实际执行 |
+| SwiftPM package tests | 通过；完整本机 Erika GPU／预读覆盖另见 Mac 报告 |
+| Apple Core-enabled parity | SDK 41；AppTests 1027 项中 1008 通过、19 条件跳过、0 失败；传输合同 9、最末公共合同 6 通过；372 条清单严格等于生产 routing，Core 嵌入严格验签通过 |
+| Apple package (macos / ios) | ZIP、DMG、IPA 与两份 dSYM 均通过；下载文件校验和复验通过 |
+| Windows Core, app and MSI | 原生／WinUI 构建、自包含 MSI、存储 124、服务器 351 通过；真实 SDK 31 检查／3 合同；ABI 218 项中 216 通过、2 个独立 Apple probe 按平台跳过 |
+| Monorepo checks | 通过，所有必需平台与候选打包均为 success |
+
+云端 Core 测试记录一条 QoS 优先级反转运行时告警，失败数为零；原始结果包保留，未描述为零告警。19 条条件跳过包括 18 条 iOS 布局用例和未设置截图导出环境的 1 条用例。本机最终单独 Core 回归开启截图导出后的 1009／18 和零 runtime warning 仍仅归属于 Mac 报告中的那次执行。
+
+## 候选产物复验
+
+下载归档的 SHA256 与 GitHub artifact digest 一致。Mac ZIP／DMG 的 40 个普通文件逐字节相同，deep／strict 验签通过；app／dSYM UUID 均为 `1ABD9AC2-1D30-3869-BE64-310875A09440`，架构 arm64，DMG 已卸载。Windows MSI 的哈希与 release.json 相同，receipt 指向 `91017b0` 和固定 v0.3.7 / `a4f829999fe8df0c35561fe1bdf0f5ad0df0c3a5`，CRT 为 `14.51.36247.0`。
+
+| 文件 | SHA256 |
+| --- | --- |
+| `OcPlayer-v0.3.0-b558-91017b0-macOS-arm64.zip` | `18f47c3e25ec736afecb7f064e4e624debc72357da7fae7c0308d049bafa85af` |
+| `OcPlayer-v0.3.0-b558-91017b0-macOS-arm64.dmg` | `ab43dcff6d2aacff1842405abaecbe59ad1cab576e94d1223a6008f678e157a7` |
+| `OcPlayer-v0.3.0-b558-91017b0-macOS-arm64.dSYM.zip` | `08d7fccbaa7e6e071aeeb4539dd3b24867cdc1937ce596a415a97824fa447a1a` |
+| `OcPlayer-v0.3.0-b558-91017b0-ios-unsigned.ipa` | `7583f72734803e775f2bb25cf873ee983b30f51ebd30d5483707a7a2abc73db8` |
+| `OcPlayer-v0.3.0-b558-91017b0-ios-unsigned.dSYM.zip` | `e1040f12ea74837c9a78998bd626323e8f23468c6d85d804d5804743290f916e` |
+| `OcPlayer-1.0.0-x64.msi` | `167b6d75df0c7f5142cd598e654b78ef4bdc29ba929483479746bf46178b1f2a` |
+
+完整 CI 结果、失败及补跑日志、原始 `.xcresult`、下载归档、产物和复验 JSON 保存在上述 `consolidation-*` 证据目录。`candidate-final-verdict.json` 核对实际 SHA 与十个 job 的 success；各平台包复验分别为 `ci-macos-package-verification.json`、`ci-ios-package-verification.json`、`ci-windows-package-verification.json`，Core 为 `ci-core-verification.json`。合仓后的主分支自动检查单独保留。
 
 当前工作不包含正式发行、旧仓库归档或覆盖安装。Windows ARM64、安装升级卸载、真实账号、长片、完整 HDR / Dolby Vision，以及 Mac 外接屏、Intel / Rosetta、系统深浅色切换等范围仍按各自报告保留为未实测。

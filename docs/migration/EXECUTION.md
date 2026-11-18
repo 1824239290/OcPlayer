@@ -228,3 +228,13 @@ README 与开发文档补齐已在 Windows 实测的仓库级长路径配置。M
 用户随后提供两端同步的 `codex/windows-window-close-fix` / `c946a0ccec255a79844b4e6a2c922663dc7fb97c`。其父提交为 `720e4add`，仅修改主窗口关闭回调；Git blob 与 Windows 报告完全一致，Windows 文件 SHA256 的 CRLF 差异也已逐字节解释并核对。合并提交 `e7c1582d857b1e6bb4a147066434e4fd9c59fd99` 保留两边修复历史，无冲突；Apple tree 等于 Mac 实测修复，Windows tree 等于 Windows 实测修复，Core tree 不变。
 
 包含两边修复的最终候选将同步到 GitHub 和 Gitea 的 `codex/monorepo-migration` 并运行新提交的完整必需 CI。此阶段 main 尚未切换；只有这些门禁成功，才能按用户授权统一切换两个远端主分支。原有平台报告和之前成功/失败的 CI 记录均保留。
+
+### 最终候选完整通过并统一切入 main
+
+源码候选 `91017b0c2caf8a526b967e29011a8b8ba82fb9ec` 已同步到两端。[Actions 44281243934](https://github.com/1824239290/OcPlayer/actions/runs/44281243934) 的第二次执行整体成功，十个必需 job 均为 success。首轮只有 iOS 在 Rust fixture 依赖下载前遇到 `index.crates.io` DNS 失败，汇总按门禁拒绝通过；在相同源码 SHA 上仅补跑失败项后，iOS AppTests 与汇总通过，其他八个成功结果保留。
+
+Core-enabled 已执行至最末：SDK 41，AppTests 1027／1008 通过／19 跳过／0 失败，传输合同 9、公共合同 6 通过，372 条清单与生产 routing 严格相同，嵌入 app 严格验签有效。结果包有一条 QoS 运行时告警，原始证据保留，未声明零告警。普通两端 AppTests、SwiftPM、Rust、Windows 原生／WinUI／SDK／MSI，以及 macOS 与 iOS 候选打包均成功。
+
+下载的 Mac ZIP／DMG 40 文件相同，严格验签及 app／dSYM UUID 一致；Apple 五个文件的校验和通过。Windows MSI 的哈希、源码 receipt 与固定内核钉点通过核对。[收尾记录](CONSOLIDATION-2026-11-18.md) 保存完整结论和产物哈希，原始数据在 `artifacts/verification/consolidation-20261118T095735Z`。
+
+用户授权检查后统一合并，两端 main 按快进方式接收相同的源码与收尾记录，保留全部导入及平台修复历史。收尾说明仅改 Markdown，生产源码树仍与已验收的 `91017b0` 相同；主分支自动检查另行保留。正式发行、旧分仓归档、安装升级及各报告未实测的设备／账号／HDR 范围没有扩展为本轮通过项。

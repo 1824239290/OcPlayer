@@ -2,9 +2,9 @@
 
 OcPlayer 的共享 Rust Core、Windows 客户端和 macOS/iOS 客户端现在在同一个仓库维护。liberika 播放内核仍是外部依赖，Apple 与 Windows 分别保留已验证的版本钉点。
 
-迁移候选位于 `codex/monorepo-migration`；验收完成前不切换 `main`，也不归档旧仓库。当前结果和待验收项见 [执行记录](docs/migration/EXECUTION.md)。
+合仓验收已完成，Apple、Windows 和共享 Core 的历史与追加修复统一进入 `main`。源码候选 `91017b0` 的十个必需 CI job 均通过，详见 [执行记录](docs/migration/EXECUTION.md)。
 
-本机追加验收见 [macOS 报告](docs/migration/MACOS-VALIDATION-2026-11-18.md) 与 [Windows 报告](docs/migration/WINDOWS-VALIDATION-2026-11-18.md)。两端追加修复已合入最终候选，正在完成新提交的必需 CI，详见 [收尾记录](docs/migration/CONSOLIDATION-2026-11-18.md)。
+本机追加验收见 [macOS 报告](docs/migration/MACOS-VALIDATION-2026-11-18.md) 与 [Windows 报告](docs/migration/WINDOWS-VALIDATION-2026-11-18.md)。最终源码、产物核对和未实测范围见 [收尾记录](docs/migration/CONSOLIDATION-2026-11-18.md)。
 
 | 组件 | 源码与工具链 | 组件文档 |
 | --- | --- | --- |
@@ -23,7 +23,7 @@ OcPlayer 的共享 Rust Core、Windows 客户端和 macOS/iOS 客户端现在在
 只需克隆一次，无需再在旁边检出 Core 或 Windows 仓库。
 
 ```powershell
-git clone -c core.longpaths=true --branch codex/monorepo-migration http://192.168.5.107:8418/jumusu/OcPlayer.git
+git clone -c core.longpaths=true http://192.168.5.107:8418/jumusu/OcPlayer.git
 cd OcPlayer
 python scripts/verify-monorepo.py
 .\scripts\prepare-kernel.ps1
