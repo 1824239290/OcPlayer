@@ -222,3 +222,9 @@ macOS 打包在与 `2ed4af7` 相同的打包代码上复跑成功，DMG 的 SHA2
 用户提供的 [Windows 报告](WINDOWS-VALIDATION-2026-11-18.md) 已按原始字节收录。报告确认 x64 本机追加测试和关闭窗口崩溃修复后的复测通过，但明确修复尚未提交或推送。Mac 接收端查不到报告指定的修复 blob；两端候选仍为 `720e4add`，源码仍包含原关闭回调。因此这些新证据尚不足以把当前远端候选直接切入 main。
 
 README 与开发文档补齐已在 Windows 实测的仓库级长路径配置。Mac 修复及接收记录在 `codex/macos-monorepo-validation` 中收尾；最终候选需要接收、核对并纳入 Windows 原始修复，再对包含两边修复的新提交完成必需 CI。[收尾记录](CONSOLIDATION-2026-11-18.md) 明确缺失文件、精确哈希与后续门禁。先前 `c4f5346` 的完整 CI 仍作为历史证据，不替代新源码验证。
+
+### Windows 原始修复已接收并合入最终候选
+
+用户随后提供两端同步的 `codex/windows-window-close-fix` / `c946a0ccec255a79844b4e6a2c922663dc7fb97c`。其父提交为 `720e4add`，仅修改主窗口关闭回调；Git blob 与 Windows 报告完全一致，Windows 文件 SHA256 的 CRLF 差异也已逐字节解释并核对。合并提交 `e7c1582d857b1e6bb4a147066434e4fd9c59fd99` 保留两边修复历史，无冲突；Apple tree 等于 Mac 实测修复，Windows tree 等于 Windows 实测修复，Core tree 不变。
+
+包含两边修复的最终候选将同步到 GitHub 和 Gitea 的 `codex/monorepo-migration` 并运行新提交的完整必需 CI。此阶段 main 尚未切换；只有这些门禁成功，才能按用户授权统一切换两个远端主分支。原有平台报告和之前成功/失败的 CI 记录均保留。

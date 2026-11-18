@@ -40,12 +40,12 @@ Bootstrap、arm64 v0.3.6 下载及哈希核对通过。iOS ZIP 缓存仅在 SHA2
 
 ## 构建与自动化
 
-每阶段完整 stdout／stderr、退出码与时间保存在证据目录；`stages.tsv` 没有未结束阶段。下表列最终有效结果。
+每阶段完整 stdout／stderr、退出码与时间保存在证据目录；`stages.tsv` 没有未结束阶段。下表列各入口有效结果。根脚本测试于本轮五份新增 Swift 修复写入审计前执行，其他标注最终的构建／包／AppTests 对应修复后的输入。
 
 | 入口／阶段 | 退出码 | 结果 |
 | --- | ---: | --- |
 | `python3 scripts/verify-monorepo.py --migration`（layout-final） | 0 | 布局、冻结快照、当前 index 精确 Swift blob 均通过 |
-| `python3 -B -m unittest discover -s scripts/tests -v` | 0 | 47 项：35 通过、12 Windows PowerShell 条件跳过；Mac 的真实 Xcode 测试 framework 签名回归已执行 |
+| `python3 -B -m unittest discover -s scripts/tests -v`（初始阶段） | 0 | 47 项：35 通过、12 Windows PowerShell 条件跳过；Mac 的真实 Xcode 测试 framework 签名回归已执行；新增修复审计后的收尾复验见下文 |
 | `apps/apple/Scripts/bootstrap.sh`／`fetch-erika.sh v0.3.6` | 0 | 同一钉点依赖与哈希通过 |
 | Apple 脚本 unittest | 0 | 3 项通过 |
 | `scripts/build-macos.sh debug` | 0 | 初始及 RootView 修复后实际 Debug 构建通过 |
@@ -56,6 +56,8 @@ Bootstrap、arm64 v0.3.6 下载及哈希核对通过。iOS ZIP 缓存仅在 SHA2
 | `ERIKA_PERF_PROBE=1`、90 秒视频与密集 ASS | 0 | 显式执行 env 门控探针，总用例耗时 115.958 秒 |
 | 共享 Apple 源码 generic arm64 iOS simulator Debug build（最终） | 0 | RootView／DanmakuView 的共享修改编译通过；本轮没有将此写作 iOS 真机或完整 AppTests 结果 |
 | `scripts/package-macos.sh`（最终） | 0 | Release、ZIP、DMG、dSYM、许可证、校验和通过 |
+
+合仓收尾在包含两端修复的提交上补跑根脚本测试，发现仓库审计测试仍硬编码旧的两份 Swift 修复数量。迁移守卫本身已接受并精确核对七份审计；测试更新为核对七个具体文件，保留原冻结提交断言和其他非法变更拒绝用例。首次失败和修复后结果记录在后续 `consolidation-*` 证据目录及 [收尾记录](CONSOLIDATION-2026-11-18.md)，不把初始阶段结果描述为已经覆盖新增审计。
 
 普通 AppTests 按正式三参数入口构建实库、build-for-testing、嵌入／重签宿主，再 test-without-building。最终 Core 测试复用此含真实 dylib 的最终宿主，环境明确设置 `TEST_RUNNER_OCP_CORE_ENABLED=1` 与实库路径；源码中的两个 RustCoreActivationTests 及每轮 29 getter 实际通过。
 

@@ -121,7 +121,15 @@ class SwiftMigrationAuditTests(unittest.TestCase):
         manifest = json.loads((ROOT / "docs/migration/source-manifest.json").read_text(encoding="utf-8"))
         follow_up = json.loads((ROOT / "docs/migration/follow-up-repairs.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["validationCommit"], "6be4a6f380e77aa951fe47c4b0eeb9fb82265316")
-        self.assertEqual(len(VERIFIER.approved_swift_repairs(manifest, follow_up)), 2)
+        self.assertEqual(set(VERIFIER.approved_swift_repairs(manifest, follow_up)), {
+            "App/Shared/RootView.swift",
+            "Packages/DanmakuKit/Sources/DanmakuKit/DanmakuFilenameParser.swift",
+            "Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuFilenameParserTests.swift",
+            "Packages/DanmakuRenderKit/Sources/DanmakuRenderKit/Classes/Core/DanmakuView.swift",
+            "Packages/DanmakuRenderKit/Tests/DanmakuRenderKitTests/DanmakuRenderKitCoreTests.swift",
+            "Packages/ErikaKit/Tests/ErikaKitTests/ErikaReadAheadBehaviorTests.swift",
+            "Packages/ErikaKit/Tests/ErikaKitTests/ErikaRenderTests.swift",
+        })
 
 
 if __name__ == "__main__":
