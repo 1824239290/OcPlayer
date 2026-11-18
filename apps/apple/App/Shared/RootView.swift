@@ -210,14 +210,18 @@ struct RootView: View {
         // 播放入口（本地文件 / 直连链接）挂在根视图：macOS 文件菜单 Cmd+O 在
         // 任何分区（设置 / Bangumi / MoviePilot…）下都可能触发，挂在某个分区
         // 页里会够不到；isPresented 直接绑 AppModel 标志，入口只管置 true。
-        .fileImporter(
-            isPresented: Binding(
-                get: { app.isLocalFileImporterPresented },
-                set: { app.isLocalFileImporterPresented = $0 }
-            ),
-            allowedContentTypes: Self.playableTypes
-        ) { result in
-            if case .success(let url) = result { app.presentLocalFile(url) }
+        .background {
+            // 独立的呈现节点，避免根视图的媒体 importer 覆盖播放覆盖层的字幕 importer。
+            Color.clear
+                .fileImporter(
+                    isPresented: Binding(
+                        get: { app.isLocalFileImporterPresented },
+                        set: { app.isLocalFileImporterPresented = $0 }
+                    ),
+                    allowedContentTypes: Self.playableTypes
+                ) { result in
+                    if case .success(let url) = result { app.presentLocalFile(url) }
+                }
         }
         .sheet(isPresented: Binding(
             get: { app.isDirectLinkSheetPresented },

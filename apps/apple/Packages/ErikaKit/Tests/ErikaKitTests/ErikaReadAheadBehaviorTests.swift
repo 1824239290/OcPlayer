@@ -5,11 +5,11 @@ import Testing
 @testable import ErikaKit
 
 /// 行为级验证 `ErikaOpenOptions` 的 HTTP 窗口参数真的被内核消费。
-/// 内核（v0.2.0）用**持久流预取**：两个 worker 各持一条
-/// 开放式 GET（`bytes=锚点-`），按 4 MiB stripe 交付、TCP 背压限速，预读窗口
+/// 钉点内核（v0.3.6）用**单条持久流预取**：首次有界读取后，一条 worker
+/// 开放式 GET（`bytes=cache_end-`），按 4 MiB stripe 交付、TCP 背压限速，预读窗口
 /// 由流**主动**灌满（不再等读者驱动）；已播数据按回退预算（`http_back_buffer_bytes`，
 /// 默认 16 MiB）保留，预算内回退是纯缓存命中。据此验证三件事：
-/// ① worker 的请求是开放式 Range、初始两条锚点相距一个 stripe（4 MiB）；
+/// ①首次有界读取与唯一开放式 Range 连续衔接，不重叠下载；
 /// ② 32 MiB 档窗口被主动灌满（交付水位 ≥ 24 MiB）；
 /// ③ 回退预算端到端生效：小预算下回到已播头部要重新发请求，大预算下零请求。
 ///
@@ -255,7 +255,7 @@ struct ErikaReadAheadBehaviorTests {
                 sent += written
             }
             offset += chunk.count
-            tracker.advance(start + offset)
+            tracker.advance(offset)
         }
     }
 
@@ -306,7 +306,7 @@ struct ErikaReadAheadBehaviorTests {
 
     // MARK: - 用例
 
-    @Test("32 MiB 窗口被持久流主动灌满，worker 锚点相距一个 stripe")
+    @Test("32 MiB 窗口被单条持久流主动灌满，初始请求连续且不重叠")
     func windowFillsProactively() async throws {
         guard let mediaPath = Self.resolvedMediaPath else {
             // swift-testing 没有正式的 skip API：空过（CI 上没挂大卷时此测试不产生断言）
@@ -331,15 +331,13 @@ struct ErikaReadAheadBehaviorTests {
         }
         try? presenter.close()
 
-        // ① 持久流签名：至少两条开方式请求，且最初的两个不同锚点相距恰好一个
-        //    stripe（两个 worker 分别锚在 cache_end 与 cache_end + 4 MiB）。
+        // ① v0.3.6 用单流避免多个开放式响应重复下载同一尾部。
+        // 首次 4 MiB 有界读取之后，流从 cache_end 连续开始。
         let openEndedStarts = log.all.filter(Self.isOpenEnded).compactMap(Self.requestStart(_:))
-        #expect(openEndedStarts.count >= 2,
-                "应有 ≥2 条开方式 worker GET：\(log.all)")
-        let distinctAnchors = Array(Set(openEndedStarts)).sorted()
-        #expect(distinctAnchors.count >= 2
-                && distinctAnchors[1] - distinctAnchors[0] == Self.stripeBytes,
-                "前两个 worker 锚点应相距 4 MiB，实际 \(distinctAnchors)")
+        #expect(log.all.first == "bytes=0-\(Self.stripeBytes - 1)",
+                "首次读取应是 4 MiB 有界请求：\(log.all)")
+        #expect(openEndedStarts == [Self.stripeBytes],
+                "唯一持久流应从首次读取末尾开始，不重叠下载：\(log.all)")
 
         // ② 窗口深度：32 MiB 档被主动灌满（读者还停在片头，交付已奔到窗口尽头）。
         let bigEnd = tracker.farthestDelivered
@@ -395,9 +393,13 @@ struct ErikaReadAheadBehaviorTests {
                 try await Task.sleep(for: .milliseconds(50))
             }
             await Self.waitForQuiet(log, tracker)
-            // 前跳必须零请求：目标在已灌满的窗口里，trim 逐头也不发网络请求。
-            #expect(log.count == baselineBeforeForward,
-                    "前跳落在窗口内应是纯缓存命中，实际新增请求：\(log.suffix(from: baselineBeforeForward))")
+            // seek 会取消在途流；服务器已送出不等于字节已经并入内核缓存。
+            // 允许从落点补齐前向窗口，但不能重拉已保留的头部。
+            let forwardRequests = log.suffix(from: baselineBeforeForward)
+            #expect(forwardRequests.allSatisfy { (Self.requestStart($0) ?? 0) > Self.stripeBytes },
+                    "前跳补齐不得重拉片头，实际新增请求：\(forwardRequests)")
+            #expect(position >= (forwardSeconds - 1) * 1_000_000,
+                    "前跳必须实际推进播放位置，实际 \(position)µs")
 
             // 回到 0：小预算 = 缓存外（重新拉取）；大预算 = 缓存内（零请求）。
             let baseline = log.count

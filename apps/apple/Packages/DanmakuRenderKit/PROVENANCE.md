@@ -16,6 +16,11 @@
 
 已应用的本地修补：
 
+- `DanmakuView.swift`（2026-11-18 macOS 合仓验收）：轨道数计算在转 `Int` 前检查
+  有效高度、正数有限轨高及整数上界。偏好差分会写入 NaN，视图尚未布局时应用
+  这类字号原先会触发运行时崩溃；无效几何现在不分配轨道，恢复合法尺寸后正常分配。
+  包测试覆盖非有限/零/负/极小轨高以及零尺寸初始化后恢复。
+
 - `DanmakuView.swift`：`shoot / canShoot / play() / pause() / stop() / clean /
   recalculateTracks / play(_:)/pause(_:)/sync` 十个控制方法 upstream 为 internal
   （其 SwiftUI 适配器同模块调用所以没暴露），App 侧调用需要，已加 `public`。

@@ -138,6 +138,30 @@ final class DanmakuRenderKitCoreTests: XCTestCase {
 
     // MARK: - 轨道选择（空视图：均分轨取第一条、适配轨取第一条、同步轨取第一条）
 
+    func testInvalidTrackHeightDoesNotCrashAndCanRecover() {
+        let view = DanmakuView(frame: NSRect(x: 0, y: 0, width: 800, height: 60))
+        view.play()
+        let model = floatingModel(width: 200, displayTime: 5)
+        for height: CGFloat in [.nan, .infinity, -.infinity, 0, -1, .leastNonzeroMagnitude] {
+            view.trackHeight = height
+            XCTAssertFalse(view.canShoot(danmaku: model), "Invalid height must leave no usable tracks")
+            view.trackHeight = 20
+            XCTAssertTrue(view.canShoot(danmaku: model), "Valid geometry must restore tracks")
+        }
+    }
+
+    func testPreferencesCanBeAppliedBeforeViewHasSize() {
+        let view = DanmakuView(frame: .zero)
+        view.paddingTop = 10
+        view.paddingBottom = 16
+        view.trackHeight = .nan
+        view.trackHeight = 29.7
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 300)
+        view.recalculateTracks()
+        view.play()
+        XCTAssertTrue(view.canShoot(danmaku: floatingModel(width: 200, displayTime: 5)))
+    }
+
     func testTrackSelectionOnEmptyView() {
         let view = DanmakuView(frame: NSRect(x: 0, y: 0, width: 800, height: 60))
         view.play()  // canShoot 需要播放态

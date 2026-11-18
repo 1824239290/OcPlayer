@@ -551,9 +551,20 @@ public extension DanmakuView {
 // 本地修补：原为 `private extension`，放宽到 internal 以便包内测试 target 覆盖
 // 轨道选择/复用池等纯逻辑（行为零改动，见 PROVENANCE.md）。
 extension DanmakuView {
+
+    /// Preferences can contain NaN, and a view can be configured before layout.
+    /// Reject unusable geometry before converting a track count to Int.
+    private var calculatedTrackCount: Int {
+        let availableHeight = viewHeight - paddingTop - paddingBottom
+        guard availableHeight.isFinite, availableHeight > 0,
+              trackHeight.isFinite, trackHeight > 0 else { return 0 }
+        let count = (availableHeight / trackHeight).rounded(.down)
+        guard count.isFinite, count < CGFloat(Int.max) else { return 0 }
+        return Int(count)
+    }
     
     func recalculateFloatingTracks() {
-        let trackCount = max(0, Int(floorf(Float((viewHeight - paddingTop - paddingBottom) / trackHeight))))
+        let trackCount = calculatedTrackCount
         let offsetY = max(0, (viewHeight - CGFloat(trackCount) * trackHeight) / 2.0)
         let diffFloatingTrackCount = trackCount - floatingTracks.count
         if diffFloatingTrackCount > 0 {
@@ -579,7 +590,7 @@ extension DanmakuView {
     }
     
     func recalculateTopTracks() {
-        let trackCount = max(0, Int(floorf(Float((viewHeight - paddingTop - paddingBottom) / trackHeight))))
+        let trackCount = calculatedTrackCount
         let offsetY = max(0, (viewHeight - CGFloat(trackCount) * trackHeight) / 2.0)
         let diffFloatingTrackCount = trackCount - topTracks.count
         if diffFloatingTrackCount > 0 {
@@ -605,7 +616,7 @@ extension DanmakuView {
     }
     
     func recalculateBottomTracks() {
-        let trackCount = max(0, Int(floorf(Float((viewHeight - paddingTop - paddingBottom) / trackHeight))))
+        let trackCount = calculatedTrackCount
         let offsetY = max(0, (viewHeight - CGFloat(trackCount) * trackHeight) / 2.0)
         let diffFloatingTrackCount = trackCount - bottomTracks.count
         if diffFloatingTrackCount > 0 {

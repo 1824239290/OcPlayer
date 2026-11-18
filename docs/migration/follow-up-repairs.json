@@ -1,6 +1,6 @@
 {
   "validationCommit": "6be4a6f380e77aa951fe47c4b0eeb9fb82265316",
-  "authorization": "用户在完整候选 CI 失败后明确要求“接着修吧”；以下是独立的基线问题修复，不修改已冻结的结构迁移快照。",
+  "authorization": "用户在完整候选 CI 失败后明确要求“接着修吧”；以下是独立的基线问题修复，不修改已冻结的结构迁移快照。2026-11-18 用户要求检查合仓候选并补完 macOS 测试，本轮保留初次失败证据，修复验收中复现的渲染崩溃、过时预读测试合同与文件选择器呈现冲突，并补充本地 XML 弹幕 GPU 回归。",
   "swiftRepairs": [
     {
       "path": "apps/apple/Packages/DanmakuKit/Sources/DanmakuKit/DanmakuFilenameParser.swift",
@@ -13,6 +13,36 @@
       "before": "100644 blob 66688ce565d0ab3f2682b57599bc4811460a5bb7",
       "after": "100644 blob ed94436cea107edb0b386d27c5b727e41eeb6952",
       "reason": "增加固定预期的解析边界回归，对原生兜底和公共入口均检查；原有 Rust/Swift 差分 corpus 与全部断言不变。"
+    },
+    {
+      "path": "apps/apple/Packages/DanmakuRenderKit/Sources/DanmakuRenderKit/Classes/Core/DanmakuView.swift",
+      "before": "100644 blob ad746fcb825dc90a704ed6bc027243650a60499f",
+      "after": "100644 blob ddd9ecd2a7ee35da9dd1fb4c640248ee97c2a039",
+      "reason": "真实 AppTests 崩溃栈落在 NaN 轨高的 Int 转换；在浮动、顶部、底部轨道统一拒绝非有限、非正数及溢出的几何，保持原偏好/Core 差分合同。"
+    },
+    {
+      "path": "apps/apple/Packages/DanmakuRenderKit/Tests/DanmakuRenderKitTests/DanmakuRenderKitCoreTests.swift",
+      "before": "100644 blob 9fa962ebef8fdb96554b53fae800c991d5bc0aa3",
+      "after": "100644 blob abd8a86569097900a7d5daeb18f856a4e46b723d",
+      "reason": "回归覆盖 NaN、正负无穷、零、负数、极小轨高以及零尺寸初始化后恢复；修复后 14 项包测试通过。"
+    },
+    {
+      "path": "apps/apple/Packages/ErikaKit/Tests/ErikaKitTests/ErikaReadAheadBehaviorTests.swift",
+      "before": "100644 blob 2ff8a05dde0e019caf79d1a37b1c1c4dfd3380aa",
+      "after": "100644 blob bf7b5751514572f5a3bae0a859f6bc6e98d883c4",
+      "reason": "钉点 v0.3.6 已使用单持久流；修复服务器水位重复累加偏移，验证初始有界/开放式请求连续且不重叠。seek 取消在途数据时允许补齐前向窗口，保留真实位置和小/大回退预算的头部重取对照。"
+    },
+    {
+      "path": "apps/apple/App/Shared/RootView.swift",
+      "before": "100644 blob 037fda848e57a2476be36e516778dbc4b5346c47",
+      "after": "100644 blob e2dee24485e8f92004be3a4547def0c587ddc9f1",
+      "reason": "macOS 真机及原始 Release 包的外挂字幕按钮置位但不呈现 NSOpenPanel；根媒体 fileImporter 移到独立背景节点，避免覆盖播放器的字幕 importer。修复后已真实选中中文空格路径 SRT 并进入外挂轨道；媒体 Cmd+O 入口继续回归。"
+    },
+    {
+      "path": "apps/apple/Packages/ErikaKit/Tests/ErikaKitTests/ErikaRenderTests.swift",
+      "before": "100644 blob 20f853382819dd934a91a690a2dc653961f3857a",
+      "after": "100644 blob d67396b73146ae380c8a1f50311ab2fb4fcdab94",
+      "reason": "补完本地弹幕真机覆盖：本地 XML 的三条滚动/顶部/底部评论进入 Metal 合成，实际 danmaku_frames/items 增长；暂停位置稳定，seek 后继续合成，关闭显示停止增加弹幕帧。独立回归与未过滤 ErikaKit 全量均通过。"
     }
   ]
 }

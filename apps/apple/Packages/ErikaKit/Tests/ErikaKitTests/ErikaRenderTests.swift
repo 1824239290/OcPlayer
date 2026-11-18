@@ -116,6 +116,68 @@ struct ErikaRenderTests {
         try presenter.close()
     }
 
+    @Test("本地 XML 弹幕真正进入 Metal 合成，暂停、seek 与关闭显示稳定")
+    func localDanmakuRendersAndFollowsPlaybackControls() async throws {
+        let movie = try await TestMedia.makeMovieWithTone(seconds: 4)
+        let xml = movie.deletingPathExtension().appendingPathExtension("xml")
+        defer {
+            try? FileManager.default.removeItem(at: movie)
+            try? FileManager.default.removeItem(at: xml)
+        }
+        try """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <i>
+        <d p="0.1,1,25,16711680,0,0,fixture,1">本地滚动弹幕 macOS 233</d>
+        <d p="0.2,5,25,65280,0,0,fixture,2">顶部弹幕</d>
+        <d p="1.3,4,25,255,0,0,fixture,3">seek 后底部弹幕</d>
+        </i>
+        """.write(to: xml, atomically: true, encoding: .utf8)
+
+        let presenter = try ErikaPresenter()
+        let layer = try Self.makeLayer(width: 640, height: 360)
+        try Self.attach(presenter, layer, width: 640, height: 360)
+        defer { try? presenter.detachSurface(); try? presenter.close() }
+        try presenter.open(PlaybackSource(fileURL: movie))
+        var ready = false
+        var position = Duration.zero
+        var failure: String?
+        func note(_ event: PlayerEvent) {
+            switch event {
+            case .stateChanged(let state) where state == .ready: ready = true
+            case .positionChanged(let value): position = value
+            case .failed(_, let message): failure = message ?? "unknown"
+            default: break
+            }
+        }
+        try Self.pump(presenter, frames: 120, collect: note, stop: { ready })
+        #expect(ready)
+        try presenter.loadDanmaku(fileURI: xml.path)
+        #expect(try presenter.danmakuTracks().first?.itemCount == 3)
+        try presenter.setDanmakuEnabled(true)
+        try presenter.play()
+        let playing = try Self.pump(presenter, frames: 48, collect: note)
+        #expect(playing.danmaku_frames > 0, "不能只验证载入轨道，必须真的合成弹幕帧")
+        #expect(playing.danmaku_items > 0)
+
+        try presenter.pause()
+        try Self.pump(presenter, frames: 8, collect: note)
+        let pausedPosition = position
+        try Self.pump(presenter, frames: 12, collect: note)
+        #expect(abs(position.microseconds - pausedPosition.microseconds) < 10_000)
+        try presenter.seek(to: .milliseconds(1_300))
+        try Self.pump(presenter, frames: 8, collect: note)
+        #expect(position.microseconds >= 1_250_000)
+        try presenter.play()
+        let resumed = try Self.pump(presenter, frames: 24, collect: note)
+        #expect(resumed.danmaku_frames > playing.danmaku_frames)
+        try presenter.setDanmakuEnabled(false)
+        let hidden = try Self.pump(presenter, frames: 12, collect: note)
+        #expect(hidden.danmaku_frames == resumed.danmaku_frames)
+        #expect(hidden.render_failures == 0)
+        #expect(failure == nil)
+        print("local XML danmaku: playing=\(playing.danmaku_frames)/\(playing.danmaku_items), resumed=\(resumed.danmaku_frames)/\(resumed.danmaku_items), hidden=\(hidden.danmaku_frames), seekPosition=\(position.microseconds)us")
+    }
+
     @Test("pause / seek / 倍速 / resize 连打不炸")
     func controlsAreStable() async throws {
         let movie = try await TestMedia.makeMovieWithTone(seconds: 2)
