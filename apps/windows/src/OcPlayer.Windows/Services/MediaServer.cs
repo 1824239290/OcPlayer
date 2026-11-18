@@ -330,7 +330,11 @@ internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
         }
         catch (ServerConnectionException ex) when (ex is not ServerAuthenticationException)
         {
-            if (_cache.Read<DemoMedia>(key) is { } cached) return cached.Value with { DetailWarning = $"更新失败：{ex.Message} · 显示 {cached.SavedAt.LocalDateTime:g} 的缓存" };
+            if (_cache.Read<DemoMedia>(key) is { } cached)
+            {
+                AppDiagnostics.Write("debug", "详情缓存后台更新失败：" + ex.Message);
+                return cached.Value with { DetailWarning = null };
+            }
             throw;
         }
     }
