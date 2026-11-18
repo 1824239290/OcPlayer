@@ -217,15 +217,38 @@ public sealed partial class MainWindow : Window
         if (_model.Route is not ("detail" or "detail-info")) _detailOrigin = _model.Route;
         if (!App.DemoMode && media.SourceUri is null && App.Core?.Server is { } server)
         {
-            if (server.CachedDetail(media) is { } cached)
+            var cached = server.CachedDetail(media);
+            if (cached is not null)
             {
-                _model.SelectedMedia = cached with { DetailWarning = "正在更新缓存详情…" };
+                _model.SelectedMedia = cached with { DetailWarning = null };
                 _model.SelectedEpisode = cached.InitialEpisodeNumber; ClearDetailPages(); Navigate("detail");
             }
             var (token, generation) = BeginLoad();
-            try { media = await server.Detail(media, token); media = await EnrichDetail(media, server, token); if (generation != _loadGeneration) return; }
+            try
+            {
+                media = await server.Detail(media, token);
+                media = await EnrichDetail(media, server, token);
+                if (generation != _loadGeneration) return;
+                if (cached is not null)
+                {
+                    if (media.DetailWarning is { } warning) AppDiagnostics.Write("debug", warning);
+                    if (media.Progress >= 100) _model.Watched.Add(media.Id);
+                    var selectedNumber = _model.SelectedEpisode;
+                    _model.SelectedMedia = media with { DetailWarning = null };
+                    _model.SelectedEpisode = cached.SelectedSeasonId == media.SelectedSeasonId
+                        && media.Episodes?.Any(x => x.Number == selectedNumber) == true ? selectedNumber : media.InitialEpisodeNumber;
+                    RefreshPlaybackPage(_model.Route);
+                    return;
+                }
+            }
             catch (OperationCanceledException) { return; }
-            catch (Exception ex) { Notify("无法加载详情：" + ex.Message); return; }
+            catch (Exception ex)
+            {
+                if (generation != _loadGeneration) return;
+                if (cached is not null) AppDiagnostics.Write("debug", "详情缓存后台更新失败：" + ex.Message);
+                else Notify("无法加载详情：" + ex.Message);
+                return;
+            }
         }
         if (media.Progress >= 100) _model.Watched.Add(media.Id);
         ClearDetailPages();

@@ -40,6 +40,21 @@ internal static partial class Program
         File.WriteAllText(Path.Combine(data, "detail.json"), JsonSerializer.Serialize(detail));
         Assert(detail.SelectedSeasonId == "s1" && detail.InitialEpisodeNumber == 2 && detail.Episodes?.Single(x => x.Number == 2).Overview == "episode overview", "smart default skips specials and selects first unfinished regular episode with synopsis");
         Assert(detail.OfficialRating == "TV-14" && detail.Cast?.Single().Name == "Actor" && detail.Similar?.Single().Id == "similar", "detail projects real rating, cast and similar endpoint results");
+        var detailInput = new DemoMedia("series", "Series", "", "", "", "", "", Kind: "series");
+        fixture.DetailName = "refreshed-series";
+        var refreshedDetail = await server.Detail(detailInput, default);
+        Assert(refreshedDetail.Title == "refreshed-series" && server.CachedDetail(detailInput)?.Title == "refreshed-series", "successful detail refresh persists new metadata for later visits");
+        new BrowserCache(profile).Save("detail:series:", refreshedDetail with { DetailWarning = "old optional metadata warning" });
+        fixture.FailDetail = true;
+        var fallbackDetail = await server.Detail(detailInput, default);
+        Assert(fallbackDetail.Title == refreshedDetail.Title && fallbackDetail.Episodes?.Length == refreshedDetail.Episodes?.Length,
+            "failed detail refresh preserves cached metadata and episode availability");
+        Assert(fallbackDetail.DetailWarning is null, "cache fallback does not expose refresh failures or stored optional warnings");
+        Assert(server.CachedDetail(detailInput)?.Title == refreshedDetail.Title, "failed refresh leaves the last successful cache intact");
+        var coldServer = new MediaServer(core, profile with { Id = "parity-browser-cold" });
+        try { await coldServer.Detail(detailInput, default); Assert(false, "detail failure without a cache must reach the caller"); }
+        catch (ServerConnectionException) { Assert(true, "detail failure without a cache remains actionable"); }
+        fixture.FailDetail = false;
         var episodePoster = await server.Poster(new DemoMedia("e2", "Episode", "", "", "", "episode-still", "", Kind: "episode", SeriesId: "series"), default);
         Assert(episodePoster.Contains("/Items/series/Images/Primary") && !episodePoster.Contains("/Items/e2/"), "portrait episode cards use the series poster instead of an episode still");
         Assert(await server.Poster(new DemoMedia("movie", "Movie", "", "", "", "movie-poster", ""), default) == "movie-poster", "movie portrait cards retain their own primary poster");
@@ -69,7 +84,8 @@ internal static partial class Program
         private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
         private readonly CancellationTokenSource _stop = new();
         public string Url { get; }
-        public bool FailNext, FailPlayback;
+        public bool FailNext, FailPlayback, FailDetail;
+        public string DetailName = "series";
         public ConcurrentQueue<string> Queries { get; } = new();
         public BrowsingFixture() { _listener.Start(); Url = "http://127.0.0.1:" + ((IPEndPoint)_listener.LocalEndpoint).Port; _ = Listen(); }
         private async Task Listen()
@@ -101,7 +117,12 @@ internal static partial class Program
                 else if (path.EndsWith("/Seasons") || query.TryGetValue("includeitemtypes", out var kinds) && kinds == "Season") body = new { Items = new[] { Item("sp", "Season", number: 0), Item("s1", "Season", number: 1) } };
                 else if (path.EndsWith("/Episodes")) body = new { Items = new[] { Item("e1", "Episode", "s1", 1, true), Item("e2", "Episode", "s1", 2) } };
                 else if (path.EndsWith("/Similar")) body = new { Items = new[] { Item("similar") } };
-                else if (path.EndsWith("/Items/series")) body = Item("series", "Series");
+                else if (path.EndsWith("/Items/series"))
+                {
+                    status = FailDetail ? 503 : 200;
+                    body = new { Id = "series", Name = DetailName, Type = "Series", OfficialRating = "TV-14", CommunityRating = 8.5,
+                        ImageTags = new { Primary = "poster" }, People = new[] { new { Id = "actor", Name = "Actor", Type = "Actor", Role = "Role" } } };
+                }
                 else if (path.EndsWith("/PlaybackInfo")) { status = FailPlayback ? 503 : 200; body = new { PlaySessionId = "session", MediaSources = new[] { new { Id = "other", SupportsDirectPlay = false, SupportsDirectStream = false }, new { Id = "stream", SupportsDirectPlay = false, SupportsDirectStream = true }, new { Id = "direct", SupportsDirectPlay = true, SupportsDirectStream = true } } }; }
                 else if (path.EndsWith("/Items")) { var start = query.TryGetValue("startindex", out var s) ? int.Parse(s) : 0; var limit = query.TryGetValue("limit", out var l) ? int.Parse(l) : 60; body = new { Items = Enumerable.Range(start, Math.Max(0, Math.Min(limit, 611 - start))).Select(i => Item("item-" + i)).ToArray(), TotalRecordCount = 611, StartIndex = start }; }
                 else if (path.EndsWith("/System/Info/Public")) body = new { Id = "same-server", ServerName = "Fixture", ProductName = "Jellyfin", Version = "10.11" };
