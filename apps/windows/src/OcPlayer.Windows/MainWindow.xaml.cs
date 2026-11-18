@@ -76,6 +76,8 @@ public sealed partial class MainWindow : Window
         _integrationPages.HeaderChanged += () => { if (_model.Route.StartsWith("viewing:")) ApplyIntegrationHeader(); };
         Closed += (_, _) =>
         {
+            _closing = true;
+            Root.ActualThemeChanged -= Root_ActualThemeChanged;
             _load?.Cancel(); DismissPlayer(false);
             if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041)) _uiSettings.AnimationsEnabledChanged -= AnimationsEnabledChanged;
             _ambient.Dispose();
@@ -92,7 +94,7 @@ public sealed partial class MainWindow : Window
         var route = Environment.GetCommandLineArgs().FirstOrDefault(x => x.StartsWith("--demo-route="))?.Split('=', 2)[1] ?? "home";
         Navigate(route == "player" ? "home" : route);
         if (route == "player") Root.Loaded += (_, _) => PresentPlayer(DemoCatalog.All[4] with { Progress = 12 });
-        Root.ActualThemeChanged += (_, _) => SetCaptionTheme();
+        Root.ActualThemeChanged += Root_ActualThemeChanged;
         TitleBar.SizeChanged += (_, _) => UpdateTitleBarRegions();
         BackButton.SizeChanged += (_, _) => UpdateTitleBarRegions();
         MainNavigation.SizeChanged += (_, _) => UpdateTitleBarRegions();
@@ -410,14 +412,16 @@ public sealed partial class MainWindow : Window
     }
     private void SetCaptionTheme()
     {
+        if (_closing || AppWindow?.TitleBar is not { } caption) return;
         _model.DarkTheme = Root.ActualTheme == ElementTheme.Dark;
         Root.Background = new SolidColorBrush(Controls.AmbientBackdropView.PageColor(_model.DarkTheme));
         Ambience.SetStyle(_model.DarkTheme, _model.Route == "detail-info");
-        AppWindow.TitleBar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
-        AppWindow.TitleBar.ButtonInactiveBackgroundColor = Microsoft.UI.Colors.Transparent;
-        AppWindow.TitleBar.ButtonForegroundColor = _player is not null || Root.ActualTheme == ElementTheme.Dark ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black;
-        AppWindow.TitleBar.ButtonInactiveForegroundColor = _player is not null ? Microsoft.UI.Colors.LightGray : null;
+        caption.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
+        caption.ButtonInactiveBackgroundColor = Microsoft.UI.Colors.Transparent;
+        caption.ButtonForegroundColor = _player is not null || Root.ActualTheme == ElementTheme.Dark ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black;
+        caption.ButtonInactiveForegroundColor = _player is not null ? Microsoft.UI.Colors.LightGray : null;
     }
+    private void Root_ActualThemeChanged(FrameworkElement sender, object args) => SetCaptionTheme();
     private void UpdateAmbientActivity()
     {
         _ambient.SetActivity(_active && !_closing && _player is null, _uiSettings.AnimationsEnabled);
