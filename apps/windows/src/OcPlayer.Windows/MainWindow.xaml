@@ -45,7 +45,7 @@
                             <NavigationViewItem x:Name="HomeNavigationItem" Tag="home" Width="40" ToolTipService.ToolTip="首页" AutomationProperties.Name="首页">
                                 <NavigationViewItem.Icon>
                                     <!-- Keep the native 16 DIP icon slot and its indicator layout;
-                                         render the circular avatar at the established 18 DIP size. -->
+                                         render the rounded-square avatar at the established 18 DIP size. -->
                                     <ImageIcon x:Name="Avatar" Width="16" Height="16" RenderTransformOrigin="0.5,0.5" IsHitTestVisible="False">
                                         <ImageIcon.RenderTransform><ScaleTransform ScaleX="1.125" ScaleY="1.125" /></ImageIcon.RenderTransform>
                                     </ImageIcon>

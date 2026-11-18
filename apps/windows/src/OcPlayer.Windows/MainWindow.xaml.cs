@@ -43,7 +43,7 @@ public sealed partial class MainWindow : Window
     private readonly global::Windows.UI.ViewManagement.UISettings _uiSettings = new();
     private bool _active = true;
     private string _searchSource = "library";
-    private BitmapImage _avatarColor = new(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", "avatar-nav.png"))) { DecodePixelWidth = 54 };
+    private ImageSource _avatarColor = new BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", "avatar-nav.png"))) { DecodePixelWidth = 54 };
     private WriteableBitmap? _avatarGray;
     private CancellationTokenSource? _avatarLoad;
 
@@ -58,6 +58,11 @@ public sealed partial class MainWindow : Window
             AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
         SetTitleBar(TitleBar);
         if (MicaController.IsSupported()) SystemBackdrop = new MicaBackdrop();
+        if (AppWindow.Presenter is OverlappedPresenter presenter)
+        {
+            presenter.PreferredMinimumWidth = 1062;
+            presenter.PreferredMinimumHeight = 778;
+        }
         AppWindow.ResizeClient(new SizeInt32(1130, 670));
         _ambient = new AmbientBackdropController(Ambience, _model);
         _transitions = new PageTransitionController(PageHost);
@@ -446,30 +451,76 @@ public sealed partial class MainWindow : Window
                 ? await ImageDiskCache.Resolve(avatar, token)
                 : Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", "avatar-nav.png");
             if (_closing || token.IsCancellationRequested || server != App.Core?.Server) return;
-            _avatarColor = new BitmapImage(new Uri(path)) { DecodePixelWidth = 54 }; _avatarGray = null; UpdateNavigationAvatar();
             using var file = File.OpenRead(path);
             using var stream = file.AsRandomAccessStream();
             var decoder = await BitmapDecoder.CreateAsync(stream);
-            // The icon asset already contains the centered circular crop and
-            // transparent edges, matching macOS's 18pt avatar in an icon-only item.
-            var scale = 54d / Math.Min(decoder.PixelWidth, decoder.PixelHeight);
-            var width = (uint)Math.Max(1, Math.Round(decoder.PixelWidth * scale));
-            var height = (uint)Math.Max(1, Math.Round(decoder.PixelHeight * scale));
+            // Crop to a square, then round the corners in the decoded pixels. ImageIcon
+            // displays its source as a plain rectangle and has no corner-radius property.
+            const uint edge = 54;
+            var scale = (double)edge / Math.Min(decoder.PixelWidth, decoder.PixelHeight);
+            var width = (uint)Math.Max(edge, Math.Round(decoder.PixelWidth * scale));
+            var height = (uint)Math.Max(edge, Math.Round(decoder.PixelHeight * scale));
             var pixels = (await decoder.GetPixelDataAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied,
-                new BitmapTransform { ScaledWidth = width, ScaledHeight = height, InterpolationMode = BitmapInterpolationMode.Fant },
+                new BitmapTransform
+                {
+                    // BitmapTransform bounds are applied after scaling.
+                    Bounds = new BitmapBounds
+                    {
+                        X = (width - edge) / 2,
+                        Y = (height - edge) / 2,
+                        Width = edge,
+                        Height = edge
+                    },
+                    ScaledWidth = width,
+                    ScaledHeight = height,
+                    InterpolationMode = BitmapInterpolationMode.Fant
+                },
                 ExifOrientationMode.IgnoreExifOrientation, ColorManagementMode.ColorManageToSRgb)).DetachPixelData();
+            ApplyRoundedAvatarCorners(pixels, (int)edge);
+            if (_closing || token.IsCancellationRequested || server != App.Core?.Server) return;
+            _avatarColor = CreateAvatarBitmap(pixels, (int)edge);
+            _avatarGray = null;
+            UpdateNavigationAvatar();
+
             for (var i = 0; i < pixels.Length; i += 4)
             {
                 var luminance = (byte)((pixels[i + 2] * 77 + pixels[i + 1] * 150 + pixels[i] * 29 + 128) >> 8);
                 pixels[i] = pixels[i + 1] = pixels[i + 2] = luminance;
             }
             if (_closing || token.IsCancellationRequested || server != App.Core?.Server) return;
-            _avatarGray = new WriteableBitmap((int)width, (int)height);
-            using var buffer = _avatarGray.PixelBuffer.AsStream();
-            buffer.Write(pixels); _avatarGray.Invalidate();
+            _avatarGray = CreateAvatarBitmap(pixels, (int)edge);
             UpdateNavigationAvatar();
         }
-        catch (Exception) { /* Keep the color picture if an optional grayscale decode is unavailable. */ }
+        catch (Exception) { /* Keep the last avatar if an optional image decode is unavailable. */ }
+    }
+
+    private static WriteableBitmap CreateAvatarBitmap(byte[] pixels, int edge)
+    {
+        var bitmap = new WriteableBitmap(edge, edge);
+        using (var buffer = bitmap.PixelBuffer.AsStream()) buffer.Write(pixels);
+        bitmap.Invalidate();
+        return bitmap;
+    }
+
+    private static void ApplyRoundedAvatarCorners(byte[] pixels, int edge)
+    {
+        var radius = edge * 0.22;
+        for (var y = 0; y < edge; y++)
+        for (var x = 0; x < edge; x++)
+        {
+            var px = x + 0.5;
+            var py = y + 0.5;
+            var nearestX = Math.Clamp(px, radius, edge - radius);
+            var nearestY = Math.Clamp(py, radius, edge - radius);
+            var dx = px - nearestX;
+            var dy = py - nearestY;
+            var coverage = Math.Clamp(radius + 0.5 - Math.Sqrt(dx * dx + dy * dy), 0, 1);
+            if (coverage >= 1) continue;
+
+            var offset = (y * edge + x) * 4;
+            for (var channel = 0; channel < 4; channel++)
+                pixels[offset + channel] = (byte)Math.Round(pixels[offset + channel] * coverage);
+        }
     }
     private void GlobalSearch_QuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
     {

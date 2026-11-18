@@ -7,8 +7,8 @@ strongly downsampled/reconstructed crop of its empty background area, used as a 
 Do not ship these fixtures as a production media catalog or describe them as
 live server data. The title bar, cards, text and interactions are WinUI controls.
 
-`avatar-nav.png` is a centered circular crop of `avatar.jpg` with transparent
-edges, sized at 54×54 pixels for the 18 DIP navigation avatar. It lets the avatar
+`avatar-nav.png` is a centered rounded-square crop of `avatar.jpg` with transparent
+corners, sized at 54×54 pixels for the 18 DIP navigation avatar. It lets the avatar
 use the same native icon slot and selection indicator as the other navigation items.
 
 The Interstellar, Dune, Spirited Away, Arrival and Blade Runner images were
