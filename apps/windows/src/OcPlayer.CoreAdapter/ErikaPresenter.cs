@@ -47,9 +47,16 @@ public sealed class ErikaPresenter : IDisposable
         return ReadResponse(pointer);
     }
 
-    public JsonElement RenderTick(double seconds)
+    public JsonElement RenderTick(double seconds, double? presentationTimestamp = null)
     {
         CheckThread();
+        if (presentationTimestamp is { } target && Native.TimedTick.Value is { } tick)
+        {
+            var now = (double)System.Diagnostics.Stopwatch.GetTimestamp() / System.Diagnostics.Stopwatch.Frequency;
+            var delay = Math.Clamp(target - now, -.25, .25);
+            Check(tick(_handle, seconds, in delay, IntPtr.Zero));
+            return Invoke("getPresenterStats");
+        }
         return ReadResponse(Native.Tick(_handle, seconds));
     }
 
@@ -152,6 +159,16 @@ public sealed class ErikaPresenter : IDisposable
     private static class Native
     {
         private const string Library = "erika_capi";
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        internal delegate int TimedRenderTick(PresenterHandle handle, double seconds, in double presentationDelay, IntPtr stats);
+        internal static readonly Lazy<TimedRenderTick?> TimedTick = new(() =>
+        {
+            if (!NativeLibrary.TryLoad(Library, typeof(ErikaPresenter).Assembly, null, out var module)) return null;
+            if (NativeLibrary.TryGetExport(module, "erika_presenter_render_tick_with_timing", out var address))
+                return Marshal.GetDelegateForFunctionPointer<TimedRenderTick>(address);
+            NativeLibrary.Free(module);
+            return null;
+        });
         [DllImport(Library, EntryPoint = "erika_presenter_set_subtitle_style", CallingConvention = CallingConvention.Cdecl)]
         internal static extern int SubtitleStyle(PresenterHandle handle, ErikaPresenter.SubtitleStyle style);
         [DllImport(Library, EntryPoint = "erika_presenter_create_with_config", CallingConvention = CallingConvention.Cdecl)]

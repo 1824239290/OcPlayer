@@ -282,7 +282,6 @@ public sealed partial class PlayerView
     private void DisposeDanmaku()
     {
         ResetDanmakuSource();
-        _danmakuFrame.Stop();
         if (App.Core is { } core) core.Danmaku.Settings.Changed -= DanmakuPreferencesChanged;
         if (_danmaku is not null) { _danmaku.Changed -= DanmakuChanged; _danmaku.Dispose(); }
     }

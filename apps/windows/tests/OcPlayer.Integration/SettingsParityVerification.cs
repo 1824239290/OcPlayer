@@ -10,6 +10,28 @@ internal static partial class Program
 {
     private static async Task VerifySettingsParity(OcpCoreClient core, string data)
     {
+        var danmakuResource = "OcPlayer.DanmakuToggle." + Guid.NewGuid().ToString("N");
+        var danmakuVault = new global::Windows.Security.Credentials.PasswordVault();
+        try
+        {
+            var saved = new DanmakuSettings(danmakuResource);
+            saved.Save(new DanmakuPreferences(UseKernelRenderer: false));
+            Assert(!new DanmakuSettings(danmakuResource).Current.UseKernelRenderer,
+                "app-renderer preference persists after reopening the Windows credential store");
+            saved = new DanmakuSettings(danmakuResource);
+            saved.Save(saved.Current with { UseKernelRenderer = true });
+            Assert(new DanmakuSettings(danmakuResource).Current.UseKernelRenderer,
+                "kernel-renderer preference replaces an existing credential and persists after reopening");
+            saved = new DanmakuSettings(danmakuResource);
+            saved.Save(saved.Current with { UseKernelRenderer = false });
+            Assert(!new DanmakuSettings(danmakuResource).Current.UseKernelRenderer,
+                "switching back to app rendering replaces the saved kernel preference");
+        }
+        finally
+        {
+            foreach (var credential in danmakuVault.RetrieveAll().Where(x => x.Resource == danmakuResource)) danmakuVault.Remove(credential);
+        }
+
         var original = RuntimeSettings.Current;
         var preference = new RuntimePreferences(NetworkBufferMiB: 32, BackBufferMiB: 128, SkipIntro: false, SkipOutro: false, OutroRetainSeconds: 30,
             SubtitleLanguage: "off", SubtitlePosition: "bottom-right", SubtitleMargin: 200, SubtitleColor: "#AABBCC80", SubtitleOutlineColor: "#000000FF", SubtitleOutlineWidth: 32,

@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using OcPlayer.Windows.Controls;
 using static OcPlayer.Windows.Controls.DemoUi;
 using static OcPlayer.Windows.Features.DemoSettings;
 
@@ -16,14 +17,7 @@ internal sealed partial class IntegrationPages
 
     private static Button SettingsAction(Button button, bool destructive = false)
     {
-        button.HorizontalAlignment = HorizontalAlignment.Stretch;
-        button.HorizontalContentAlignment = HorizontalAlignment.Left;
-        button.MinHeight = 42;
-        button.Padding = new Thickness(0, 4, 0, 4);
-        button.Background = null;
-        button.BorderThickness = new Thickness(0);
-        if (destructive) button.Foreground = Resource("SystemFillColorCriticalBrush");
-        return button;
+        return SettingsUi.Action(button, destructive);
     }
 
     private UIElement BangumiSettings()
@@ -31,8 +25,9 @@ internal sealed partial class IntegrationPages
         var page = new Page();
         page.Body.MaxWidth = 680;
         page.Body.Spacing = 28;
+        SettingsUi.Status(page.Status);
         var rows = Stack(0);
-        page.Body.Children.Add(Panel(rows, new Thickness(16, 5, 16, 5)));
+        page.Body.Children.Add(SettingsUi.Card(rows));
         var enabled = SettingsSwitch("启用 Bangumi", Service.IsEnabled("bangumi"));
         rows.Children.Add(SettingsLine("启用 Bangumi", enabled));
         var accountRows = Stack(0);
@@ -51,7 +46,7 @@ internal sealed partial class IntegrationPages
         }
         else AddBangumiLogin(page, accountRows);
 
-        var disabledNote = Muted("关闭后将隐藏顶栏与详情页的 Bangumi 入口，并保留账号和条目关联。");
+        var disabledNote = SettingsUi.Caption("关闭后将隐藏顶栏与详情页的 Bangumi 入口，并保留账号和条目关联。");
         rows.Children.Add(disabledNote);
         var mirror = BangumiMirrorSettings();
         page.Body.Children.Add(mirror);
@@ -119,12 +114,12 @@ internal sealed partial class IntegrationPages
     private StackPanel BangumiMirrorSettings()
     {
         var section = Stack(8);
-        section.Children.Add(Muted("镜像源"));
+        section.Children.Add(SettingsUi.Caption("镜像源", 13));
         var rows = Stack(0);
-        section.Children.Add(Panel(rows, new Thickness(16, 5, 16, 5)));
+        section.Children.Add(SettingsUi.Card(rows));
         var mirror = SettingsSwitch("使用镜像源", Service.MirrorEnabled);
         rows.Children.Add(SettingsLine("使用镜像源", mirror));
-        var note = Muted("");
+        var note = SettingsUi.Caption(""); note.Margin = new Thickness(0, 3, 0, 0);
         rows.Children.Add(note);
         var details = Stack(0);
         rows.Children.Add(details);
@@ -148,7 +143,7 @@ internal sealed partial class IntegrationPages
             finally { resetting = false; }
             Refresh();
         }), destructive: true));
-        section.Children.Add(Muted("只填根域，可带端口。API 使用 api.<根域>，图床使用 lain.<根域>，章节与收藏使用 next.<根域>，登录授权使用根域。调整镜像会保留登录状态。", 12));
+        section.Children.Add(SettingsUi.Caption("只填根域，可带端口。API 使用 api.<根域>，图床使用 lain.<根域>，章节与收藏使用 next.<根域>，登录授权使用根域。调整镜像会保留登录状态。"));
         void Refresh(string problem = "")
         {
             note.Text = mirror.IsOn ? "条目、收藏、章节与封面使用镜像，登录授权页使用镜像主站。" : "当前直连官方域名。开启后可填写镜像根域。";

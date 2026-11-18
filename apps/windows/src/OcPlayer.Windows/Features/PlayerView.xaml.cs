@@ -18,7 +18,10 @@ namespace OcPlayer.Windows;
 
 public sealed partial class PlayerView : UserControl, IDisposable
 {
-    private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromMilliseconds(16) };
+    private readonly DispatcherTimer _backgroundClock = new() { Interval = TimeSpan.FromMilliseconds(33) };
+    private bool _renderingSubscribed;
+    private TimeSpan _lastRenderingTime = TimeSpan.MinValue;
+    private double _presentationClockOffset = double.NaN;
     private readonly Stopwatch _time = Stopwatch.StartNew();
     private PlaybackSession? _session;
     private SwapChainPanelHost? _surface;
@@ -60,7 +63,7 @@ public sealed partial class PlayerView : UserControl, IDisposable
             if (_hudVisibility.IsVisible) { _userHidden = true; _hudVisibility.Hide(); }
             else ShowHud();
         };
-        PlayerRoot.Loaded += (_, _) => { UpdateWindowChrome(); AttachNative(); Focus(FocusState.Programmatic); };
+        PlayerRoot.Loaded += (_, _) => { UpdateWindowChrome(); AttachNative(); UpdatePlaybackClock(); Focus(FocusState.Programmatic); };
         PlayerRoot.SizeChanged += (_, _) => { UpdateWindowChrome(); ResizeNative(); };
         _window.AppWindow.Changed += WindowChanged;
         Unloaded += (_, _) => Dispose();
@@ -72,7 +75,8 @@ public sealed partial class PlayerView : UserControl, IDisposable
         InitializeMoreMenu();
         InitializeRuntime();
         SetMedia(media, source);
-        _clock.Tick += (_, _) => Tick(); _clock.Start();
+        _backgroundClock.Tick += (_, _) => { UpdatePlaybackClock(); if (!_renderingSubscribed) Tick(false); };
+        UpdatePlaybackClock();
 
     }
 
@@ -165,10 +169,48 @@ public sealed partial class PlayerView : UserControl, IDisposable
         Run(() => { var (width, height, scale) = Geometry(); _session!.Resize(width, height, scale); _surface!.Bind(_session.GetSwapChain()); });
     }
 
-    private void Tick()
+    private void UpdatePlaybackClock()
+    {
+        if (_closed) return;
+        var minimized = _window.AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized };
+        if (minimized)
+        {
+            if (_renderingSubscribed) CompositionTarget.Rendering -= OnRendering;
+            _renderingSubscribed = false;
+            _backgroundClock.Start();
+        }
+        else
+        {
+            _backgroundClock.Stop();
+            if (_renderingSubscribed) return;
+            _lastRenderingTime = TimeSpan.MinValue;
+            _presentationClockOffset = double.NaN;
+            CompositionTarget.Rendering += OnRendering;
+            _renderingSubscribed = true;
+        }
+    }
+
+    private void OnRendering(object? sender, object args)
+    {
+        if (_closed || !_renderingSubscribed) return;
+        if (args is RenderingEventArgs frame)
+        {
+            if (frame.RenderingTime == _lastRenderingTime) return;
+            _lastRenderingTime = frame.RenderingTime;
+            var now = (double)Stopwatch.GetTimestamp() / Stopwatch.Frequency;
+            if (double.IsNaN(_presentationClockOffset)) _presentationClockOffset = now - frame.RenderingTime.TotalSeconds;
+            Tick(true, _presentationClockOffset + frame.RenderingTime.TotalSeconds);
+            return;
+        }
+        Tick();
+    }
+
+    private void Tick(bool renderOverlay = true, double? presentationTimestamp = null)
     {
         if (_closed) return;
         var seconds = _time.Elapsed.TotalSeconds;
+        var updateHud = seconds - _lastHudUpdate >= .2;
+        if (updateHud) _lastHudUpdate = seconds;
         if (_demoMode)
         {
             if (_playing && !_scrubbing) { Timeline.Value = Math.Min(Timeline.Maximum, Timeline.Value + (seconds - _lastDemoTick) * _rate); if (Timeline.Value >= Timeline.Maximum) SetPlaying(false); }
@@ -176,12 +218,12 @@ public sealed partial class PlayerView : UserControl, IDisposable
         }
         else if (_attached)
         {
-            _session!.Tick(seconds); Run(() => _surface!.Bind(_session.GetSwapChain())); App.Core?.DrainEvents();
+            _session!.Tick(seconds, presentationTimestamp); Run(() => _surface!.Bind(_session.GetSwapChain())); App.Core?.DrainEvents();
             StartServerSubtitlesIfReady();
             Run(() => _viewingRecorder?.Sample(seconds, _session.PositionSeconds, _session.Ready && _session.Playing && !_scrubbing, _rate, DateTimeOffset.Now));
-            if (seconds - _lastHudUpdate >= .2)
+            if (updateHud)
             {
-                _lastHudUpdate = seconds; _updating = true;
+                _updating = true;
                 var wasPlaying = _playing; _playing = _session.Playing;
                 if (wasPlaying && !_playing) ShowHud();
                 UpdatePlayIcon(); UpdateMenuIndicators(); Timeline.IsEnabled = _session.Ready && _session.DurationSeconds > 0;
@@ -190,8 +232,10 @@ public sealed partial class PlayerView : UserControl, IDisposable
                 _updating = false;
             }
         }
+        if (renderOverlay) DrawDanmakuOverlay(presentationTimestamp);
         TickRuntime(seconds);
-        UpdateChapterSelection(); RefreshMoreInfo();
+        if (updateHud) UpdateChapterSelection();
+        RefreshMoreInfo();
         if (_hudVisibility.IsVisible && !_userHidden && _playing && !_scrubbing && !_menuOpen && !_controlsHovered
             && _session?.Buffering != true && !_screenReader
             && DateTime.UtcNow - _lastInteraction > TimeSpan.FromSeconds(3) && !HasControlFocus())
@@ -202,7 +246,9 @@ public sealed partial class PlayerView : UserControl, IDisposable
     {
         if (_closed) return;
         DisposeRuntime();
-        _closed = true; _clock.Stop();
+        _closed = true; _backgroundClock.Stop();
+        if (_renderingSubscribed) CompositionTarget.Rendering -= OnRendering;
+        _renderingSubscribed = false;
         DisposeDanmaku();
         DisposeServerSubtitles();
         DisposeTrackMenus(); DisposeMoreMenu();
@@ -313,7 +359,7 @@ public sealed partial class PlayerView : UserControl, IDisposable
     }
     private void WindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
     {
-        if (args.DidSizeChange || args.DidPresenterChange) DispatcherQueue.TryEnqueue(UpdateWindowChrome);
+        if (args.DidSizeChange || args.DidPresenterChange) DispatcherQueue.TryEnqueue(() => { UpdatePlaybackClock(); UpdateWindowChrome(); });
     }
     internal void UpdateWindowChrome()
     {

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 
 namespace OcPlayer.CoreAdapter;
@@ -15,12 +16,17 @@ public sealed record PlaybackMetadata(string? FileName, long? FileSize, double? 
 public sealed class PlaybackSession(OcpCoreClient core) : IDisposable
 {
     private readonly ErikaPresenter _presenter = new();
+    private readonly PlaybackRenderClock _renderClock = new();
+    private static double ClockSeconds => (double)Stopwatch.GetTimestamp() / Stopwatch.Frequency;
     private PlaybackSource? _source;
     private bool _ready, _attached, _ended, _failed, _disposed;
     private double _resume, _lastSave;
     private DateTime _openStarted;
     private double _openedRenderedFrames;
     public double PositionSeconds { get; private set; }
+    /// Continuous position for app-layer animation, bounded by native feedback.
+    public double RenderPositionSeconds => RenderPositionAt(ClockSeconds);
+    public double RenderPositionAt(double monotonicSeconds) => Math.Min(DurationSeconds > 0 ? DurationSeconds : double.MaxValue, _renderClock.Position(monotonicSeconds));
     public double DurationSeconds { get; private set; }
     public bool Playing { get; private set; }
     public bool Ready => _ready;
@@ -77,6 +83,8 @@ public sealed class PlaybackSession(OcpCoreClient core) : IDisposable
         _ready = _ended = _failed = false;
         Playing = false;
         PositionSeconds = DurationSeconds = _lastSave = 0;
+        _renderClock.SetRunning(false, ClockSeconds);
+        _renderClock.Reset(0, ClockSeconds);
         Tracks = default;
         PlaybackState = 1; Buffering = false;
         VideoWidth = VideoHeight = 0; VideoPrimaries = VideoTransfer = DolbyVisionProfile = 0;
@@ -100,7 +108,7 @@ public sealed class PlaybackSession(OcpCoreClient core) : IDisposable
         catch (Exception ex) { ReportFailure(ex.Message); throw; }
     }
 
-    public void Tick(double seconds)
+    public void Tick(double seconds, double? presentationTimestamp = null)
     {
         if (_disposed || !_attached || _source is null || _failed) return;
         if (!_ready && DateTime.UtcNow - _openStarted >= TimeSpan.FromSeconds(60))
@@ -111,10 +119,11 @@ public sealed class PlaybackSession(OcpCoreClient core) : IDisposable
         }
         try
         {
-            Stats = _presenter.RenderTick(seconds);
+            Stats = _presenter.RenderTick(seconds, presentationTimestamp);
             if (Stats.TryGetProperty("renderedVideoFrames", out var frames) && frames.TryGetDouble(out var count) && count > 0 && count != _openedRenderedFrames) HasFirstFrame = true;
             core.RenderTick(seconds);
-            while (_presenter.PollEvent() is { } value) HandleEvent(value);
+            var clockTimestamp = presentationTimestamp ?? ClockSeconds;
+            while (_presenter.PollEvent() is { } value) HandleEvent(value, clockTimestamp);
             if (_ready && !_ended && seconds - _lastSave >= 5)
             {
                 SaveProgress();
@@ -124,7 +133,7 @@ public sealed class PlaybackSession(OcpCoreClient core) : IDisposable
         catch (Exception ex) { ReportFailure(ex.Message); }
     }
 
-    private void HandleEvent(JsonElement value)
+    private void HandleEvent(JsonElement value, double clockTimestamp)
     {
         switch (value.GetProperty("kind").GetInt32())
         {
@@ -158,6 +167,10 @@ public sealed class PlaybackSession(OcpCoreClient core) : IDisposable
                 break;
             case 3:
                 PositionSeconds = value.GetProperty("positionMicros").GetUInt64() / 1_000_000d;
+                // Anchor feedback on the same display timeline used for drawing.
+                // Anchoring after the native call would revise an already sampled
+                // past frame when the display target precedes event dispatch.
+                _renderClock.Synchronize(PositionSeconds, clockTimestamp);
                 Require(core.Call("playback.position", new { positionSeconds = PositionSeconds, durationSeconds = DurationSeconds > 0 ? (double?)DurationSeconds : null }));
                 break;
             case 4:
@@ -191,7 +204,10 @@ public sealed class PlaybackSession(OcpCoreClient core) : IDisposable
                 ReportFailure(value.TryGetProperty("error", out var error) ? error.GetString() ?? "播放失败" : value.TryGetProperty("message", out var message) ? message.GetString() ?? "播放失败" : "播放失败");
                 break;
         }
+        UpdateRenderClock(clockTimestamp);
     }
+
+    private void UpdateRenderClock(double? clockTimestamp = null) => _renderClock.SetRunning(_ready && Playing && !Buffering && !_ended && !_failed, clockTimestamp ?? ClockSeconds);
 
     public void SetPlaying(bool playing)
     {
@@ -199,6 +215,7 @@ public sealed class PlaybackSession(OcpCoreClient core) : IDisposable
         _presenter.Invoke(playing ? "play" : "pause");
         Require(core.Call(playing ? "playback.play" : "playback.pause"));
         Playing = playing;
+        UpdateRenderClock();
         if (!playing) SaveProgress();
     }
 
@@ -209,7 +226,9 @@ public sealed class PlaybackSession(OcpCoreClient core) : IDisposable
         _presenter.Invoke("seek", new { positionMicros = checked((ulong)(seconds * 1_000_000)) });
         Require(core.Call("playback.seek", new { positionSeconds = seconds }));
         PositionSeconds = seconds;
+        _renderClock.Reset(seconds, ClockSeconds);
         _ended = false;
+        UpdateRenderClock();
     }
 
     public void SetVolume(double volume)
@@ -222,6 +241,7 @@ public sealed class PlaybackSession(OcpCoreClient core) : IDisposable
     {
         _presenter.Invoke("setPlaybackRate", new { rate });
         Require(core.Call("playback.setRate", new { rate }));
+        _renderClock.SetRate(rate, ClockSeconds);
     }
 
     public void SelectTrack(long id, bool subtitle)
@@ -293,6 +313,7 @@ public sealed class PlaybackSession(OcpCoreClient core) : IDisposable
         Require(core.Call("playback.stop"));
         _source = null;
         _ready = Playing = false;
+        UpdateRenderClock();
         PlaybackState = 5; Buffering = false;
         while (_presenter.PollEvent() is not null) { }
     }
@@ -304,6 +325,7 @@ public sealed class PlaybackSession(OcpCoreClient core) : IDisposable
         Playing = false;
         PlaybackState = 7;
         Buffering = false;
+        UpdateRenderClock();
         var failure = PlaybackFailure.Classify(message);
         _ = core.Call("playback.failed", new { category = failure.Category switch { "auth" => "unauthorized", "server" => "network", _ => failure.Category }, message, retryable = failure.Retryable, stopsAutomaticRecovery = !failure.CanTryAlternateSource });
         Failed?.Invoke(message);

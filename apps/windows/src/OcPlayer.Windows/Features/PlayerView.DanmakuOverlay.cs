@@ -12,11 +12,12 @@ public sealed partial class PlayerView
     private sealed record OverlayComment(double Time, int Mode, uint Color, string Text);
     private sealed record ScheduledComment(int Id, OverlayComment Comment, int Lane, double Width);
     private Canvas? _danmakuCanvas;
-    private readonly DispatcherTimer _danmakuFrame = new() { Interval = TimeSpan.FromMilliseconds(33) };
     private readonly List<OverlayComment> _overlayComments = [];
     private readonly List<ScheduledComment> _overlaySchedule = [];
     private readonly Dictionary<int, TextBlock> _overlayVisible = [];
-    private bool _useKernelDanmaku = true;
+    private readonly HashSet<int> _overlayActive = [];
+    private readonly List<int> _overlayExpired = [];
+    private bool _useKernelDanmaku;
     private double _overlayWidth, _overlayHeight;
     private const double OverlayLifetime = 8;
 
@@ -24,8 +25,6 @@ public sealed partial class PlayerView
     {
         _danmakuCanvas = new Canvas { IsHitTestVisible = false };
         PlayerRoot.Children.Insert(PlayerRoot.Children.IndexOf(VideoPanel) + 1, _danmakuCanvas);
-        _danmakuFrame.Tick += (_, _) => DrawDanmakuOverlay();
-        _danmakuFrame.Start();
     }
     private void ClearDanmakuContent()
     {
@@ -88,17 +87,18 @@ public sealed partial class PlayerView
             _overlaySchedule.Add(new(count++, comment, lane, width));
         }
     }
-    private void DrawDanmakuOverlay()
+    private void DrawDanmakuOverlay(double? presentationTimestamp = null)
     {
         if (_closed || _useKernelDanmaku || _danmakuCanvas is null || _session is null) return;
         var p = CurrentDanmakuPreferences; _danmakuCanvas.Visibility = p.Enabled ? Visibility.Visible : Visibility.Collapsed; _danmakuCanvas.Opacity = p.Opacity;
         if (!p.Enabled) return;
         if (Math.Abs(_overlayWidth - PlayerRoot.ActualWidth) > 1 || Math.Abs(_overlayHeight - PlayerRoot.ActualHeight) > 1) RebuildDanmakuOverlay();
-        var position = _session.PositionSeconds - _danmakuShift - _danmakuOffset;
-        // Binary seek gives the same output after a seek, pause or rate change, without a second clock.
+        var position = (presentationTimestamp is { } target ? _session.RenderPositionAt(target) : _session.RenderPositionSeconds) - _danmakuShift - _danmakuOffset;
+        // Use the continuous media clock between native progress reports; binary seek
+        // still recreates the same comments after a seek or source change.
         var low = 0; var high = _overlaySchedule.Count;
         while (low < high) { var mid = (low + high) / 2; if (_overlaySchedule[mid].Comment.Time < position - OverlayLifetime) low = mid + 1; else high = mid; }
-        var active = new HashSet<int>();
+        var active = _overlayActive; active.Clear();
         for (var i = low; i < _overlaySchedule.Count && _overlaySchedule[i].Comment.Time <= position && active.Count < 400; i++)
         {
             var scheduled = _overlaySchedule[i]; var item = scheduled.Comment; active.Add(scheduled.Id);
@@ -106,13 +106,16 @@ public sealed partial class PlayerView
             {
                 var c = item.Color; text = new TextBlock { Text = item.Text, FontSize = p.FontSize, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                     Foreground = new SolidColorBrush(global::Windows.UI.Color.FromArgb(255, (byte)(c >> 16), (byte)(c >> 8), (byte)c)),
-                    IsHitTestVisible = false };
+                    IsHitTestVisible = false, UseLayoutRounding = false, RenderTransform = new TranslateTransform() };
+                Canvas.SetLeft(text, 0);
                 _overlayVisible[scheduled.Id] = text; _danmakuCanvas.Children.Add(text);
             }
             var x = item.Mode == 1 ? _overlayWidth - (position - item.Time) / OverlayLifetime * (_overlayWidth + scheduled.Width) : (_overlayWidth - scheduled.Width) / 2;
             var y = item.Mode == 4 ? _overlayHeight * p.DisplayArea - (scheduled.Lane + 1) * p.FontSize * 1.5 : scheduled.Lane * p.FontSize * 1.5;
-            Canvas.SetLeft(text, x); Canvas.SetTop(text, Math.Max(0, y));
+            ((TranslateTransform)text.RenderTransform).X = x; Canvas.SetTop(text, Math.Max(0, y));
         }
-        foreach (var id in _overlayVisible.Keys.Where(id => !active.Contains(id)).ToArray()) { _danmakuCanvas.Children.Remove(_overlayVisible[id]); _overlayVisible.Remove(id); }
+        _overlayExpired.Clear();
+        foreach (var id in _overlayVisible.Keys) if (!active.Contains(id)) _overlayExpired.Add(id);
+        foreach (var id in _overlayExpired) { _danmakuCanvas.Children.Remove(_overlayVisible[id]); _overlayVisible.Remove(id); }
     }
 }

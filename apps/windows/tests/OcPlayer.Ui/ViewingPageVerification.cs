@@ -203,6 +203,31 @@ internal sealed partial class ViewingPageVerification : Window
                     if (parent is UIElement { Visibility: Visibility.Collapsed }) { loginHidden = true; break; }
                 if (guest.IsEnabled("bangumi") || !loginHidden) throw new Exception("Disabled Bangumi still offers login");
                 assertions.Add("Bangumi account row reflects guest, signed-in and disabled states with resolved mirror hosts");
+                root.Children.Clear(); root.Children.Add(guestPages.Settings(false));
+                await Task.Delay(150); root.UpdateLayout();
+                var mpAddress = Descendants(root).OfType<TextBox>().Single(x => AutomationProperties.GetName(x) == "服务器地址");
+                var mpUser = Descendants(root).OfType<TextBox>().Single(x => AutomationProperties.GetName(x) == "用户名");
+                var mpPassword = Descendants(root).OfType<PasswordBox>().Single();
+                await Capture("moviepilot-settings-guest-dark");
+                root.RequestedTheme = ElementTheme.Light; root.Background = new SolidColorBrush(Microsoft.UI.Colors.White);
+                AppWindow.ResizeClient(new(640, 720)); await Task.Delay(150); root.UpdateLayout();
+                await Capture("moviepilot-settings-guest-compact-light");
+                if (new FrameworkElement[] { mpAddress, mpUser, mpPassword }.Any(x => x.TransformToVisual(root).TransformPoint(new()).X + x.ActualWidth > root.ActualWidth)) throw new Exception("MoviePilot connection fields overflow the compact settings page");
+                mpAddress.Text = "https://example.invalid"; mpUser.Text = "settings-fixture"; mpPassword.Password = "fixture-only";
+                Descendants(root).OfType<ToggleSwitch>().Single(x => AutomationProperties.GetName(x) == "记住密码").IsOn = true;
+                var connect = Descendants(root).OfType<Button>().Single(x => Equals(x.Content, "验证并保存连接"));
+                ((IInvokeProvider)new ButtonAutomationPeer(connect).GetPattern(PatternInterface.Invoke)).Invoke();
+                for (var attempt = 0; attempt < 100 && guest.MoviePilot is null; attempt++) await Task.Delay(20);
+                if (guest.MoviePilot is not { UserName: "settings-fixture", RememberPassword: true } || mpPassword.Password.Length != 0 || routes.LastOrDefault() != "settings:MoviePilot") throw new Exception("MoviePilot settings connection did not save the account and remember preference or clear its password field");
+                root.Children.Clear(); root.Children.Add(guestPages.Settings(false)); await Task.Delay(150); root.UpdateLayout();
+                if (Descendants(root).OfType<PasswordBox>().Any() || !Descendants(root).OfType<TextBlock>().Any(x => x.Text == guest.MoviePilot.DisplayName)) throw new Exception("Connected MoviePilot settings still shows the login form or loses its account row");
+                await Capture("moviepilot-settings-connected-compact-light");
+                Descendants(root).OfType<ToggleSwitch>().Single(x => AutomationProperties.GetName(x) == "启用 MoviePilot").IsOn = false;
+                root.Children.Clear(); root.Children.Add(guestPages.Settings(false)); await Task.Delay(100);
+                if (guest.IsEnabled("moviepilot") || Descendants(root).OfType<ToggleSwitch>().Single(x => AutomationProperties.GetName(x) == "启用 MoviePilot").IsOn) throw new Exception("MoviePilot enable switch does not retain its state after page recreation");
+                assertions.Add("MoviePilot compact settings preserves connection, remembered password and enable state, then shows account rows after login");
+                await guest.Logout("moviepilot");
+                AppWindow.ResizeClient(new(1130, 800)); root.RequestedTheme = ElementTheme.Dark; root.Background = new SolidColorBrush(Microsoft.UI.Colors.Black);
                 foreach (var route in new[] { "viewing", "viewing:calendar", "viewing:moviepilot", "viewing:downloads", "viewing:resources:测试", "viewing:history", "settings:Bangumi", "settings:MoviePilot" })
                 {
                     var page = route == "viewing" ? pages.Dashboard() : route.StartsWith("settings:") ? pages.Settings(route.EndsWith("Bangumi")) : pages.Route(route);

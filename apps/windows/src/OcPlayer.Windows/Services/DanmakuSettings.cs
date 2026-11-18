@@ -6,7 +6,7 @@ internal sealed record DanmakuPreferences(
     string GatewayUrl = "", string ApiKey = "", bool AutoLoad = true, bool Enabled = true,
     double FontSize = 22, double Opacity = .85, double DisplayArea = .75,
     bool BlockTop = false, bool BlockBottom = false, bool BlockScroll = false,
-    bool MergeDuplicates = false, bool AllowStacking = false, bool UseKernelRenderer = true, string AnimeSkipClientId = "")
+    bool MergeDuplicates = false, bool AllowStacking = false, bool UseKernelRenderer = false, string AnimeSkipClientId = "")
 {
     // Public, app-distributed gateway credentials, shared with OcPlayer's DandanplaySettingsStore.
     public const string DefaultGateway = "https://dandanplay.3841625.xyz";

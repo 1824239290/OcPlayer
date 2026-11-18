@@ -5,6 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="OcPlayer.Integration" />
     <!-- Compile the authoritative SDK sources in place. This also keeps all
          generated build output in Windows, without writing into Core. -->
     <Compile Include="$(OcpCoreRoot)bindings\windows\OcPlayerCore.cs" Link="SharedSdk\OcpCore.cs" />

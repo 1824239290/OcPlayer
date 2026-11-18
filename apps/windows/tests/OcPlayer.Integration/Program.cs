@@ -17,6 +17,7 @@ internal static partial class Program
         if (args.Length is < 2 or > 3 || args.Length == 3 && args[2] != "--danmaku-only")
             throw new ArgumentException("Pass a local media file (or --server-only), a new verification directory, and optionally --danmaku-only.");
         var danmakuOnly = args.Length == 3;
+        VerifyPlaybackRenderClock();
         var oauthBrowser = args[0] == "--oauth-browser-only";
         var oauthOnly = oauthBrowser || args[0] == "--oauth-only";
         var output = Path.GetFullPath(args[1]); Directory.CreateDirectory(output);

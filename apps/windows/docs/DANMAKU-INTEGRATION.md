@@ -2,7 +2,8 @@
 
 2026-11-16。以 macOS OcPlayer 的 `DanmakuModel`、`DanmakuCoordinator`、
 `DanmakuSelectionSheet` 和 `Packages/DanmakuKit` 为参考，Windows 接入共享 Rust Core
-的匹配、缓存和格式转换，再交给 Erika 原生弹幕轨道渲染。
+的匹配、缓存和格式转换，再交给 Windows 播放器绘制。2026-11-18 默认改为应用层
+渲染，保留 Erika 内核渲染作为可选路线。
 
 ## 使用入口
 
@@ -23,13 +24,16 @@
 配置及自定义 Key 整体存入 Windows PasswordVault 的 `OcPlayer.Windows` /
 `danmaku-settings` 凭据，不保存到普通 JSON。保存失败保留旧配置；存储不可用或配置
 损坏时暂停自动请求并提示重新保存，保持播放器可用。
+设置页的开关切换后自动保存，失败时回退开关并显示原因；网关、Client ID 和数值
+仍通过“保存弹幕设置”提交。播放器弹幕设置弹窗保留显式“保存/取消”。渲染路线
+的选择会保存下来，从下次播放开始应用。
 
 ## 接入路径与补齐的缺陷
 
 `DanmakuService` 提供媒体身份和调用参数。`danmaku.load` 复用 Core 的指纹匹配、
 TMDB / 标题与集数回退、候选评分、重试、持久化映射和弹幕缓存；手动搜索通过
-`danmaku.exchange` 访问同一网关。成功结果以 `kernelTrack` JSON 交给
-`PlaybackSession.LoadDanmakuJson`，不在 WinUI 层重复绘制弹幕。
+`danmaku.exchange` 访问同一网关。成功结果以 `kernelTrack` JSON 按设置交给应用层
+或 `PlaybackSession.LoadDanmakuJson`，同一片源只使用一种弹幕渲染路线。
 
 - 本地缓存身份包含完整路径、大小、修改时间，替换同名文件后不会沿用旧匹配。
   `01.mkv` 等短文件名可从上层目录补剧名和季号。
@@ -52,6 +56,33 @@ TMDB / 标题与集数回退、候选评分、重试、持久化映射和弹幕�
 本功能关闭自动片头信息查询，避免弹幕请求触发不相关的外部服务。
 
 ## 构建与验证
+
+播放器在前台使用 `CompositionTarget.Rendering` 同步调用原生呈现和应用层弹幕绘制。
+同一次回调使用固定的显示时间；通过内核已有的可选相对时间 ABI
+`erika_presenter_render_tick_with_timing` 采样，旧内核可回退到原有 Tick。
+应用层通过 `PlaybackSession.RenderPositionAt` 在同一显示时间采样，原生进度事件也
+锚定到这个显示时间，避免事件处理延迟修改上一帧的坐标。文字使用保留小数的
+`TranslateTransform` 移动，减少每帧布局和像素取整；时钟校正同样限制在 ±2%。
+暂停和缓冲冻结，跳转与换源立即对齐。进度保存仍使用原生上报的
+`PositionSeconds`。窗口最小化时改用 33 毫秒后台定时器维持播放和事件处理，恢复后
+重新订阅屏幕刷新；关闭播放器会解除订阅并停止后台定时器。
+
+Debug 构建提供 `--verify-danmaku-cadence=<结果目录> --open=<视频路径>`。
+为该进程设置独立的 `OCP_DATA_DIRECTORY`，并使用至少 70 秒、带音轨的本地合成视频。
+该入口分别测量内核和应用层弹幕 60 秒，记录原生弹幕帧数、应用层横坐标和连续媒体时间，
+随后检查暂停、小幅跳转、2 倍速、两轮最小化/恢复和关闭清理。`kernel-samples.json`、
+`overlay-samples.json`、`metrics.json`、`results.json` 保存在结果目录。
+短时调试可通过 `OCP_CADENCE_SECONDS` 将每种模式的采样时长设为 2–60 秒。
+设置 `OCP_CADENCE_NATIVE_DETAILS=1` 还会记录原生媒体时间、显示时间与 DXGI
+提交/显示计数。应用层检查绘制时钟速度和真实文字横坐标；内核路线保留其自身的
+弹幕时钟，只检查刷新和播放生命周期。
+确定性的时钟回归也包含在 C# 集成套件中，覆盖进度抖动、缓冲冻结和缺失进度事件的边界。
+
+2026-11-18 的滚动卡顿修复与实测记录见 [弹幕刷新验证](danmaku-smoothness-2026-11-18.md)。
+运动速度优化和原生实验记录见 [弹幕运动验证](danmaku-motion-2026-11-18.md)。
+最终采用应用层方案，已撤掉本轮新增的原生视觉时钟补丁及专用 QPC ABI；这些改动
+作为实验保存在本机 artifacts 中。当前默认应用层优化只需构建 C#，沿用项目原来
+的 `erika_capi.dll`。设置中的“用内核渲染弹幕”仍可开启，从下次播放生效。
 
 必须带上共享 Core 的上述解析修复并重建 `ocp_ffi.dll`；只复制 Windows C# 源码、
 使用旧 Core 二进制不能获得完整修复。当前工作区 `native/OcPlayerCore/x64/ocp_ffi.dll`

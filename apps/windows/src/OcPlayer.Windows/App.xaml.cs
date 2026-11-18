@@ -88,6 +88,16 @@ public partial class App : Application
             return;
         }
 #if DEBUG
+        var cadenceVerification = launchArguments.FirstOrDefault(x => x.StartsWith("--verify-danmaku-cadence="));
+        if (cadenceVerification is not null)
+        {
+            var mediaPath = launchArguments.First(x => x.StartsWith("--open=")).Split('=', 2)[1];
+            var resource = "OcPlayer.UiCadenceTest." + Guid.NewGuid().ToString("N");
+            EnsureCore(resource);
+            _window = new Preview.DanmakuCadenceVerification(mediaPath, cadenceVerification.Split('=', 2)[1], resource);
+            _window.Closed += (_, _) => { Core?.Dispose(); Core = null; };
+            _window.Activate(); return;
+        }
         var serverConnectionVerification = launchArguments.FirstOrDefault(x => x.StartsWith("--verify-server-connection="));
         if (serverConnectionVerification is not null)
         {
