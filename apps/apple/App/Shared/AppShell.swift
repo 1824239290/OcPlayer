@@ -66,13 +66,6 @@ struct AppShellView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    #if os(macOS)
-    /// 原生全屏状态：进全屏时系统把工具栏搬进独立的 NSToolbarFullScreenWindow，
-    /// 顶栏是它画的不透明硬底，窗口态「氛围图透过玻璃顶栏」不再成立——氛围层
-    /// 顶部改向窗口底色渐隐衔接（`FullscreenTitlebarFade`）。
-    @State private var isWindowFullscreen = false
-    #endif
-
     var body: some View {
         layout
             // 横向留白跟**窗口宽度**走，不跟设备型号走：iPad 拖到 1/3 宽时
@@ -82,10 +75,6 @@ struct AppShellView: View {
             // iPad 版式，留白就该是 52pt；跟着标签栏的紧凑档走会变成 22pt 的错位。
             .environment(\.contentLeading, contentLeading)
             .environment(\.imageCacheScope, app.server?.profile.imageCacheScope)
-            #if os(macOS)
-            // 首页轮播等页面内的氛围层经它感知全屏（整窗层直接读 @State）。
-            .environment(\.isWindowFullscreen, isWindowFullscreen)
-            #endif
             // 背景挂在 AppShell 根节点，分区内容重建时不销毁轮播视图。
             // 仅 macOS：iOS 的导航栈宿主自带不透明底，垫在后面的层
             // 到不了屏幕——iOS 的首页轮播挂在首页 Tab 栈内（见 compactLayout）。
@@ -156,21 +145,7 @@ struct AppShellView: View {
 
     private var splitLayout: some View {
         detailColumn
-        #if os(macOS)
-        // 全屏跟踪：willEnter 先行（衔接层赶在硬底亮相前就位），didExit 收尾；
-        // 起窗对齐兜底「状态恢复直接以全屏起窗」——那时通知可能早于订阅。
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.willEnterFullScreenNotification)) { _ in
-            isWindowFullscreen = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { _ in
-            isWindowFullscreen = false
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
-            syncFullscreenFlag()
-        }
-        #endif
         .onAppear {
-            syncFullscreenFlag()
             app.setCompact(false)
         }
     }
@@ -437,32 +412,7 @@ struct AppShellView: View {
             }
             // 只动画专属背景，底下的首页轮播始终留在视图树里。
             .motion(Motion.ambient, value: app.windowAmbience)
-
-            #if os(macOS)
-            // 全屏：顶栏是不透明硬底，顶部向窗口底色渐隐衔接（见
-            // FullscreenTitlebarFade）；窗口态工具栏透玻璃，无需此层。
-            // **必须放在氛围层的动画作用域之外**：放进去会被换页/换图的
-            // 交叉淡入卷着一起动，插进/移出时在背景里滑出一条渐变带
-            // （全屏下肉眼可见）。
-            if isWindowFullscreen, app.windowAmbience != nil {
-                FullscreenTitlebarFade()
-                    .transition(.section)
-            }
-            #endif
         }
-        #if os(macOS)
-        .motion(Motion.standard, value: isWindowFullscreen)
-        #endif
-    }
-
-    /// 对齐一次窗口实际全屏状态（macOS；iOS 恒 no-op）。
-    private func syncFullscreenFlag() {
-        #if os(macOS)
-        let fullscreen = NSApp.windows.contains { $0.styleMask.contains(.fullScreen) }
-        if isWindowFullscreen != fullscreen {
-            isWindowFullscreen = fullscreen
-        }
-        #endif
     }
 }
 

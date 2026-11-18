@@ -54,7 +54,6 @@ struct BackdropCarouselTrigger: Hashable {
 /// 残留的 `false` 是死键，升级后氛围图照常出（见 CHANGELOG）。
 struct AmbientBackdropCarousel: View {
     @Environment(AppModel.self) private var app
-    @Environment(\.isWindowFullscreen) private var isWindowFullscreen
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -69,16 +68,6 @@ struct AmbientBackdropCarousel: View {
                 }
             }
             .animation(Motion.ambient, value: app.ambienceIndex)
-
-            // 全屏顶栏是不透明硬底（macOS 26 系统行为），顶部向窗口底色渐隐衔接；
-            // 窗口态工具栏透明，图直接透出。见 FullscreenTitlebarFade。
-            // **放在换片动画作用域之外**：放进去换片时会被交叉淡入卷着一起动，
-            // 背景里滑出一条渐变带（全屏下肉眼可见）。
-            if isWindowFullscreen {
-                FullscreenTitlebarFade()
-                    .transition(.section)
-            }
         }
-        .animation(Motion.ambient, value: isWindowFullscreen)
     }
 }

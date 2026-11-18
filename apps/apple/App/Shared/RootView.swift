@@ -93,6 +93,10 @@ struct RootView: View {
         // 迟到」）。全程可见的代价只是启动期顶栏条目在 phase 就绪（~100ms）时就位，
         // 玻璃条透出的就是启动底色，深浅色都连续。
         .toolbar((app.presentedPlayer == nil && app.playbackPreparation == nil) ? .visible : .hidden, for: .windowToolbar)
+        .background {
+            FullscreenToolbarBackground()
+                .frame(width: 0, height: 0)
+        }
         #endif
         .overlay {
             if let request = app.presentedPlayer {
