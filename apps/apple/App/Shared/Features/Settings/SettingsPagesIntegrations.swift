@@ -144,8 +144,8 @@ struct BangumiSettingsView: View {
                 .neutralSwitch()
                 if bangumiEnabled {
                     SettingsGlassDivider()
-                    KeyValueRow(label: "账号", value: bangumiAccountText)
                     if bangumi.isAuthenticated {
+                        KeyValueRow(label: "账号", value: bangumi.profile?.name ?? "已登录")
                         SettingsGlassDivider()
                         // 退出登录原先只有 Bangumi 分区「我的」页顶栏一个出口：要退得先
                         // 切到那个分区、再进个人页，设置页里找不到——与 Jellyfin /
@@ -158,8 +158,11 @@ struct BangumiSettingsView: View {
                             confirmSignOut = true
                         }
                     } else {
-                        // 未登录时它就是「账号」行的注解（登录入口在哪儿），不是整段的说明。
-                        SettingsNote("登录入口在顶栏的 Bangumi 分区。")
+                        #if os(macOS)
+                        BangumiAccountLoginRow()
+                        #else
+                        KeyValueRow(label: "账号", value: "未登录")
+                        #endif
                     }
                 } else {
                     SettingsNote("关闭后顶栏与详情页的 Bangumi 入口会隐藏；登录状态与条目关联保留。")
@@ -181,17 +184,10 @@ struct BangumiSettingsView: View {
                 Task { await bangumi.signOut() }
             }
         } message: {
-            Text("本机的授权登录会清除；顶栏入口仍在，可随时重新授权。")
+            Text("本机的授权登录会清除，可以随时重新登录。")
         }
     }
 
-    /// 账号行：以 `isAuthenticated` 为准（它是登录的唯一门控信号）。
-    /// 资料还没拉回来时 profile 为 nil，直接读它会显示成「未登录」——而旁边
-    /// 就摆着「退出 Bangumi」，两行互相打架。
-    private var bangumiAccountText: String {
-        if let profile = bangumi.profile { return profile.name }
-        return bangumi.isAuthenticated ? "已登录" : "未登录"
-    }
 }
 
 // MARK: - Bangumi 镜像源

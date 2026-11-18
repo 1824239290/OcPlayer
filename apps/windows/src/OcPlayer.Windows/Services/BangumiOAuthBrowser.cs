@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Pipes;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text;
@@ -74,25 +75,27 @@ internal static class BangumiOAuthBrowser
         var ack = new byte[1];
         if (await pipe.ReadAsync(ack, token) != 1 || ack[0] != 1) throw new InvalidOperationException("授权回调未被接收。");
     }
-    internal static string ProtocolCommand(string executable, string? runtimeDirectory)
+    internal static string ProtocolCommand(string applicationDirectory, string? dotnetHost)
     {
-        executable = Path.GetFullPath(executable);
-        if (executable.Contains('"')) throw new InvalidOperationException("应用安装路径无效。");
-        var assembly = Path.Combine(AppContext.BaseDirectory, "OcPlayer.Windows.dll");
-        var runtime = runtimeDirectory is null ? null : Path.Combine(runtimeDirectory, "dotnet.exe");
-        // Developer installs may only expose .NET via DOTNET_ROOT. The protocol
-        // process is launched by the shell and does not inherit that environment.
-        if (!File.Exists(Path.Combine(AppContext.BaseDirectory, "coreclr.dll"))
-            && runtime is not null && File.Exists(runtime) && File.Exists(assembly) && !runtime.Contains('"'))
-            return $"\"{runtime}\" \"{assembly}\" {CallbackArgument} \"%1\"";
-        if (Path.GetFileName(executable).Equals("dotnet.exe", StringComparison.OrdinalIgnoreCase))
-            return $"\"{executable}\" \"{assembly}\" {CallbackArgument} \"%1\"";
-        return $"\"{executable}\" {CallbackArgument} \"%1\"";
+        applicationDirectory = Path.GetFullPath(applicationDirectory);
+        var appHost = Path.Combine(applicationDirectory, "OcPlayer.Windows.exe");
+        if (File.Exists(Path.Combine(applicationDirectory, "coreclr.dll")) || !File.Exists(dotnetHost))
+            return $"\"{appHost}\" {CallbackArgument} \"%1\"";
+
+        var consoleHost = Path.Combine(Environment.SystemDirectory, "conhost.exe");
+        var assembly = Path.Combine(applicationDirectory, "OcPlayer.Windows.dll");
+        return $"\"{consoleHost}\" --headless \"{Path.GetFullPath(dotnetHost)}\" \"{assembly}\" {CallbackArgument} \"%1\"";
     }
     internal static void RegisterProtocol()
     {
-        var executable = Environment.ProcessPath ?? throw new InvalidOperationException("无法定位应用，请重新启动 OcPlayer。");
-        var command = ProtocolCommand(executable, Environment.GetEnvironmentVariable("DOTNET_ROOT_X64") ?? Environment.GetEnvironmentVariable("DOTNET_ROOT"));
+        var dotnetHost = Environment.ProcessPath;
+        if (!string.Equals(Path.GetFileName(dotnetHost), "dotnet.exe", StringComparison.OrdinalIgnoreCase))
+        {
+            var runtime = Environment.GetEnvironmentVariable("DOTNET_ROOT_" + RuntimeInformation.ProcessArchitecture.ToString().ToUpperInvariant())
+                ?? Environment.GetEnvironmentVariable("DOTNET_ROOT");
+            dotnetHost = runtime is null ? null : Path.Combine(runtime, "dotnet.exe");
+        }
+        var command = ProtocolCommand(AppContext.BaseDirectory, dotnetHost);
         RegisterProtocol(Registry.CurrentUser, @"Software\Classes\ocplayer", command);
     }
     internal static void RegisterProtocol(RegistryKey root, string path, string command)

@@ -175,24 +175,37 @@ internal static partial class Program
         try { BangumiOAuthBrowser.DefaultBrowserStartInfo(new Uri("file:///C:/Windows/system32/cmd.exe")); throw new Exception("Non-web browser launch accepted"); }
         catch (ArgumentException) { Assert(true, "browser launch accepts only HTTP and HTTPS URLs"); }
         var path = @"Software\OcPlayer\OAuthProtocolTest." + Guid.NewGuid().ToString("N");
-        var command = "\"C:\\OcPlayer\\OcPlayer.Windows.exe\" --bangumi-oauth-callback \"%1\"";
+        var directory = Directory.CreateTempSubdirectory("OcPlayer OAuth ");
         try
         {
+            var dotnetHost = Path.Combine(directory.FullName, "dotnet.exe");
+            File.WriteAllBytes(dotnetHost, []);
+            var assembly = Path.Combine(directory.FullName, "OcPlayer.Windows.dll");
+            var consoleHost = Path.Combine(Environment.SystemDirectory, "conhost.exe");
+            var command = BangumiOAuthBrowser.ProtocolCommand(directory.FullName, dotnetHost);
+            Assert(command == $"\"{consoleHost}\" --headless \"{dotnetHost}\" \"{assembly}\" --bangumi-oauth-callback \"%1\"",
+                "a private .NET runtime receives the quoted callback through a headless console");
+            var appHost = Path.Combine(directory.FullName, "OcPlayer.Windows.exe");
+            var directCommand = $"\"{appHost}\" --bangumi-oauth-callback \"%1\"";
+            Assert(BangumiOAuthBrowser.ProtocolCommand(directory.FullName, null) == directCommand, "the system runtime uses the GUI apphost");
+            File.WriteAllBytes(Path.Combine(directory.FullName, "coreclr.dll"), []);
+            Assert(BangumiOAuthBrowser.ProtocolCommand(directory.FullName, dotnetHost) == directCommand, "self-contained installs always use the GUI apphost");
             using var root = Registry.CurrentUser.CreateSubKey(path, true);
+            BangumiOAuthBrowser.RegisterProtocol(root, "ocplayer", $"\"{dotnetHost}\" \"{assembly}\" --bangumi-oauth-callback \"%1\"");
             BangumiOAuthBrowser.RegisterProtocol(root, "ocplayer", command);
             using (var handler = root.OpenSubKey(@"ocplayer\shell\open\command"))
-                Assert(Equals(handler?.GetValue(""), command), "first launch registers the callback executable and quoted URL argument");
+                Assert(Equals(handler?.GetValue(""), command), "registration upgrades the old console handler before opening the browser");
             using var readOnly = Registry.CurrentUser.OpenSubKey(path, false)!;
             BangumiOAuthBrowser.RegisterProtocol(readOnly, "ocplayer", command);
             Assert(true, "an existing callback registration works with read-only registry access");
             try { BangumiOAuthBrowser.RegisterProtocol(readOnly, "ocplayer", command + " --new-version"); throw new Exception("Read-only registration was overwritten"); }
             catch (InvalidOperationException ex) { Assert(ex.Message.Contains("启动脚本"), "missing write access reports an actionable startup instruction"); }
-            var movedCommand = command.Replace(@"C:\OcPlayer\", @"C:\New Location\");
+            var movedCommand = BangumiOAuthBrowser.ProtocolCommand(Path.Combine(directory.FullName, "New Location"), null);
             BangumiOAuthBrowser.RegisterProtocol(root, "ocplayer", movedCommand);
             using (var handler = root.OpenSubKey(@"ocplayer\shell\open\command"))
                 Assert(Equals(handler?.GetValue(""), movedCommand), "launching from a new install path updates the callback handler");
         }
-        finally { Registry.CurrentUser.DeleteSubKeyTree(path, false); }
+        finally { Registry.CurrentUser.DeleteSubKeyTree(path, false); directory.Delete(true); }
     }
     private static async Task VerifyBangumiBrowserRoundTrip(OcpCoreClient core)
     {
@@ -203,9 +216,10 @@ internal static partial class Program
         using (var handler = Registry.CurrentUser.OpenSubKey(@"Software\Classes\ocplayer\shell\open\command"))
         {
             var command = handler?.GetValue("") as string ?? "";
-            Assert(command.Contains("\"" + Path.GetFullPath(assembly) + "\"", StringComparison.OrdinalIgnoreCase)
-                && command.Contains(BangumiOAuthBrowser.CallbackArgument, StringComparison.Ordinal),
-                "the installed ocplayer protocol targets the staged shipping callback assembly");
+            var directory = Path.GetDirectoryName(Path.GetFullPath(assembly))!;
+            Assert(command.Equals(BangumiOAuthBrowser.ProtocolCommand(directory, runtime), StringComparison.OrdinalIgnoreCase)
+                || command.Equals(BangumiOAuthBrowser.ProtocolCommand(directory, null), StringComparison.OrdinalIgnoreCase),
+                "the installed ocplayer protocol targets the staged callback without opening a console window");
         }
         using var fixture = new ViewingFixture();
         var service = new ViewingIntegrations(core, "OcPlayer.BrowserRoundTrip." + Guid.NewGuid().ToString("N"));

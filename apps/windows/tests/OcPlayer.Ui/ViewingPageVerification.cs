@@ -182,6 +182,27 @@ internal sealed partial class ViewingPageVerification : Window
                     var encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, stream);
                     encoder.SetPixelData(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied, (uint)bitmap.PixelWidth, (uint)bitmap.PixelHeight, 96, 96, pixels.ToArray()); await encoder.FlushAsync();
                 }
+                service.ConfigureMirror(true, "bangumi.lat");
+                root.Children.Clear(); root.Children.Add(pages.Settings(true));
+                await Task.Delay(150); root.UpdateLayout();
+                var settingsLabels = Descendants(root).OfType<TextBlock>().Select(label => label.Text).ToArray();
+                if (!settingsLabels.Contains(service.Bangumi!.DisplayName) || !settingsLabels.Contains("api.bangumi.lat") || !settingsLabels.Contains("lain.bangumi.lat")
+                    || Descendants(root).OfType<SplitButton>().Any()) throw new Exception("Signed-in Bangumi account or mirror rows are incorrect");
+                await Capture("bangumi-account-and-mirror");
+                service.ConfigureMirror(false, "", clear: true);
+                var guest = new ViewingIntegrations(Call, resource + ".Guest");
+                var guestPages = new IntegrationPages(new PageLayout(), routes.Add, opened.Add, guest);
+                root.Children.Clear(); root.Children.Add(guestPages.Settings(true));
+                await Task.Delay(150); root.UpdateLayout();
+                var accountLogin = Descendants(root).OfType<SplitButton>().Single(button => AutomationProperties.GetName(button) == "登录 Bangumi");
+                await Capture("bangumi-account-signed-out");
+                Descendants(root).OfType<ToggleSwitch>().Single(toggle => AutomationProperties.GetName(toggle) == "启用 Bangumi").IsOn = false;
+                root.UpdateLayout();
+                var loginHidden = false;
+                for (DependencyObject? parent = accountLogin; parent is not null; parent = VisualTreeHelper.GetParent(parent))
+                    if (parent is UIElement { Visibility: Visibility.Collapsed }) { loginHidden = true; break; }
+                if (guest.IsEnabled("bangumi") || !loginHidden) throw new Exception("Disabled Bangumi still offers login");
+                assertions.Add("Bangumi account row reflects guest, signed-in and disabled states with resolved mirror hosts");
                 foreach (var route in new[] { "viewing", "viewing:calendar", "viewing:moviepilot", "viewing:downloads", "viewing:resources:测试", "viewing:history", "settings:Bangumi", "settings:MoviePilot" })
                 {
                     var page = route == "viewing" ? pages.Dashboard() : route.StartsWith("settings:") ? pages.Settings(route.EndsWith("Bangumi")) : pages.Route(route);

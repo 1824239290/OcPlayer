@@ -7,6 +7,53 @@ import AuthenticationServices
 import UIKit
 #endif
 
+#if os(macOS)
+struct BangumiAccountLoginRow: View {
+    @Environment(BangumiCoordinator.self) private var bangumi
+    @Environment(DanmakuModel.self) private var danmakuModel
+    @Environment(\.openURL) private var openURL
+    @State private var preparing = false
+
+    var body: some View {
+        SettingsFieldRow("账号") {
+            Button("登录 Bangumi") {
+                preparing = true
+                Task { await openAuthorization() }
+            }
+            .disabled(preparing || !danmakuModel.dandanplayIsConfigured)
+        }
+        if !danmakuModel.dandanplayIsConfigured {
+            SettingsNote("请先在「设置 → 弹幕」中配置网关和具有 bgm:oauth 权限的 API Key。")
+        } else if let error = bangumi.authError {
+            ErrorNotice(error)
+        }
+    }
+
+    private func openAuthorization() async {
+        defer { preparing = false }
+        bangumi.authError = nil
+        do {
+            let url = try await BangumiAuthService.buildOAuthURL()
+            openURL(url) { accepted in
+                if !accepted { bangumi.authError = "无法打开默认浏览器，请重试。" }
+            }
+        } catch {
+            bangumi.authError = (error as? BangumiError)?.userMessage ?? error.localizedDescription
+        }
+    }
+}
+
+struct BangumiLoginView: View {
+    @Environment(BangumiCoordinator.self) private var bangumi
+
+    var body: some View {
+        PageFillingState {
+            Text(bangumi.isAuthenticated ? "暂无账号资料" : "请在「设置 → Bangumi → 账号」中登录。")
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+#else
 /// Bangumi 登录视图：未登录时显示登录引导，已登录时显示用户信息。
 /// 放在 Bangumi 功能区的根，作为未登录态的门面。
 ///
@@ -92,13 +139,6 @@ struct BangumiLoginView: View {
         }
     }
 
-    #if os(macOS)
-    private func presentAuthSession(url: URL) {
-        // macOS 打开系统浏览器完成授权，回调经 RootView 的 onOpenURL 回到 App。
-        NSWorkspace.shared.open(url)
-        pendingAuthURL = nil
-    }
-    #else
     private func presentAuthSession(url: URL) {
         let session = ASWebAuthenticationSession(
             url: url,
@@ -126,8 +166,8 @@ struct BangumiLoginView: View {
         authSession = session
         session.start()
     }
-    #endif
 }
+#endif
 
 #if os(iOS)
 /// ASWebAuthenticationSession 的呈现锚点。iOS 上没有它 start() 直接失败。

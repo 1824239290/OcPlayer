@@ -16,3 +16,6 @@ http = "1"
 async-compression = { version = "0.4", features = ["tokio", "gzip", "zlib", "brotli"] }
 tokio-util = { version = "0.7", features = ["io"] }
 futures-util = "0.3"
+
+[target.'cfg(windows)'.dependencies]
+reqwest = { workspace = true, features = ["system-proxy"] }

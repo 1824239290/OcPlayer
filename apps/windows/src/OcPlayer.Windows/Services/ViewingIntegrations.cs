@@ -7,7 +7,12 @@ namespace OcPlayer.Windows.Services;
 internal sealed record IntegrationAccount(string BaseUrl, string AccessToken, string UserName, string DisplayName, bool Enabled = true, string? Avatar = null,
     string? RefreshToken = null, DateTimeOffset? ExpiresAt = null, BangumiGateway? OAuthGateway = null,
     bool RememberPassword = false, string? Password = null);
-internal sealed class IntegrationRequestException(int code) : InvalidOperationException(code is 2001 or 2003 ? "登录已失效，请重新连接账号。" : $"请求失败（{code}），请检查连接或重新登录。")
+internal sealed class IntegrationRequestException(int code) : InvalidOperationException(code switch
+{
+    1521 => "请求超时，请检查网络或系统代理后重试。",
+    2001 or 2003 => "登录已失效，请重新连接账号。",
+    _ => $"请求失败（{code}），请检查连接或重新登录。"
+})
 { public int Code { get; } = code; }
 
 /// Platform credentials and presentation adapters; all service traffic goes through Core.

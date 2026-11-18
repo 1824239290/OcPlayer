@@ -86,7 +86,9 @@ internal sealed partial class IntegrationPages(PageLayout layout, Action<string>
         var account = bangumi ? Service.Bangumi : Service.MoviePilot; var name = bangumi ? "Bangumi" : "MoviePilot";
         if (account is { Enabled: true, AccessToken.Length: > 0 }) return false;
         page.Body.Children.Add(Text(account is null ? "连接 " + name : account.AccessToken.Length == 0 ? name + " 登录已失效" : name + " 已停用", 22, true));
-        page.Body.Children.Add(Button("前往设置", () => navigate("settings:" + name))); return true;
+        if (bangumi) page.Body.Children.Add(Muted("请在「设置 → Bangumi → 账号」中管理连接。"));
+        else page.Body.Children.Add(Button("前往设置", () => navigate("settings:" + name)));
+        return true;
     }
     public UIElement Route(string route)
     {

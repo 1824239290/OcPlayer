@@ -173,8 +173,8 @@ internal sealed class DemoSettings(DemoViewModel model, PageLayout pageLayout, A
         var toggle=new ToggleSwitch{IsOn=model.Preferences.TryGetValue(title,out var value)?(bool)value:initial,OnContent="",OffContent="",MinWidth=0};toggle.Toggled+=(_,_)=>{model.Preferences[title]=toggle.IsOn;changed?.Invoke(toggle.IsOn);};return SettingsLine(title,toggle);
     }
     static UIElement Note(string text){var note=Muted(text,11);note.Margin=new Thickness(12,6,12,12);note.LineHeight=17;return note;}
-    static Border Divider()=>new(){Height=1,Margin=new Thickness(24,0,0,0),Background=new SolidColorBrush(global::Windows.UI.Color.FromArgb(18,255,255,255))};
-    static UIElement SettingsLine(string title,UIElement value,Action? action=null,bool icon=false)
+    internal static Border Divider()=>new(){Height=1,Margin=new Thickness(24,0,0,0),Background=Resource("DividerStrokeColorDefaultBrush")};
+    internal static UIElement SettingsLine(string title,UIElement value,Action? action=null,bool icon=false)
     {
         var row=new Grid{MinHeight=42,ColumnSpacing=10,Padding=new Thickness(0,4,0,4)};
         row.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(1,GridUnitType.Star)});row.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
