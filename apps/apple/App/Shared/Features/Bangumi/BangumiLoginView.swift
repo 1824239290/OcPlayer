@@ -34,11 +34,24 @@ struct BangumiAccountLoginRow: View {
         bangumi.authError = nil
         do {
             let url = try await BangumiAuthService.buildOAuthURL()
-            openURL(url) { accepted in
-                if !accepted { bangumi.authError = "无法打开默认浏览器，请重试。" }
-            }
+            openURL(url, completion: Self.authorizationCompletion(for: bangumi))
         } catch {
             bangumi.authError = (error as? BangumiError)?.userMessage ?? error.localizedDescription
+        }
+    }
+
+    // macOS can invoke OpenURLAction's completion on the LaunchServices queue.
+    // A closure inheriting this View's MainActor isolation traps before its body,
+    // even when accepted is true. Keep the callback nonisolated and hop explicitly
+    // to MainActor before changing the coordinator's UI state.
+    nonisolated static func authorizationCompletion(
+        for coordinator: BangumiCoordinator
+    ) -> @Sendable (Bool) -> Void {
+        { accepted in
+            guard !accepted else { return }
+            Task { @MainActor in
+                coordinator.authError = "无法打开默认浏览器，请重试。"
+            }
         }
     }
 }
