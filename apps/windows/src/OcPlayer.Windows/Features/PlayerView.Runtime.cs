@@ -92,7 +92,7 @@ public sealed partial class PlayerView
         return false;
     }
     private void RuntimeWindowActivated(object sender, WindowActivatedEventArgs args)
-    { if (args.WindowActivationState == WindowActivationState.Deactivated) EndFastForward(); }
+    { if (args.WindowActivationState == WindowActivationState.Deactivated) EndFastForward(); UpdatePlaybackClock(); }
     private void PlayerKeyDown(object sender, KeyRoutedEventArgs args)
     {
         if (_closed || _menuOpen || FocusManager.GetFocusedElement(XamlRoot) is TextBox or PasswordBox) return;

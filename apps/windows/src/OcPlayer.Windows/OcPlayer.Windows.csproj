@@ -37,6 +37,7 @@
     <Compile Include="..\..\tests\OcPlayer.Ui\MoviePilotPageVerification.cs" Link="Preview\MoviePilotPageVerification.cs" />
     <Compile Include="..\..\tests\OcPlayer.Ui\BangumiPagesVerification.cs" Link="Preview\BangumiPagesVerification.cs" />
     <Compile Include="..\..\tests\OcPlayer.Ui\NativePlayerVerification.cs" Link="Preview\NativePlayerVerification.cs" />
+    <Compile Include="..\..\tests\OcPlayer.Ui\DanmakuCadenceVerification.cs" Link="Preview\DanmakuCadenceVerification.cs" />
   </ItemGroup>
   <ItemGroup Condition="Exists('$(OcpNativeDirectory)ocp_ffi.dll')">
     <Content Include="$(OcpNativeDirectory)ocp_ffi.dll" Link="ocp_ffi.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
