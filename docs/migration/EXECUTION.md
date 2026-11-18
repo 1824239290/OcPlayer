@@ -214,3 +214,11 @@ macOS 打包在与 `2ed4af7` 相同的打包代码上复跑成功，DMG 的 SHA2
 完整记录在 `artifacts/verification/ci-fixes-identity-cache-attempt1-results.json`、`ci-fixes-identity-cache-attempt2-results.json` 和 `ci-fixes-identity-cache-final-status.json`。分阶段日志在 `ci-fixes-apple-core-identity-cache`、`ci-fixes-identity-cache-*-passed.log`；Windows 产物与核对记录在 `ci-fixes-windows-identity-cache`、`ci-fixes-identity-cache-msi-verified.json`，两端 Apple 下载包与核对记录在 `ci-fixes-apple-package-*-identity-cache`、`ci-fixes-identity-cache-apple-packages-verified.json`。
 
 此次已满足合仓候选进入主分支切换阶段的必需 CI 门禁，但尚未切换任何远端 main、归档旧 Core/Windows 仓库、安装测试包或创建正式发行。收尾文档提交不改变已验证的代码树；平台证据始终标注实际执行的 `c4f5346`，不将文档专用的布局检查当作再次完成平台验收。
+
+## 两端本机追加验收与修复收尾（2026-11-18）
+
+完整 CI 后，macOS 本机复现并修复了弹幕 NaN 轨高崩溃和外挂字幕选择器未呈现的问题，并更新钉点内核的预读测试、补充本地 XML 弹幕 Metal 回归。[macOS 报告](MACOS-VALIDATION-2026-11-18.md) 保留首次失败、最终全量自动化、实际窗口交互、最终包及条件跳过。上述代码、回归与逐文件 Swift 审计已提交为 `da66543f8c6154d26affe0a24e9d06c0f3f3a767`，提交前当前 index 的迁移守卫再次通过。
+
+用户提供的 [Windows 报告](WINDOWS-VALIDATION-2026-11-18.md) 已按原始字节收录。报告确认 x64 本机追加测试和关闭窗口崩溃修复后的复测通过，但明确修复尚未提交或推送。Mac 接收端查不到报告指定的修复 blob；两端候选仍为 `720e4add`，源码仍包含原关闭回调。因此这些新证据尚不足以把当前远端候选直接切入 main。
+
+README 与开发文档补齐已在 Windows 实测的仓库级长路径配置。Mac 修复及接收记录在 `codex/macos-monorepo-validation` 中收尾；最终候选需要接收、核对并纳入 Windows 原始修复，再对包含两边修复的新提交完成必需 CI。[收尾记录](CONSOLIDATION-2026-11-18.md) 明确缺失文件、精确哈希与后续门禁。先前 `c4f5346` 的完整 CI 仍作为历史证据，不替代新源码验证。

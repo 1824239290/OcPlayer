@@ -17,6 +17,14 @@ cargo test --manifest-path core/Cargo.toml --workspace --locked
 
 需要 .NET 10 SDK、Visual Studio C++ x64/ARM64 工具链、Python、Rust/MSVC 与含 `libclang.dll` 的 LLVM。根 `global.json` 沿用 `10.0.100` / `latestFeature`。内核依赖构建还需要 CMake、Ninja 和准备脚本使用的原生工具；详见 [组件文档](../apps/windows/docs/core-integration.md)。
 
+Git for Windows 在深目录检出保留的历史文件时可能报 `Filename too long`。全新克隆使用 `git clone -c core.longpaths=true ...`，让配置在首次检出前生效。已有检出在仓库内运行以下命令；该配置仅作用于此仓库：
+
+```powershell
+git config core.longpaths true
+```
+
+该克隆方式已通过 Windows 中文深目录全新检出、Release 编译与集成测试，详见 [Windows 追加验收](migration/WINDOWS-VALIDATION-2026-11-18.md)。
+
 ```powershell
 .\scripts\prepare-kernel.ps1
 .\scripts\build-windows.ps1 -Configuration Release -LibClangPath 'C:\path\to\LLVM\bin'

@@ -4,6 +4,8 @@ OcPlayer 的共享 Rust Core、Windows 客户端和 macOS/iOS 客户端现在在
 
 迁移候选位于 `codex/monorepo-migration`；验收完成前不切换 `main`，也不归档旧仓库。当前结果和待验收项见 [执行记录](docs/migration/EXECUTION.md)。
 
+本机追加验收见 [macOS 报告](docs/migration/MACOS-VALIDATION-2026-11-18.md) 与 [Windows 报告](docs/migration/WINDOWS-VALIDATION-2026-11-18.md)。Windows 关闭窗口修复的原始 patch 尚待接收，最终合仓状态见 [收尾记录](docs/migration/CONSOLIDATION-2026-11-18.md)。
+
 | 组件 | 源码与工具链 | 组件文档 |
 | --- | --- | --- |
 | 共享 Core / SDK | `core/` · Rust、C ABI、Swift/C# 绑定 | [Core README](core/README.md) |
@@ -21,7 +23,7 @@ OcPlayer 的共享 Rust Core、Windows 客户端和 macOS/iOS 客户端现在在
 只需克隆一次，无需再在旁边检出 Core 或 Windows 仓库。
 
 ```powershell
-git clone --branch codex/monorepo-migration http://192.168.5.107:8418/jumusu/OcPlayer.git
+git clone -c core.longpaths=true --branch codex/monorepo-migration http://192.168.5.107:8418/jumusu/OcPlayer.git
 cd OcPlayer
 python scripts/verify-monorepo.py
 .\scripts\prepare-kernel.ps1
