@@ -55,6 +55,7 @@ public sealed partial class PlayerView : UserControl, IDisposable
         InitializeComponent();
         _window = window;
         _hudVisibility = new PlayerHudVisibilityController(Hud, UpdateWindowChrome);
+        PlayerRoot.AddHandler(UIElement.PointerExitedEvent, new PointerEventHandler(Player_PointerExited), true);
         _singleTap.Interval = TimeSpan.FromMilliseconds(new global::Windows.UI.ViewManagement.UISettings().DoubleClickTime);
         _singleTap.Tick += (_, _) =>
         {
@@ -245,6 +246,7 @@ public sealed partial class PlayerView : UserControl, IDisposable
     public void Dispose()
     {
         if (_closed) return;
+        RestoreWindowChrome();
         DisposeRuntime();
         _closed = true; _backgroundClock.Stop();
         if (_renderingSubscribed) CompositionTarget.Rendering -= OnRendering;
@@ -335,13 +337,18 @@ public sealed partial class PlayerView : UserControl, IDisposable
     internal void ToggleFullscreen()
     {
         if (_window.AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen)
+        {
             _window.AppWindow.SetPresenter(_windowedPresenter ?? OverlappedPresenter.Create());
+            ShowHud();
+        }
         else
         {
+            SetNativeCaptionButtonsVisible(true);
+            ShowHud();
             _windowedPresenter = _window.AppWindow.Presenter;
             _window.AppWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
         }
-        UpdateWindowChrome(); ShowHud();
+        UpdateWindowChrome();
     }
     private void AddShortcut(VirtualKey key, Action action)
     {
@@ -366,6 +373,13 @@ public sealed partial class PlayerView : UserControl, IDisposable
         if (_closed || PlayerRoot.XamlRoot is not { } root) return;
         var appWindow = _window.AppWindow;
         var fullscreen = appWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen;
+        if (!fullscreen && appWindow.TitleBar.Height > 0) _captionHeight = appWindow.TitleBar.Height;
+        if (!fullscreen && appWindow.TitleBar.RightInset > 0)
+        {
+            _captionLeftInset = appWindow.TitleBar.LeftInset;
+            _captionRightInset = appWindow.TitleBar.RightInset;
+        }
+        if (!fullscreen) SetNativeCaptionButtonsVisible(_hudVisibility.IsVisible);
         var scale = root.RasterizationScale;
         var narrow = PlayerRoot.ActualWidth < 560;
         BottomDock.Margin = new Thickness(narrow ? 16 : 28, 0, narrow ? 16 : 28, narrow ? 16 : 28);
@@ -376,11 +390,11 @@ public sealed partial class PlayerView : UserControl, IDisposable
         MediaTitle.FontSize = narrow ? 18 : 22;
         EpisodeTitle.FontSize = narrow ? 12 : 13;
         RefreshMoreInfo();
-        PlayerTitleBar.Height = fullscreen || appWindow.TitleBar.Height <= 0 ? 48 : appWindow.TitleBar.Height / scale;
+        PlayerTitleBar.Height = fullscreen || _captionHeight <= 0 ? 48 : _captionHeight / scale;
         ReturnButton.Height = FullscreenButton.Height = VolumeButton.Height = PlayerTitleBar.Height;
-        ReturnButton.Width = FullscreenButton.Width = VolumeButton.Width = !fullscreen && appWindow.TitleBar.RightInset > 0 ? appWindow.TitleBar.RightInset / (3 * scale) : 46;
-        TitleActions.Margin = new Thickness(fullscreen ? 0 : appWindow.TitleBar.LeftInset / scale, 0, 0, 0);
-        VolumeButton.Margin = new Thickness(0, 0, fullscreen ? 0 : appWindow.TitleBar.RightInset / scale, 0);
+        ReturnButton.Width = FullscreenButton.Width = VolumeButton.Width = !fullscreen && _captionRightInset > 0 ? _captionRightInset / (3 * scale) : 46;
+        TitleActions.Margin = new Thickness(fullscreen ? 0 : _captionLeftInset / scale, 0, 0, 0);
+        VolumeButton.Margin = new Thickness(0, 0, fullscreen ? 0 : _captionRightInset / scale, 0);
         FullscreenIcon.Symbol = fullscreen ? Symbol.BackToWindow : Symbol.FullScreen;
         var label = fullscreen ? "退出全屏" : "全屏";
         AutomationProperties.SetName(FullscreenButton, label);
@@ -468,11 +482,8 @@ public sealed partial class PlayerView : UserControl, IDisposable
     }
     private void Player_PointerExited(object sender, PointerRoutedEventArgs e)
     {
-        var point = e.GetCurrentPoint(PlayerRoot).Position;
-        // Routed exits also occur between children and when a popup opens.
-        if (point.X >= 0 && point.Y >= 0 && point.X < PlayerRoot.ActualWidth && point.Y < PlayerRoot.ActualHeight) return;
-        _pointerInside = false; _lastPointer = null; _controlsHovered = false;
-        if (!_menuOpen && !_scrubbing && !HasControlFocus() && !_screenReader && _session?.Buffering != true) _hudVisibility.Hide();
+        if (IsPointerInsideWindow()) return;
+        PointerLeftPlayer();
     }
     private void Controls_PointerEntered(object sender, PointerRoutedEventArgs e)
     {

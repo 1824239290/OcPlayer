@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Microsoft.UI.Input;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -13,9 +14,12 @@ namespace OcPlayer.Windows;
 
 public sealed partial class PlayerView
 {
+    private OverlappedPresenter? _captionPresenter;
+    private bool _captionBorder, _captionTitleBar;
+    private double _captionHeight, _captionLeftInset, _captionRightInset;
     private PlaybackSystemSession? _systemSession;
     private bool _muted, _restoringPreferences, _preparing, _fastForward, _rightDown, _pointerHidden;
-    private double _rightPressedAt, _bufferingAt = -1, _bufferShownAt, _lastSystemUpdate = -1, _stallPosition, _stallSince, _lastAccessibilityCheck;
+    private double _rightPressedAt, _bufferingAt = -1, _bufferShownAt, _lastSystemUpdate = -1, _stallPosition, _stallSince, _lastAccessibilityCheck, _lastPointerCheck;
     private bool _stallReported, _screenReader;
     private Func<bool> _readScreenReader = ReadScreenReaderState;
     private readonly DispatcherTimer _preferenceSave = new() { Interval = TimeSpan.FromMilliseconds(350) };
@@ -170,6 +174,11 @@ public sealed partial class PlayerView
     }
     private void TickRuntime(double seconds)
     {
+        if (seconds - _lastPointerCheck >= .05)
+        {
+            _lastPointerCheck = seconds;
+            if (_pointerInside && !IsPointerInsideWindow()) PointerLeftPlayer();
+        }
         if (_rightDown && !_fastForward && seconds - _rightPressedAt >= .35)
         { _fastForward = true; Run(() => _session?.SetRate(2)); _fastForwardBadge.Visibility = Visibility.Visible; }
         var buffering = _session?.Buffering == true && _session?.Playing == true;
@@ -193,6 +202,45 @@ public sealed partial class PlayerView
         var hidePointer = !_hudVisibility.IsVisible && !_menuOpen && _pointerInside;
         if (hidePointer != _pointerHidden) { ProtectedCursor = hidePointer ? null : _normalCursor; _pointerHidden = hidePointer; }
         TickSkipPrompt();
+    }
+
+    private bool IsPointerInsideWindow()
+    {
+        var window = WinRT.Interop.WindowNative.GetWindowHandle(_window);
+        if (!GetCursorPos(out var pointer) || !GetWindowRect(window, out var bounds)) return true;
+        return pointer.X >= bounds.Left && pointer.X < bounds.Right
+            && pointer.Y >= bounds.Top && pointer.Y < bounds.Bottom;
+    }
+
+    private void PointerLeftPlayer()
+    {
+        _pointerInside = false; _lastPointer = null; _controlsHovered = false;
+        if (!_menuOpen && !_scrubbing && !HasControlFocus() && !_screenReader && _session?.Buffering != true)
+            _hudVisibility.Hide();
+    }
+
+    private void SetNativeCaptionButtonsVisible(bool visible)
+    {
+        if (_window.AppWindow.Presenter is not OverlappedPresenter presenter) return;
+        if (!ReferenceEquals(_captionPresenter, presenter))
+        {
+            RestoreWindowChrome();
+            _captionPresenter = presenter;
+            _captionBorder = presenter.HasBorder;
+            _captionTitleBar = presenter.HasTitleBar;
+        }
+        // WinUI owns the extended caption buttons; HWND style flags alone do not
+        // remove their rendered surface. Let its presenter hide the title bar.
+        var showTitleBar = visible && _captionTitleBar;
+        if (presenter.HasTitleBar != showTitleBar || presenter.HasBorder != _captionBorder)
+            presenter.SetBorderAndTitleBar(_captionBorder, showTitleBar);
+    }
+
+    private void RestoreWindowChrome()
+    {
+        if (_captionPresenter is not { } presenter) return;
+        if (presenter.HasBorder != _captionBorder || presenter.HasTitleBar != _captionTitleBar)
+            presenter.SetBorderAndTitleBar(_captionBorder, _captionTitleBar);
     }
     private double StatsNumber(string key) => _session?.Stats is { ValueKind: System.Text.Json.JsonValueKind.Object } stats && stats.TryGetProperty(key, out var v) && v.TryGetDouble(out var n) ? n : 0;
     private bool HasVideoTrack() => _session?.Tracks is { ValueKind: System.Text.Json.JsonValueKind.Array } tracks
@@ -221,6 +269,16 @@ public sealed partial class PlayerView
         ProtectedCursor = _normalCursor;
         DisposeSkipPrompts();
     }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint { public int X; public int Y; }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect { public int Left; public int Top; public int Right; public int Bottom; }
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetCursorPos(out NativePoint point);
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(IntPtr window, out NativeRect rect);
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SystemParametersInfo(uint action, uint parameter, [MarshalAs(UnmanagedType.Bool)] out bool value, uint flags);
     private static bool ReadScreenReaderState() => SystemParametersInfo(0x0046, 0, out var active, 0) && active;
