@@ -18,7 +18,7 @@ struct MediaSourcesView: View {
                     ForEach(app.fileLibrary.sources) { source in
                         HStack {
                             VStack(alignment: .leading) {
-                                Label(source.displayName, systemImage: source.kind == "webdav" ? "network" : "folder")
+                                Label(source.displayName, systemImage: source.kind == "localFolder" ? "folder" : "network")
                                 Text(source.rootPath).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                                 if let message = app.fileLibrary.permissionErrors[source.sourceId] {
                                     Text(message).font(.caption).foregroundStyle(.orange)
@@ -32,7 +32,7 @@ struct MediaSourcesView: View {
                                     Task { await app.activateFileSource(source.sourceId) }
                                 }
                             }
-                            if source.kind == "webdav" {
+                            if source.kind != "localFolder" {
                                 Button("更新连接") { app.addFileLibraryDraft = FileLibraryDraft(sourceID: source.sourceId, connectionOnly: true) }
                             } else if app.fileLibrary.permissionErrors[source.sourceId] != nil {
                                 Button("授权目录") { reauthorizing = source; importing = true }

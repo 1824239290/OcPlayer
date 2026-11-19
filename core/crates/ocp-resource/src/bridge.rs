@@ -1,7 +1,7 @@
 //! One capability URL per playback lease, bound to 127.0.0.1. Streaming and
 //! backpressure keep video size independent of memory use. All upstream requests
 //! are bounded single ranges; a bridge never relays caller headers or redirects.
-use crate::{Error, Provider};
+use crate::{Error, Provider, Snapshot};
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -34,7 +34,9 @@ impl Drop for Lease {
 }
 
 impl Lease {
-    pub fn start(provider: Provider, relative: String, size: u64) -> Result<Self, Error> {
+    pub fn start(provider: Provider, relative: String, snapshot: Snapshot) -> Result<Self, Error> {
+        let size = snapshot.size();
+        let snapshot = Arc::new(snapshot);
         let listener = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
             .map_err(|_| Error::Bridge)?;
         listener.set_nonblocking(true).map_err(|_| Error::Bridge)?;
@@ -48,7 +50,7 @@ impl Lease {
             .enable_all()
             .build()
             .map_err(|_| Error::Bridge)?;
-        let handle = std::thread::Builder::new().name("ocp-dav-resource".into()).spawn(move || {
+        let handle = std::thread::Builder::new().name("ocp-file-resource".into()).spawn(move || {
             runtime.block_on(async move {
                 let Ok(listener) = TcpListener::from_std(listener) else { return; };
                 let mut tasks = JoinSet::new();
@@ -60,8 +62,8 @@ impl Lease {
                         accepted = listener.accept() => {
                             let Ok((socket, _)) = accepted else { break; };
                             if tasks.len() >= 8 { drop(socket); continue; }
-                            let (provider, relative, path) = (provider.clone(), relative.clone(), path.clone());
-                            tasks.spawn(async move { let _ = serve(socket, provider, relative, size, path, address.to_string()).await; });
+                            let (provider, relative, path, snapshot) = (provider.clone(), relative.clone(), path.clone(), snapshot.clone());
+                            tasks.spawn(async move { let _ = serve(socket, provider, relative, size, path, address.to_string(), snapshot).await; });
                         }
                     }
                 }
@@ -90,6 +92,18 @@ async fn reject(socket: &mut TcpStream, status: &str) -> Result<(), Error> {
         format!("HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").as_bytes(),
     )
     .await
+}
+async fn peer_closed(socket: &TcpStream) {
+    loop {
+        if socket.readable().await.is_err() {
+            return;
+        }
+        let mut byte = [0u8; 1];
+        match socket.try_read(&mut byte) {
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
+            _ => return, // EOF, reset, or unsupported pipelined request data.
+        }
+    }
 }
 fn interval(value: Option<&str>, size: u64) -> Result<(u64, u64), Error> {
     if size == 0 {
@@ -128,6 +142,7 @@ async fn serve(
     size: u64,
     path: String,
     host: String,
+    snapshot: Arc<Snapshot>,
 ) -> Result<(), Error> {
     let mut header = Vec::new();
     tokio::time::timeout(Duration::from_secs(10), async {
@@ -179,14 +194,27 @@ async fn serve(
         return send(&mut socket, format!("HTTP/1.1 416 Range Not Satisfiable\r\nContent-Range: bytes */{size}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").as_bytes()).await;
     };
     let head = parts[0] == "HEAD";
+    let mut reader = if head {
+        None
+    } else {
+        let result = tokio::select! {
+            result=provider.reader(&relative,&snapshot)=>result,
+            _=peer_closed(&socket)=>return Err(Error::Network),
+        };
+        match result {
+            Ok(reader) => Some(reader),
+            Err(_) => return reject(&mut socket, "502 Bad Gateway").await,
+        }
+    };
     // Validate the first upstream response before announcing success locally.
     let mut response = if head {
         None
     } else {
-        match provider
-            .range(&relative, start, end.min(start + WINDOW - 1), Some(size))
-            .await
-        {
+        let result = tokio::select! {
+            result=reader.as_mut().ok_or(Error::Range)?.range(start,end.min(start+WINDOW-1))=>result,
+            _=peer_closed(&socket)=>return Err(Error::Network),
+        };
+        match result {
             Ok(response) => Some(response),
             Err(_) => return reject(&mut socket, "502 Bad Gateway").await,
         }
@@ -211,13 +239,21 @@ async fn serve(
         let mut upstream = match response.take() {
             Some(response) => response,
             None => {
-                provider
-                    .range(&relative, cursor, window_end, Some(size))
-                    .await?
+                tokio::select! {
+                    result=reader.as_mut().ok_or(Error::Range)?.range(cursor,window_end)=>result?,
+                    _=peer_closed(&socket)=>return Err(Error::Network),
+                }
             }
         };
         let mut received = 0;
-        while let Some(chunk) = upstream.chunk().await.map_err(|_| Error::Network)? {
+        loop {
+            let chunk = tokio::select! {
+                result=upstream.chunk()=>result?,
+                _=peer_closed(&socket)=>return Err(Error::Network),
+            };
+            let Some(chunk) = chunk else {
+                break;
+            };
             received += chunk.len() as u64;
             if received > window_end - cursor + 1 {
                 return Err(Error::Range);

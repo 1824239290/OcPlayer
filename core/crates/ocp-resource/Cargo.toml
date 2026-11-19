@@ -1,0 +1,13 @@
+[package]
+name = "ocp-resource"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+[dependencies]
+ocp-webdav.workspace = true
+ocp-smb.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+tokio = { workspace = true, features = ["net", "io-util", "sync"] }

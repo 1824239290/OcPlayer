@@ -1,7 +1,5 @@
 //! Credential-scoped DAV enumeration and a bounded loopback Range resource.
 //! No credentials, signed URLs or request diagnostics are persisted here.
-pub mod bridge;
-
 use base64::Engine;
 use reqwest::{header, Client, Method, Response};
 use serde::{Deserialize, Serialize};
@@ -173,6 +171,9 @@ impl Provider {
     }
     pub fn root(&self) -> &str {
         self.root.as_str()
+    }
+    pub fn same_access(&self, other: &Self) -> bool {
+        self.root == other.root && self.authorization == other.authorization
     }
     pub fn scoped(&self, root: &str) -> Result<Self, Error> {
         if !within(self.root(), root) {

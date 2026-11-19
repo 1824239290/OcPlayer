@@ -1,6 +1,6 @@
-//! DAV scan workers share the permanent catalog and checkpoints with local scans.
+//! SMB and DAV workers share the permanent catalog and local scan checkpoints.
 use ocp_library::{parse, scan, Job, Store};
-use ocp_webdav::Provider;
+use ocp_resource::Provider;
 use std::{
     path::Path,
     sync::{
@@ -46,7 +46,7 @@ pub fn run(
                     // Keep this checkpoint unfinished. A later resume retries it;
                     // no partial network listing may prove that files disappeared.
                     store.scan_error(&job.job_id, &error.to_string())?;
-                    store.set_job_status(&job.job_id, if error == ocp_webdav::Error::Unauthorized { "waitingCredentials" } else { "waitingNetwork" })?;
+                    store.set_job_status(&job.job_id, if error.credentials() { "waitingCredentials" } else { "waitingNetwork" })?;
                     return Ok(());
                 }
             }

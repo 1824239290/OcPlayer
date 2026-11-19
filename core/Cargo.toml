@@ -6,6 +6,8 @@ members = [
     "crates/ocp-store",
     "crates/ocp-library",
     "crates/ocp-webdav",
+    "crates/ocp-smb",
+    "crates/ocp-resource",
     "crates/ocp-jellyfin",
     "crates/ocp-tmdb",
     "crates/ocp-danmaku",
@@ -29,6 +31,8 @@ ocp-http = { path = "crates/ocp-http" }
 ocp-store = { path = "crates/ocp-store" }
 ocp-library = { path = "crates/ocp-library" }
 ocp-webdav = { path = "crates/ocp-webdav" }
+ocp-smb = { path = "crates/ocp-smb" }
+ocp-resource = { path = "crates/ocp-resource" }
 ocp-jellyfin = { path = "crates/ocp-jellyfin" }
 ocp-tmdb = { path = "crates/ocp-tmdb" }
 ocp-danmaku = { path = "crates/ocp-danmaku" }

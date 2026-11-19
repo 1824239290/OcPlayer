@@ -213,7 +213,7 @@ final class FileLibraryCoordinator {
     }
 
     private func restoreAccess(for source: OcpFileLibrary.Source) {
-        if source.kind == "webdav" { return }
+        if source.kind != "localFolder" { return }
         do {
             guard let runtime else { return }
             let restored = try runtime.restore(ref: source.accessRef ?? source.sourceId)
@@ -256,6 +256,17 @@ final class FileLibraryCoordinator {
         guard let data = remoteCredentials.data(forKey: source.accessRef ?? source.sourceId) else { return nil }
         return try? JSONDecoder().decode(OcpFileLibrary.WebDAVCredential.self, from: data)
     }
+    private func saveRemoteCredential(_ data: Data, ref: String) throws {
+        remoteCredentials.setData(data, forKey: ref)
+        let freshStore = CredentialFileStore(directory: directory, fileName: "LibraryCredentials.json")
+        guard freshStore.data(forKey: ref) == data else {
+            throw OcpCoreError(message: "连接凭据未能保存，请检查媒体库存储位置后重试")
+        }
+        let attributes = try FileManager.default.attributesOfItem(atPath: freshStore.url.path)
+        guard (attributes[.posixPermissions] as? NSNumber)?.intValue == 0o600 else {
+            throw OcpCoreError(message: "连接凭据文件权限未能设置，请检查存储位置后重试")
+        }
+    }
 
     func prepareWebDAV(rootURL: String, credential: OcpFileLibrary.WebDAVCredential, accessRef: String) async throws -> OcpFileLibrary.Access {
         try await setup()
@@ -270,7 +281,7 @@ final class FileLibraryCoordinator {
                       name: String, type: OcpFileLibrary.LibraryType) async throws -> OcpFileLibrary.Creation {
         guard lastCredentialRevision == credentialRevision else { throw OcpCoreError(message: "TMDB 配置已变更，请重新验证") }
         // A crash after catalog creation must not discard the only saved credential.
-        remoteCredentials.setData(try JSONEncoder().encode(credential), forKey: accessRef)
+        try saveRemoteCredential(JSONEncoder().encode(credential), ref: accessRef)
         let result = try await withSDK { try await $0.create(.init(
             draftId: draftID, verificationId: verificationID, credentialRevision: credentialRevision, apiBase: apiBase,
             accessId: access.accessId, kind: "webdav", sourceId: source?.sourceId, sourceName: sourceName,
@@ -289,20 +300,60 @@ final class FileLibraryCoordinator {
             permissionErrors[source.sourceId] = "WebDAV 连接未就绪：\(error.localizedDescription)"
             throw error
         }
-        remoteCredentials.setData(try JSONEncoder().encode(credential), forKey: source.accessRef ?? source.sourceId)
+        try saveRemoteCredential(JSONEncoder().encode(credential), ref: source.accessRef ?? source.sourceId)
         restoredRemoteSources.insert(source.sourceId)
         permissionErrors[source.sourceId] = nil
     }
     private func ensureRemoteAccess(_ sourceID: String) async throws {
-        guard let source = sources.first(where: { $0.sourceId == sourceID }), source.kind == "webdav",
+        guard let source = sources.first(where: { $0.sourceId == sourceID }), source.kind != "localFolder",
               !restoredRemoteSources.contains(sourceID) else { return }
         do {
-            guard let credential = storedWebDAVCredential(for: source) else { throw OcpCoreError(message: "请在媒体来源中更新 WebDAV 凭据") }
-            try await restoreWebDAV(source: source, credential: credential)
+            if source.kind == "smb" {
+                guard let credential = storedSMBCredential(for: source) else { throw OcpCoreError(message: "请在媒体来源中更新 SMB 凭据") }
+                try await restoreSMB(source: source, credential: credential)
+            } else {
+                guard let credential = storedWebDAVCredential(for: source) else { throw OcpCoreError(message: "请在媒体来源中更新 WebDAV 凭据") }
+                try await restoreWebDAV(source: source, credential: credential)
+            }
         } catch {
-            permissionErrors[sourceID] = "WebDAV 连接未就绪：\(error.localizedDescription)"
+            permissionErrors[sourceID] = "远程连接未就绪：\(error.localizedDescription)"
             throw error
         }
+    }
+    func storedSMBCredential(for source: OcpFileLibrary.Source) -> OcpFileLibrary.SMBCredential? {
+        guard let data = remoteCredentials.data(forKey: source.accessRef ?? source.sourceId) else { return nil }
+        return try? JSONDecoder().decode(OcpFileLibrary.SMBCredential.self, from: data)
+    }
+    func prepareSMB(rootURL: String, credential: OcpFileLibrary.SMBCredential, accessRef: String) async throws -> OcpFileLibrary.Access {
+        try await setup()
+        return try await withSDK { try await $0.prepareSMB(rootURL: rootURL, credential: credential, accessRef: accessRef) }
+    }
+    func browseSMB(accessID: String, relativePath: String) async throws -> OcpFileLibrary.RemoteDirectory {
+        try await withSDK { try await $0.browseSMB(accessId: accessID, relativePath: relativePath) }
+    }
+    func createSMB(draftID: String, verificationID: String, credentialRevision: String, apiBase: String,
+                   source: OcpFileLibrary.Source?, access: OcpFileLibrary.Access, category: OcpFileLibrary.RemoteDirectory,
+                   credential: OcpFileLibrary.SMBCredential, accessRef: String, sourceName: String,
+                   name: String, type: OcpFileLibrary.LibraryType) async throws -> OcpFileLibrary.Creation {
+        guard lastCredentialRevision == credentialRevision else { throw OcpCoreError(message: "TMDB 配置已变更，请重新验证") }
+        try saveRemoteCredential(JSONEncoder().encode(credential), ref: accessRef)
+        let result = try await withSDK { try await $0.create(.init(
+            draftId: draftID, verificationId: verificationID, credentialRevision: credentialRevision, apiBase: apiBase,
+            accessId: access.accessId, kind: "smb", sourceId: source?.sourceId, sourceName: sourceName,
+            rootPath: category.rootPath, name: name, type: type)) }
+        try await refreshSources()
+        restoredRemoteSources.insert(result.library.sourceId)
+        permissionErrors[result.library.sourceId] = nil
+        catalogRevision &+= 1
+        return result
+    }
+    func restoreSMB(source: OcpFileLibrary.Source, credential: OcpFileLibrary.SMBCredential) async throws {
+        restoredRemoteSources.remove(source.sourceId)
+        do { try await withSDK { try await $0.restoreSMB(sourceId: source.sourceId, rootURL: source.rootPath, credential: credential) } }
+        catch { permissionErrors[source.sourceId] = "SMB 连接未就绪：\(error.localizedDescription)"; throw error }
+        try saveRemoteCredential(JSONEncoder().encode(credential), ref: source.accessRef ?? source.sourceId)
+        restoredRemoteSources.insert(source.sourceId)
+        permissionErrors[source.sourceId] = nil
     }
     func retainPlayback(_ playback: OcpFileLibrary.Playback) -> PlaybackResourceLifetime? {
         guard let id = playback.leaseId, let runtime else { return nil }

@@ -22,11 +22,15 @@ struct AddFileLibraryView: View {
     @Environment(\.dismiss) private var dismiss
     let draft: FileLibraryDraft
     @State private var kind = "localFolder"
-    @State private var webDAVURL = ""
+    @State private var remoteURL = ""
     @State private var authType = "basic"
     @State private var username = ""
     @State private var password = ""
     @State private var token = ""
+    @State private var domain = ""
+    @State private var smbGuest = false
+    @State private var requireSigning = true
+    @State private var requireEncryption = false
     @State private var remoteAccess: OcpFileLibrary.Access?
     @State private var remoteDirectory: OcpFileLibrary.RemoteDirectory?
     @State private var accessRef = UUID().uuidString
@@ -55,6 +59,7 @@ struct AddFileLibraryView: View {
                         Picker("类型", selection: $kind) {
                             Text("本地文件夹").tag("localFolder")
                             if app.fileLibrary.capabilities?.sourceKinds.contains("webdav") == true { Text("WebDAV").tag("webdav") }
+                            if app.fileLibrary.capabilities?.sourceKinds.contains("smb") == true { Text("SMB").tag("smb") }
                         }
                     }
                 }
@@ -76,13 +81,14 @@ struct AddFileLibraryView: View {
                     Link("申请 TMDB API Key", destination: URL(string: "https://www.themoviedb.org/settings/api")!)
                 }
                 }
-                Section(draft.connectionOnly ? "WebDAV 连接" : "2. 来源目录") {
+                Section(draft.connectionOnly ? "远程连接" : "2. 来源目录") {
                     if let source {
                         LabeledContent("来源", value: source.displayName)
                     } else {
                         TextField("来源名称", text: $sourceName)
                     }
                     if kind == "webdav" { webDAVConnection }
+                    else if kind == "smb" { smbConnection }
                     else {
                     Button(root == nil ? "选择文件夹…" : "重新选择文件夹…") { selectingFolder = true }
                         .disabled(isWorking || verification == nil)
@@ -91,7 +97,7 @@ struct AddFileLibraryView: View {
                         .font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                if kind == "webdav", !draft.connectionOnly, let directory = remoteDirectory {
+                if kind != "localFolder", !draft.connectionOnly, let directory = remoteDirectory {
                     Section("选择分类目录") { remoteFolders(directory) }
                 }
                 if !draft.connectionOnly {
@@ -117,7 +123,7 @@ struct AddFileLibraryView: View {
             }
             .formStyle(.grouped)
             .disabled(isWorking)
-            .navigationTitle(draft.connectionOnly ? "更新 WebDAV 连接" : "添加文件媒体库")
+            .navigationTitle(draft.connectionOnly ? "更新远程连接" : "添加文件媒体库")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(isWorking) }
                 ToolbarItem(placement: .confirmationAction) {
@@ -133,19 +139,26 @@ struct AddFileLibraryView: View {
                 if let source {
                     kind = source.kind; accessRef = source.accessRef ?? source.sourceId
                     if source.kind == "webdav" {
-                        webDAVURL = source.rootPath
+                        remoteURL = source.rootPath
                         if let credential = app.fileLibrary.storedWebDAVCredential(for: source) {
                             authType = credential.type; username = credential.username ?? ""; password = credential.password ?? ""; token = credential.token ?? ""
+                        }
+                    } else if source.kind == "smb" {
+                        remoteURL = source.rootPath
+                        if let credential = app.fileLibrary.storedSMBCredential(for: source) {
+                            smbGuest = credential.type == "guest"; username = credential.username ?? ""; password = credential.password ?? ""; domain = credential.domain ?? ""
+                            requireSigning = credential.requireSigning ?? true; requireEncryption = credential.requireEncryption ?? false
                         }
                     }
                 }
             }
             .onChange(of: kind) { _, new in
                 root = nil; remoteAccess = nil; remoteDirectory = nil
-                if source == nil { sourceName = new == "webdav" ? "WebDAV 媒体库" : "本地媒体库" }
+                if source == nil { sourceName = new == "webdav" ? "WebDAV 媒体库" : (new == "smb" ? "SMB 媒体库" : "本地媒体库") }
             }
-            .onChange(of: webDAVURL) { _, _ in resetRemoteAccess() }
+            .onChange(of: remoteURL) { _, _ in resetRemoteAccess() }
             .onChange(of: credential) { _, _ in resetRemoteAccess() }
+            .onChange(of: smbCredential) { _, _ in resetRemoteAccess() }
             .onChange(of: keyInput) { _, _ in verification = nil; verifiedRevision = nil }
             .onChange(of: type) { old, new in
                 if name == (old == .movies ? "电影" : "电视剧") { name = new == .movies ? "电影" : "电视剧" }
@@ -166,8 +179,36 @@ struct AddFileLibraryView: View {
         }
     }
     private func resetRemoteAccess() { remoteAccess = nil; remoteDirectory = nil }
+    private var smbCredential: OcpFileLibrary.SMBCredential {
+        smbGuest ? .guest : .password(username: username, password: password, domain: domain, requireSigning: requireSigning, requireEncryption: requireEncryption)
+    }
+    @ViewBuilder private var smbConnection: some View {
+        TextField("共享地址，例如 smb://nas.example/Media/", text: $remoteURL)
+            .autocorrectionDisabled()
+            #if os(iOS)
+            .textInputAutocapitalization(.never)
+            .keyboardType(.URL)
+            #endif
+            .disabled(source != nil)
+        Toggle("以访客身份连接", isOn: $smbGuest)
+        if !smbGuest {
+            TextField("用户名", text: $username).autocorrectionDisabled()
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                #endif
+            SecureField("密码", text: $password)
+            TextField("域（可留空）", text: $domain).autocorrectionDisabled()
+            Toggle("要求连接签名", isOn: $requireSigning)
+            Toggle("要求 SMB3 加密", isOn: $requireEncryption)
+        }
+        Button("验证连接并读取目录") { Task { await connectRemote() } }
+            .disabled(isWorking || (!draft.connectionOnly && verification == nil) || remoteURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        if remoteAccess != nil { Label("SMB 连接成功", systemImage: "checkmark.circle.fill").foregroundStyle(.green) }
+        Text("填写共享名称后逐级选择电影或电视剧目录。服务器需要支持 SMB2 或 SMB3；访客访问需服务器允许。")
+            .font(.caption).foregroundStyle(.secondary)
+    }
     @ViewBuilder private var webDAVConnection: some View {
-        TextField("目录地址，例如 https://nas.example/dav/", text: $webDAVURL)
+        TextField("目录地址，例如 https://nas.example/dav/", text: $remoteURL)
             .autocorrectionDisabled()
             #if os(iOS)
             .textInputAutocapitalization(.never)
@@ -186,8 +227,8 @@ struct AddFileLibraryView: View {
                 #endif
             SecureField("密码", text: $password)
         } else if authType == "bearer" { SecureField("Access Token", text: $token) }
-        Button("验证连接并读取目录") { Task { await connectWebDAV() } }
-            .disabled(isWorking || (!draft.connectionOnly && verification == nil) || webDAVURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        Button("验证连接并读取目录") { Task { await connectRemote() } }
+            .disabled(isWorking || (!draft.connectionOnly && verification == nil) || remoteURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         if remoteAccess != nil { Label("WebDAV 连接成功", systemImage: "checkmark.circle.fill").foregroundStyle(.green) }
         Text("填写 WebDAV 最终目录地址。更新已有来源时保留原地址，目录和观看进度仍属于原来源。")
             .font(.caption).foregroundStyle(.secondary)
@@ -198,31 +239,40 @@ struct AddFileLibraryView: View {
         if !directory.relativePath.isEmpty {
             Button("上一级") {
                 let parent = directory.relativePath.split(separator: "/").dropLast().joined(separator: "/")
-                Task { await browseWebDAV(parent) }
+                Task { await browseRemote(parent) }
             }
         }
         ForEach(directory.entries.filter(\.isDirectory)) { entry in
-            Button { Task { await browseWebDAV(entry.relativePath) } } label: {
+            Button { Task { await browseRemote(entry.relativePath) } } label: {
                 Label(entry.relativePath.split(separator: "/").last.map(String.init) ?? entry.relativePath, systemImage: "folder")
             }
         }
         Text("此目录下显示 \(directory.entries.filter { !$0.isDirectory }.count) 个文件。点击文件夹进入，添加时扫描当前目录及其子目录。")
             .font(.caption).foregroundStyle(.secondary)
     }
-    private func connectWebDAV() async {
+    private func connectRemote() async {
         isWorking = true; error = nil; resetRemoteAccess()
         defer { isWorking = false }
         do {
-            let access = try await app.fileLibrary.prepareWebDAV(rootURL: webDAVURL.trimmingCharacters(in: .whitespacesAndNewlines), credential: credential, accessRef: accessRef)
-            let directory = try await app.fileLibrary.browseWebDAV(accessID: access.accessId, relativePath: "")
+            let address = remoteURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            let access = kind == "smb"
+                ? try await app.fileLibrary.prepareSMB(rootURL: address, credential: smbCredential, accessRef: accessRef)
+                : try await app.fileLibrary.prepareWebDAV(rootURL: address, credential: credential, accessRef: accessRef)
+            let directory = kind == "smb"
+                ? try await app.fileLibrary.browseSMB(accessID: access.accessId, relativePath: "")
+                : try await app.fileLibrary.browseWebDAV(accessID: access.accessId, relativePath: "")
             remoteAccess = access; remoteDirectory = directory
         } catch { self.error = error.localizedDescription }
     }
-    private func browseWebDAV(_ relativePath: String) async {
+    private func browseRemote(_ relativePath: String) async {
         guard let access = remoteAccess else { return }
         isWorking = true; error = nil
         defer { isWorking = false }
-        do { remoteDirectory = try await app.fileLibrary.browseWebDAV(accessID: access.accessId, relativePath: relativePath) }
+        do {
+            remoteDirectory = kind == "smb"
+                ? try await app.fileLibrary.browseSMB(accessID: access.accessId, relativePath: relativePath)
+                : try await app.fileLibrary.browseWebDAV(accessID: access.accessId, relativePath: relativePath)
+        }
         catch { self.error = error.localizedDescription }
     }
 
@@ -249,7 +299,11 @@ struct AddFileLibraryView: View {
             guard let source, remoteAccess != nil else { return }
             isWorking = true; error = nil
             defer { isWorking = false }
-            do { try await app.fileLibrary.restoreWebDAV(source: source, credential: credential); dismiss() }
+            do {
+                if kind == "smb" { try await app.fileLibrary.restoreSMB(source: source, credential: smbCredential) }
+                else { try await app.fileLibrary.restoreWebDAV(source: source, credential: credential) }
+                dismiss()
+            }
             catch { self.error = error.localizedDescription }
             return
         }
@@ -261,7 +315,14 @@ struct AddFileLibraryView: View {
         defer { isWorking = false }
         do {
             let result: OcpFileLibrary.Creation
-            if kind == "webdav" {
+            if kind == "smb" {
+                guard let access = remoteAccess, let category = remoteDirectory else { return }
+                result = try await app.fileLibrary.createSMB(
+                    draftID: draft.id, verificationID: verification.verificationId, credentialRevision: revision,
+                    apiBase: app.fileLibraryAPIBase, source: source, access: access, category: category,
+                    credential: smbCredential, accessRef: accessRef, sourceName: source?.displayName ?? sourceName,
+                    name: name, type: type)
+            } else if kind == "webdav" {
                 guard let access = remoteAccess, let category = remoteDirectory else { return }
                 result = try await app.fileLibrary.createWebDAV(
                     draftID: draft.id, verificationID: verification.verificationId, credentialRevision: revision,

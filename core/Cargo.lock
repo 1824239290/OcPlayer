@@ -861,7 +861,9 @@ dependencies = [
  "ocp-library",
  "ocp-model",
  "ocp-moviepilot",
+ "ocp-resource",
  "ocp-session",
+ "ocp-smb",
  "ocp-store",
  "ocp-tmdb",
  "ocp-webdav",
@@ -940,6 +942,7 @@ dependencies = [
 name = "ocp-library"
 version = "0.1.0"
 dependencies = [
+ "ocp-smb",
  "ocp-webdav",
  "regex",
  "rusqlite",
@@ -972,6 +975,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ocp-resource"
+version = "0.1.0"
+dependencies = [
+ "ocp-smb",
+ "ocp-webdav",
+ "reqwest",
+ "serde",
+ "thiserror",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "ocp-session"
 version = "0.1.0"
 dependencies = [
@@ -981,6 +997,19 @@ dependencies = [
  "thiserror",
  "unicode-normalization",
  "unicode-segmentation",
+]
+
+[[package]]
+name = "ocp-smb"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "percent-encoding",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "url",
 ]
 
 [[package]]

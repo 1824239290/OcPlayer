@@ -1,0 +1,19 @@
+[package]
+name = "ocp-smb"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+url.workspace = true
+tokio = { workspace = true, features = ["net"] }
+percent-encoding = "2"
+
+[build-dependencies]
+cc = "1"
+
+[dev-dependencies]
+serde_json.workspace = true
+tokio = { workspace = true, features = ["io-util"] }

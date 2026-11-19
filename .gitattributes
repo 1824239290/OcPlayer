@@ -1,1 +1,3 @@
 *.sh text eol=lf
+# Retain the complete upstream source and its existing whitespace verbatim.
+core/crates/ocp-smb/vendor/libsmb2/** -text whitespace=-trailing-space,-space-before-tab

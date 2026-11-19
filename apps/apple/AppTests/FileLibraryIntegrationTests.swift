@@ -23,7 +23,7 @@ final class FileLibraryIntegrationTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         XCTAssertFalse(OcpCoreFeature.isEnabled)
         try await library.setup()
-        XCTAssertEqual(library.capabilities?.sourceKinds, ["localFolder", "webdav"])
+        XCTAssertEqual(library.capabilities?.sourceKinds, ["localFolder", "webdav", "smb"])
         XCTAssertFalse(try XCTUnwrap(library.capabilities).aggregation)
         XCTAssertNil(app.server)
         XCTAssertTrue(library.sources.isEmpty)
@@ -357,6 +357,91 @@ final class FileLibraryIntegrationTests: XCTestCase {
         app.dismissPlayer()
     }
 
+    func testSMBCreationCredentialRecoveryAndErikaRangePlayback() async throws {
+        let began = Date()
+        func stage(_ label: String) { XCTContext.runActivity(named: "SMB \(label): \(Date().timeIntervalSince(began))s") { _ in } }
+        let (directory, _, library, app) = try fixture()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let media = directory.appendingPathComponent("fixture.mkv")
+        guard FileManager.default.isExecutableFile(atPath: "/opt/homebrew/bin/ffmpeg") else { throw XCTSkip("ffmpeg fixture generator unavailable") }
+        let generator = Process()
+        generator.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg")
+        generator.arguments = ["-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=128x72:rate=10", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "3", "-c:v", "mpeg4", "-c:a", "aac", media.path]
+        generator.standardOutput = FileHandle.nullDevice; generator.standardError = FileHandle.nullDevice
+        try generator.run()
+        while generator.isRunning { try await Task.sleep(for: .milliseconds(20)) }
+        XCTAssertEqual(generator.terminationStatus, 0)
+        stage("generated")
+        let server = try await Task.detached { try LibrarySMBFixture(media: media) }.value
+        defer { server.stop() }
+        stage("serverStarted")
+        try await library.setup()
+        stage("coreOpened")
+        let revision = FileLibraryCoordinator.credentialRevision(key: "fixture-tmdb", apiBase: server.base + "/3")
+        let verification = try await library.validate(key: "fixture-tmdb", apiBase: server.base + "/3", draftID: "smb")
+        let credential = OcpFileLibrary.SMBCredential.password(username: "user", password: "fixture-password")
+        stage("tmdb")
+        let access = try await library.prepareSMB(rootURL: server.root, credential: credential, accessRef: "smb-ref")
+        stage("connected")
+        let category = try await library.browseSMB(accessID: access.accessId, relativePath: "Movies")
+        stage("browsed")
+        let created = try await library.createSMB(draftID: "smb", verificationID: verification.verificationId,
+            credentialRevision: revision, apiBase: server.base + "/3", source: nil, access: access, category: category,
+            credential: credential, accessRef: "smb-ref", sourceName: "SMB", name: "电影", type: .movies)
+        try await waitForScan(library, sourceID: created.library.sourceId)
+        stage("scanned")
+        let source = try XCTUnwrap(library.sources.first)
+        XCTAssertEqual(source.kind, "smb")
+        XCTAssertEqual(library.storedSMBCredential(for: source), credential)
+        let credentialFile = directory.appendingPathComponent("catalog/LibraryCredentials.json")
+        let attributes = try FileManager.default.attributesOfItem(atPath: credentialFile.path)
+        XCTAssertEqual((attributes[.posixPermissions] as? NSNumber)?.intValue, 0o600)
+        library.credentialsChanged()
+        let reopened = FileLibraryCoordinator(directory: directory.appendingPathComponent("catalog"))
+        try await reopened.setup()
+        XCTAssertEqual(reopened.storedSMBCredential(for: source), credential)
+        let page = try await reopened.page(.init(sourceId: source.sourceId))
+        let item = try XCTUnwrap(page.items.first)
+        let detail = try await reopened.detail(sourceID: source.sourceId, itemID: item.itemId)
+        let asset = try XCTUnwrap(detail.assets.first)
+        stage("reopened")
+        let prepared = try await reopened.preparePlayback(item: item, asset: asset)
+        XCTAssertNotNil(prepared.leaseId)
+        XCTAssertTrue(prepared.headers.isEmpty)
+        stage("prepared")
+        let lifetime = try XCTUnwrap(reopened.retainPlayback(prepared))
+        let playbackSource = PlaybackSource(uri: prepared.uri, resourceLifetime: lifetime)
+        // Actual liberika open and seek against Core's loopback Range bridge.
+        let duration = try await Task.detached {
+            let presenter = try ErikaPresenter()
+            try presenter.open(playbackSource)
+            var duration: Double?
+            for _ in 0..<100 {
+                _ = try? presenter.audioOnlyTick()
+                while let event = try presenter.pollEvent() {
+                    if case let .durationChanged(value) = event { duration = Double(value.microseconds) / 1_000_000 }
+                }
+                if duration != nil { break }
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            try presenter.seek(to: .seconds(1))
+            try presenter.close()
+            return duration
+        }.value
+        stage("decoded")
+        XCTAssertEqual(try XCTUnwrap(duration), 3, accuracy: 0.15)
+        await app.activateFileSource(source.sourceId)
+        stage("activated")
+        try await app.playFileLibraryItem(item, asset: asset, fromStart: true)
+        stage("requested")
+        let request = try XCTUnwrap(app.presentedPlayer)
+        XCTAssertTrue(request.uri.hasPrefix("http://127.0.0.1:"))
+        XCTAssertNotNil(request.resourceLifetime)
+        XCTAssertNil(request.sessionContext)
+        stage("end")
+        app.dismissPlayer()
+    }
+
     private func waitForScan(_ library: FileLibraryCoordinator, sourceID: String) async throws {
         for _ in 0..<100 {
             let jobs = try await library.jobs(sourceID: sourceID)
@@ -404,6 +489,115 @@ private final class FileLibraryTestEngine: PlaybackEngine, @unchecked Sendable {
     func addExternalSubtitle(_ uri: String) throws -> Int64 { 0 }
     func setSubtitleScale(_ scale: Double) throws {}
     func captureFrameRGBA(width: Int, height: Int) throws -> [UInt8] { [] }
+}
+
+private final class LibrarySMBFixture: @unchecked Sendable {
+    private let process = Process()
+    let base: String
+    let root: String
+    let directory: String
+    init(media: URL) throws {
+        let python = ProcessInfo.processInfo.environment["OCP_SMB_TEST_PYTHON"] ?? "/tmp/ocp-smb-test-venv/bin/python"
+        guard FileManager.default.isExecutableFile(atPath: python) else { throw XCTSkip("Set OCP_SMB_TEST_PYTHON to Python with impacket==0.13.0") }
+        process.executableURL = URL(fileURLWithPath: python)
+        process.arguments = ["-u", "-c", Self.script, media.path]
+        let output = Pipe(); process.standardOutput = output; process.standardError = FileHandle.nullDevice
+        try process.run()
+        var data = Data()
+        while let byte = try output.fileHandleForReading.read(upToCount: 1), !byte.isEmpty {
+            if byte == Data([10]) { break }; data.append(byte)
+        }
+        struct Configuration: Decodable { let base: String; let root: String; let directory: String }
+        let config = try JSONDecoder().decode(Configuration.self, from: data)
+        base = config.base; root = config.root; directory = config.directory
+    }
+    // BEGIN GENERATED SMB FIXTURE
+    // Generated from core/tests/fixtures/file_library_smb.py.
+    // Run core/Scripts/sync-smb-test-fixture.py after editing the shared fixture.
+    private static let script = #"""
+    #!/usr/bin/env python3
+    """Loopback SMB2 protocol fixture. Requires impacket==0.13.0, not a real NAS.
+
+    Optional first argument is playable media. Sparse file content above 4 GiB is
+    used to verify 64-bit readAt without allocating a giant fixture.
+    """
+    import json
+    import logging
+    import os
+    import shutil
+    import tempfile
+    import threading
+    import sys
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from impacket import smbserver
+    from impacket.ntlm import compute_lmhash, compute_nthash
+    from impacket import smb3structs as smb2
+    from impacket.nt_errors import STATUS_ACCESS_DENIED
+
+    logging.disable(logging.CRITICAL)
+    directory = tempfile.mkdtemp(prefix='ocp-smb-fixture-')
+    os.makedirs(os.path.join(directory, 'Movies'))
+    os.makedirs(os.path.join(directory, 'Denied'))
+    os.makedirs(os.path.join(directory, 'Shows', 'Show', 'Season 0'))
+    os.makedirs(os.path.join(directory, 'Shows', 'Show', 'Season 1'))
+    movie = os.path.join(directory, 'Movies', '中文 100% # & (2020).mkv')
+    size = 5 * 1024**3 + 1025
+    if len(sys.argv) > 1:
+        shutil.copyfile(sys.argv[1], movie)
+        size = os.path.getsize(movie)
+    else:
+        with open(movie, 'wb') as f:
+            f.truncate(size)
+            for position in (0, 4 * 1024**3 - 16, size - 32):
+                f.seek(position)
+                f.write(bytes(i % 251 for i in range(position, position + 32)))
+    for season in (0, 1):
+        with open(os.path.join(directory, 'Shows', 'Show', f'Season {season}', f'Show S0{season}E01.mkv'), 'wb') as f:
+            f.write(bytes(range(100)))
+    # A reparse-point-like symlink must never escape a scan root (the fixture does
+    # not expose Windows reparse metadata; provider path checks are tested separately).
+    server = smbserver.SimpleSMBServer(listenAddress='127.0.0.1', listenPort=0)
+    server.setSMB2Support(True)
+    server.addShare('Media', directory, readOnly='yes')
+    server.addCredential('user', 0, compute_lmhash('fixture-password'), compute_nthash('fixture-password'))
+    def guarded_create(conn_id, smb_server, packet):
+        request = smb2.SMB2Create(packet['Data'])
+        if request['Buffer'].decode('utf-16le').replace('\\', '/').strip('/') == 'Denied':
+            return [smb2.SMB2Error()], None, STATUS_ACCESS_DENIED
+        return original_create(conn_id, smb_server, packet)
+    original_create = server.getServer().hookSmb2Command(smb2.SMB2_CREATE, guarded_create)
+    threading.Thread(target=server.start, daemon=True).start()
+    guest = smbserver.SimpleSMBServer(listenAddress='127.0.0.1', listenPort=0)
+    guest.setSMB2Support(True)
+    guest.addShare('Media', directory, readOnly='yes')
+    threading.Thread(target=guest.start, daemon=True).start()
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_): pass
+        def do_GET(self):
+            if self.path.startswith('/3/configuration'):
+                data = {'images': {'secure_base_url': 'https://image.tmdb.org/t/p/', 'poster_sizes': ['w500']}, 'change_keys': ['title']}
+            elif self.path.startswith('/3/search/movie'):
+                data = {'results': [{'id': 11, 'title': '中文 100% # &', 'release_date': '2020-01-01'}]}
+            elif self.path.startswith('/3/movie/11'):
+                data = {'id': 11, 'title': 'SMB 刮削电影', 'release_date': '2020-01-01', 'overview': '永久 SMB 元数据'}
+            else: data = {'results': []}
+            body = json.dumps(data).encode()
+            self.send_response(200); self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body)
+
+    http = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    http.daemon_threads = True
+    print(json.dumps({'root': f'smb://127.0.0.1:{server.getServer().server_address[1]}/Media/',
+                      'guestRoot': f'smb://127.0.0.1:{guest.getServer().server_address[1]}/Media/',
+                      'base': f'http://127.0.0.1:{http.server_port}', 'directory': directory, 'size': size}), flush=True)
+    http.serve_forever()
+    """#
+    // END GENERATED SMB FIXTURE
+    func stop() {
+        if process.isRunning { process.terminate(); process.waitUntilExit() }
+        try? FileManager.default.removeItem(atPath: directory)
+    }
+    deinit { stop() }
 }
 
 private final class LibraryWebDAVFixture: @unchecked Sendable {

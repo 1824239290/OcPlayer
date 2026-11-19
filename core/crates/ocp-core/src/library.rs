@@ -59,7 +59,7 @@ struct Access {
     root: PathBuf,
     access_ref: Option<String>,
     expires: Instant,
-    webdav: Option<ocp_webdav::Provider>,
+    remote: Option<ocp_resource::Provider>,
     verified_directories: HashSet<String>,
 }
 
@@ -82,9 +82,9 @@ pub(crate) struct Runtime {
     credential_digest: Option<Vec<u8>>,
     credential_api_base: Option<String>,
     access_generation: u64,
-    webdav: HashMap<String, ocp_webdav::Provider>,
+    remote: HashMap<String, ocp_resource::Provider>,
     remote_epochs: HashMap<String, u64>,
-    resources: HashMap<String, ocp_webdav::bridge::Lease>,
+    resources: HashMap<String, ocp_resource::bridge::Lease>,
 }
 
 impl Drop for Runtime {
@@ -180,7 +180,7 @@ impl Runtime {
         match method {
             "library.capabilities" => {
                 return Ok(
-                    json!({"schemaVersion":3,"sourceKinds":["localFolder","webdav"],"libraryTypes":["movies","tvshows"],"aggregation":false,"backgroundScan":true,"tmdbAccessValidation":true,"tmdbScraping":true,"remoteProviders":true}),
+                    json!({"schemaVersion":4,"sourceKinds":["localFolder","webdav","smb"],"libraryTypes":["movies","tvshows"],"aggregation":false,"backgroundScan":true,"tmdbAccessValidation":true,"tmdbScraping":true,"remoteProviders":true}),
                 )
             }
             "tmdb.access.invalidate" => {
@@ -215,7 +215,7 @@ impl Runtime {
                         root: root.clone(),
                         access_ref: input.access_ref,
                         expires: Instant::now() + RECEIPT_TTL,
-                        webdav: None,
+                        remote: None,
                         verified_directories: HashSet::new(),
                     },
                 );
@@ -239,7 +239,7 @@ impl Runtime {
                 store.recover_jobs()?;
                 store.recover_scrapes()?;
                 self.store = Some(store);
-                self.webdav.clear();
+                self.remote.clear();
                 self.remote_epochs.clear();
                 self.accesses.clear();
                 return Ok(json!({"path":path.to_string_lossy()}));
@@ -477,11 +477,6 @@ impl Runtime {
             typ: LibraryType,
         }
         let input: Input = serde_json::from_value(args)?;
-        if input.kind == SourceKind::Smb {
-            return Err(Error::Invalid(
-                "SMB provider is not available in this build".into(),
-            ));
-        }
         if self.workers.len() >= 2 && self.db()?.created_draft(&input.draft_id)?.is_none() {
             return Err(Error::Invalid(
                 "pause another scan before creating another library".into(),
@@ -509,30 +504,39 @@ impl Runtime {
             .filter(|a| a.expires > Instant::now())
             .ok_or_else(|| Error::Invalid("directory access lease has expired".into()))?;
         let previous = self.db()?.created_draft(&input.draft_id)?.is_some();
-        let provider = access.webdav.clone();
-        let library = if input.kind == SourceKind::Webdav {
+        let provider = access.remote.clone();
+        let library = if input.kind != SourceKind::LocalFolder {
             let provider = provider
                 .as_ref()
-                .ok_or_else(|| Error::Invalid("validate WebDAV access first".into()))?;
-            let root = ocp_webdav::root_url(&input.root_path).map_err(remote_error)?;
-            if !access.verified_directories.contains(root.as_str()) {
+                .filter(|p| p.kind() == input.kind.as_str())
+                .ok_or_else(|| {
+                    Error::Invalid("validate access for this source kind first".into())
+                })?;
+            let root = provider.scoped(&input.root_path).map_err(remote_error)?;
+            if !access.verified_directories.contains(root.root()) {
                 return Err(Error::Invalid(
-                    "open the selected WebDAV directory before adding it".into(),
+                    "open the selected remote directory before adding it".into(),
                 ));
             }
-            self.db()?.create_webdav(
+            let create = if input.kind == SourceKind::Smb {
+                Store::create_smb
+            } else {
+                Store::create_webdav
+            };
+            create(
+                self.db()?,
                 &input.draft_id,
                 input.source_id.as_deref(),
                 &input.source_name,
                 provider.root(),
                 access.access_ref.as_deref(),
                 &input.name,
-                root.as_str(),
+                root.root(),
                 input.typ,
             )?
         } else {
             if provider.is_some() {
-                return Err(Error::Invalid("access belongs to a WebDAV source".into()));
+                return Err(Error::Invalid("access belongs to a remote source".into()));
             }
             let root = std::fs::canonicalize(&input.root_path)?;
             if !root.is_dir() || !root.starts_with(&access.root) {
@@ -552,7 +556,24 @@ impl Runtime {
             )?
         };
         if let Some(provider) = provider {
-            self.webdav.insert(library.source_id.clone(), provider);
+            if (!previous || !self.remote.contains_key(&library.source_id))
+                && !self
+                    .remote
+                    .get(&library.source_id)
+                    .is_some_and(|old| old.same_access(&provider))
+            {
+                let epoch = self
+                    .remote_epochs
+                    .entry(library.source_id.clone())
+                    .or_default();
+                *epoch = epoch.wrapping_add(1);
+                for job in self.db()?.jobs(&library.source_id)? {
+                    if let Some(worker) = self.workers.get(&job.job_id) {
+                        worker.control.store(scan::PAUSE, Ordering::Release);
+                    }
+                }
+                self.remote.insert(library.source_id.clone(), provider);
+            }
         }
         if previous {
             if let Some(job) = self
@@ -585,8 +606,8 @@ impl Runtime {
         // Opening before spawn reports corruption/IO immediately instead of leaving a queued ghost job.
         let store = Store::open_path(&path)?;
         let source = store.source(&job.source_id)?;
-        let provider = if source.kind == SourceKind::Webdav {
-            let Some(provider) = self.webdav.get(&job.source_id) else {
+        let provider = if source.kind != SourceKind::LocalFolder {
+            let Some(provider) = self.remote.get(&job.source_id) else {
                 self.db()?
                     .set_job_status(&job.job_id, "waitingCredentials")?;
                 return Ok(());
@@ -608,7 +629,7 @@ impl Runtime {
             .spawn(move || {
                 let fallback = Store::open_path(store.path());
                 let result = if let Some(provider) = provider {
-                    crate::library_webdav::run(store, job.clone(), provider, worker_control)
+                    crate::library_remote::run(store, job.clone(), provider, worker_control)
                 } else {
                     scan::run(&store, &job, &worker_control)
                 };
@@ -883,11 +904,11 @@ fn string<'a>(args: &'a Value, key: &str) -> Result<&'a str, Error> {
     Ok(value)
 }
 
-fn remote_error(error: ocp_webdav::Error) -> Error {
+fn remote_error(error: ocp_resource::Error) -> Error {
     Error::Invalid(error.to_string())
 }
 pub(crate) struct RemoteRequest {
-    provider: Option<ocp_webdav::Provider>,
+    provider: Option<ocp_resource::Provider>,
     relative: String,
     purpose: RemotePurpose,
 }
@@ -911,8 +932,8 @@ enum RemotePurpose {
     LocalPlayback(Value),
 }
 pub(crate) enum RemoteReply {
-    Entries(Vec<ocp_webdav::Entry>),
-    Size(u64),
+    Entries(Vec<ocp_resource::Entry>),
+    Snapshot(ocp_resource::Snapshot),
     Local,
 }
 impl RemoteRequest {
@@ -925,7 +946,7 @@ impl RemoteRequest {
             return Ok(RemoteReply::Local);
         };
         if matches!(self.purpose, RemotePurpose::Playback { .. }) {
-            Ok(RemoteReply::Size(
+            Ok(RemoteReply::Snapshot(
                 provider.probe(&self.relative).await.map_err(remote_error)?,
             ))
         } else {
@@ -946,29 +967,49 @@ impl Runtime {
         #[serde(rename_all = "camelCase", deny_unknown_fields)]
         struct Connection {
             root_url: String,
-            credential: ocp_webdav::Credential,
+            credential: Value,
             access_ref: Option<String>,
             source_id: Option<String>,
         }
         match method {
-            "library.webdav.access.prepare" | "library.webdav.credentials.restore" => {
+            "library.webdav.access.prepare"
+            | "library.webdav.credentials.restore"
+            | "library.smb.access.prepare"
+            | "library.smb.credentials.restore" => {
                 let input: Connection = serde_json::from_value(args)?;
-                let provider = ocp_webdav::Provider::new(&input.root_url, input.credential)
-                    .map_err(remote_error)?;
+                let provider = if method.starts_with("library.smb.") {
+                    ocp_resource::Provider::Smb(
+                        ocp_smb::Provider::new(
+                            &input.root_url,
+                            serde_json::from_value(input.credential)?,
+                        )
+                        .map_err(|e| remote_error(e.into()))?,
+                    )
+                } else {
+                    ocp_resource::Provider::Webdav(
+                        ocp_webdav::Provider::new(
+                            &input.root_url,
+                            serde_json::from_value(input.credential)?,
+                        )
+                        .map_err(|e| remote_error(e.into()))?,
+                    )
+                };
                 let purpose = if method.ends_with("restore") {
                     let source_id = input
                         .source_id
                         .ok_or_else(|| Error::Invalid("sourceId is required".into()))?;
                     let source = self.db()?.source(&source_id)?;
-                    if source.kind != SourceKind::Webdav || source.root_path != provider.root() {
+                    if source.kind.as_str() != provider.kind()
+                        || source.root_path != provider.root()
+                    {
                         return Err(Error::Invalid(
-                            "WebDAV credentials belong to a different source root".into(),
+                            "remote credentials belong to a different source root".into(),
                         ));
                     }
                     let epoch = self.remote_epochs.entry(source_id.clone()).or_default();
                     *epoch = epoch.wrapping_add(1);
                     let epoch = *epoch;
-                    self.webdav.remove(&source_id);
+                    self.remote.remove(&source_id);
                     for job in self.db()?.jobs(&source_id)? {
                         if let Some(worker) = self.workers.get(&job.job_id) {
                             worker.control.store(scan::PAUSE, Ordering::Release);
@@ -994,23 +1035,26 @@ impl Runtime {
                     purpose,
                 })
             }
-            "library.webdav.browse" => {
+            "library.webdav.browse" | "library.smb.browse" => {
                 let access_id = string(&args, "accessId")?.to_owned();
                 let access = self
                     .accesses
                     .get(&access_id)
                     .filter(|a| a.expires > Instant::now())
-                    .ok_or_else(|| Error::Invalid("WebDAV access has expired; reconnect".into()))?;
+                    .ok_or_else(|| Error::Invalid("remote access has expired; reconnect".into()))?;
                 let provider = access
-                    .webdav
+                    .remote
                     .clone()
-                    .ok_or_else(|| Error::Invalid("access is not WebDAV".into()))?;
+                    .filter(|p| method == format!("library.{}.browse", p.kind()))
+                    .ok_or_else(|| {
+                        Error::Invalid("access belongs to a different source kind".into())
+                    })?;
                 let relative = args
                     .get("relativePath")
                     .and_then(Value::as_str)
                     .unwrap_or("")
                     .to_owned();
-                provider.url(&relative, true).map_err(remote_error)?;
+                provider.directory_url(&relative).map_err(remote_error)?;
                 Ok(RemoteRequest {
                     provider: Some(provider),
                     relative,
@@ -1043,10 +1087,10 @@ impl Runtime {
                     .ok_or(Error::NotFound)?
                     .relative_path;
                 let provider = self
-                    .webdav
+                    .remote
                     .get(&source)
                     .ok_or_else(|| {
-                        Error::Invalid("restore WebDAV credentials before playback".into())
+                        Error::Invalid("restore remote credentials before playback".into())
                     })?
                     .scoped(&library.root_path)
                     .map_err(remote_error)?;
@@ -1088,7 +1132,7 @@ impl Runtime {
                         root: PathBuf::new(),
                         access_ref,
                         expires: Instant::now() + RECEIPT_TTL,
-                        webdav: Some(provider),
+                        remote: Some(provider),
                         verified_directories: HashSet::from([root.clone()]),
                     },
                 );
@@ -1104,7 +1148,7 @@ impl Runtime {
                     .provider
                     .ok_or_else(|| Error::Invalid("missing provider".into()))?;
                 let root = provider
-                    .url(&request.relative, true)
+                    .directory_url(&request.relative)
                     .map_err(remote_error)?
                     .to_string();
                 if access.verified_directories.len() >= 256 {
@@ -1121,10 +1165,10 @@ impl Runtime {
             RemotePurpose::Restore { source, epoch } => {
                 if self.remote_epochs.get(&source) != Some(&epoch) {
                     return Err(Error::Invalid(
-                        "WebDAV credentials changed during validation".into(),
+                        "remote credentials changed during validation".into(),
                     ));
                 }
-                self.webdav.insert(
+                self.remote.insert(
                     source,
                     request
                         .provider
@@ -1139,10 +1183,10 @@ impl Runtime {
                 epoch,
             } => {
                 if *self.remote_epochs.get(&source).unwrap_or(&0) != epoch
-                    || !self.webdav.contains_key(&source)
+                    || !self.remote.contains_key(&source)
                 {
                     return Err(Error::Invalid(
-                        "WebDAV credentials changed during playback preparation".into(),
+                        "remote credentials changed during playback preparation".into(),
                     ));
                 }
                 if !self.db()?.assets(&source, &item)?.iter().any(|a| {
@@ -1150,18 +1194,18 @@ impl Runtime {
                 }) {
                     return Err(Error::NotFound);
                 }
-                let RemoteReply::Size(size) = reply else {
+                let RemoteReply::Snapshot(snapshot) = reply else {
                     return Err(Error::Invalid("invalid range reply".into()));
                 };
                 if self.resources.len() >= 32 {
                     return Err(Error::Invalid("too many active playback resources".into()));
                 }
-                let lease = ocp_webdav::bridge::Lease::start(
+                let lease = ocp_resource::bridge::Lease::start(
                     request
                         .provider
                         .ok_or_else(|| Error::Invalid("missing provider".into()))?,
                     request.relative,
-                    size,
+                    snapshot,
                 )
                 .map_err(remote_error)?;
                 let result = json!({"sourceId":source,"itemId":item,"assetId":asset,"uri":lease.uri,"headers":{},"leaseId":lease.id,"progress":self.db()?.progress(&source,&item)?});
@@ -1175,6 +1219,49 @@ impl Runtime {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn late_smb_credential_validation_cannot_replace_new_connection() {
+        let directory = std::env::temp_dir().join(format!("ocp-smb-epoch-{}", ocp_library::id()));
+        let store = Store::open(&directory).unwrap();
+        let library = store
+            .create_smb(
+                "epoch",
+                None,
+                "SMB",
+                "smb://nas/Media/",
+                None,
+                "电影",
+                "smb://nas/Media/Movies/",
+                LibraryType::Movies,
+            )
+            .unwrap();
+        let mut runtime = Runtime::default();
+        runtime.store = Some(store);
+        let args = json!({"sourceId":library.source_id,"rootUrl":"smb://nas/Media/","credential":{"type":"guest"}});
+        let old = runtime
+            .prepare_remote("library.smb.credentials.restore", args.clone())
+            .unwrap();
+        let new = runtime
+            .prepare_remote("library.smb.credentials.restore", args)
+            .unwrap();
+        assert!(runtime
+            .finish_remote(old, RemoteReply::Entries(Vec::new()))
+            .is_err());
+        assert!(runtime.remote.is_empty());
+        assert_eq!(
+            runtime
+                .finish_remote(new, RemoteReply::Entries(Vec::new()))
+                .unwrap()["restored"],
+            true
+        );
+        assert_eq!(
+            runtime.db().unwrap().libraries(&library.source_id).unwrap()[0].library_id,
+            library.library_id
+        );
+        drop(runtime);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
 
     #[test]
     fn invalidation_rejects_late_validation_receipts() {

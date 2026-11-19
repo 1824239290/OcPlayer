@@ -77,7 +77,7 @@ impl Drop for Fixture {
 }
 
 #[test]
-fn v1_and_v2_upgrade_preserve_catalog_and_add_durable_online_queue() {
+fn v1_v2_v3_upgrade_preserve_catalog_and_add_durable_online_queue() {
     let f = Fixture::new();
     f.video("Movie (2020).mkv");
     let library = f.library(LibraryType::Movies);
@@ -106,12 +106,15 @@ fn v1_and_v2_upgrade_preserve_catalog_and_add_durable_online_queue() {
         })
         .unwrap();
     // Construct real older schemas, including source CHECK rebuilding and FK preservation.
-    for version in [1, 2] {
+    for version in [1, 2, 3] {
         let old = f.directory.join(format!("old-{version}.sqlite"));
         let db = rusqlite::Connection::open(&old).unwrap();
         db.execute_batch(include_str!("../schema/v1.sql")).unwrap();
-        if version == 2 {
+        if version >= 2 {
             db.execute_batch(include_str!("../schema/v2.sql")).unwrap();
+        }
+        if version == 3 {
+            db.execute_batch(include_str!("../schema/v3.sql")).unwrap();
         }
         db.pragma_update(None, "user_version", version).unwrap();
         db.execute(
@@ -119,7 +122,9 @@ fn v1_and_v2_upgrade_preserve_catalog_and_add_durable_online_queue() {
             [f.store.path().to_str().unwrap()],
         )
         .unwrap();
-        db.execute_batch("INSERT INTO source SELECT * FROM fixture.source; INSERT INTO library SELECT * FROM fixture.library; INSERT INTO entry SELECT source_id,asset_id,library_id,relative_path,size,mtime,available,seen_generation FROM fixture.entry; INSERT INTO catalog_item(source_id,library_id,item_id,group_key,kind,title,year,parent_id,series_id,season_number,episode_number,first_seen_at) SELECT source_id,library_id,item_id,group_key,kind,title,year,parent_id,series_id,season_number,episode_number,first_seen_at FROM fixture.catalog_item; INSERT INTO item_asset SELECT * FROM fixture.item_asset; INSERT INTO item_match SELECT * FROM fixture.item_match; INSERT INTO watch_state SELECT * FROM fixture.watch_state;").unwrap();
+        db.execute_batch("INSERT INTO source SELECT * FROM fixture.source; INSERT INTO library SELECT * FROM fixture.library;").unwrap();
+        db.execute_batch(if version==3 {"INSERT INTO entry SELECT * FROM fixture.entry;"} else {"INSERT INTO entry SELECT source_id,asset_id,library_id,relative_path,size,mtime,available,seen_generation FROM fixture.entry;"}).unwrap();
+        db.execute_batch("INSERT INTO catalog_item(source_id,library_id,item_id,group_key,kind,title,year,parent_id,series_id,season_number,episode_number,first_seen_at) SELECT source_id,library_id,item_id,group_key,kind,title,year,parent_id,series_id,season_number,episode_number,first_seen_at FROM fixture.catalog_item; INSERT INTO item_asset SELECT * FROM fixture.item_asset; INSERT INTO item_match SELECT * FROM fixture.item_match; INSERT INTO watch_state SELECT * FROM fixture.watch_state;").unwrap();
         drop(db);
         let upgraded = Store::open_path(&old).unwrap();
         assert_eq!(
@@ -157,6 +162,97 @@ fn v1_and_v2_upgrade_preserve_catalog_and_add_durable_online_queue() {
         );
         assert!(upgraded.claim_scrape(&run).unwrap().is_some());
     }
+}
+
+#[test]
+fn smb_roots_categories_and_source_identity_stay_scoped() {
+    let f = Fixture::new();
+    let movie = f
+        .store
+        .create_smb(
+            "smb-movies",
+            None,
+            "NAS",
+            "smb://nas/Media/",
+            Some("credential"),
+            "电影",
+            "smb://nas/Media/Movies/",
+            LibraryType::Movies,
+        )
+        .unwrap();
+    let tv = f
+        .store
+        .create_smb(
+            "smb-tv",
+            Some(&movie.source_id),
+            "NAS",
+            "smb://nas/Media/",
+            Some("credential"),
+            "电视剧",
+            "smb://nas/Media/Shows/",
+            LibraryType::Tvshows,
+        )
+        .unwrap();
+    assert_eq!(movie.source_id, tv.source_id);
+    assert_eq!(
+        f.store.source(&movie.source_id).unwrap().kind,
+        ocp_library::SourceKind::Smb
+    );
+    for root in [
+        "smb://nas/Media/movies/",
+        "smb://nas/Media/",
+        "smb://other/Media/",
+        "smb://nas/Other/",
+        "smb://nas/Media/Movies/Nested/",
+    ] {
+        assert!(
+            f.store
+                .create_smb(
+                    "smb-invalid",
+                    Some(&movie.source_id),
+                    "NAS",
+                    "smb://nas/Media/",
+                    None,
+                    "无效",
+                    root,
+                    LibraryType::Movies
+                )
+                .is_err(),
+            "{root}"
+        );
+    }
+    assert_eq!(
+        f.store
+            .create_smb(
+                "smb-movies",
+                None,
+                "NAS",
+                "smb://nas/Media/",
+                Some("credential"),
+                "电影",
+                "smb://nas/Media/Movies/",
+                LibraryType::Movies
+            )
+            .unwrap()
+            .library_id,
+        movie.library_id
+    );
+    let reopened = Store::open_path(f.store.path()).unwrap();
+    assert_eq!(reopened.libraries(&movie.source_id).unwrap().len(), 2);
+    let db = rusqlite::Connection::open(f.store.path()).unwrap();
+    assert_eq!(
+        db.pragma_query_value::<i64, _>(None, "user_version", |r| r.get(0))
+            .unwrap(),
+        4
+    );
+    assert_eq!(
+        db.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| r
+            .get::<_, i64>(
+            0
+        ))
+        .unwrap(),
+        0
+    );
 }
 
 #[test]

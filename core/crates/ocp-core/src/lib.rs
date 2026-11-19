@@ -17,8 +17,8 @@ mod danmaku_load;
 mod diagnostic_export;
 mod events;
 mod library;
+mod library_remote;
 mod library_scrape;
-mod library_webdav;
 mod media;
 mod network;
 mod preferences;
@@ -413,6 +413,9 @@ impl Core {
             "library.webdav.access.prepare"
                 | "library.webdav.browse"
                 | "library.webdav.credentials.restore"
+                | "library.smb.access.prepare"
+                | "library.smb.browse"
+                | "library.smb.credentials.restore"
                 | "library.playback.prepare"
         ) {
             arguments
@@ -434,7 +437,9 @@ impl Core {
                         .map_err(|_| CommandError::invalid("library unavailable"))?;
                     if matches!(
                         method,
-                        "library.playback.prepare" | "library.webdav.credentials.restore"
+                        "library.playback.prepare"
+                            | "library.webdav.credentials.restore"
+                            | "library.smb.credentials.restore"
                     ) {
                         runtime
                             .call("library.sources.list", json!({}), directory.as_deref())

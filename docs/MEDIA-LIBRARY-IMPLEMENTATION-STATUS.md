@@ -2,7 +2,7 @@
 
 日期：2026-11-20。分支：`codex/media-library-single-source`。实施依据：[V3 方案](/Users/jumusu/Documents/project/OcPlayer/docs/MEDIA-LIBRARY-IMPLEMENTATION-V3.md)。原分析报告和 V2/V3 完整保留。
 
-M1/M2/M3 已提交，本批接通 WebDAV 的验证、目录选择、永久索引、共用 TMDB 刮削、凭据恢复和原播放器 Range 播放。macOS 可以创建本地文件夹或 WebDAV 来源，分别添加电影／电视剧目录，并与 Jellyfin／Emby 切换；**完整方案仍未完成**，SMB、iOS 静态 Core 分发和 Windows 应用入口仍待接通。
+本地文件夹、WebDAV 与 TMDB 刮削切片已提交，本批接通 SMB 的连接验证、目录选择、永久索引、凭据恢复和原播放器 Range 播放。macOS 可以创建本地文件夹、WebDAV 或 SMB 来源，分别添加电影／电视剧目录，并与 Jellyfin／Emby 切换；**完整方案仍未完成**，iOS 静态 Core 分发、Windows 应用入口及真实 NAS 验收仍待接通。
 
 ## M1 基础（2026-11-19）
 
@@ -60,10 +60,10 @@ M1/M2/M3 已提交，本批接通 WebDAV 的验证、目录选择、永久索引
 | 识别与元数据完善 | NFO 解析、更丰富的文件名／绝对集号规则、同片电影版本分组、题材筛选、稳定离线海报保留预算 |
 | 播放完善 | 文件字幕、集间连播、明确 EOF 事件、同片电影版本分组、长视频／系统权限与真机验收 |
 | WebDAV 完善 | 真实 NAS／长视频 seek 与断网恢复、签名 CDN 资源解析、外置字幕／本地图片、地址迁移和完整管理 |
-| SMB | libsmb2 三端依赖与 IO、共享目录、本机 HTTP Range 桥接、句柄及播放租约 |
+| SMB 完善 | 真实 NAS 的 SMB3 加密／权限／断网重开、长路径、DFS／Kerberos、自动发现共享及完整管理 |
 | 发行／平台验收 | macOS 自动嵌入已接通；iOS 静态 Core 分发、Windows 宿主、系统权限与真实视频／NAS 验证 |
 
-能力接口明确返回 `schemaVersion: 3`、`tmdbScraping: true`、`remoteProviders: true`，来源放行 `localFolder` 与 `webdav`，SMB 不放行，聚合为 false。应用接入阶段依据真实能力判断可用范围；首版最终仍只做来源切换，不做多来源聚合。
+能力接口明确返回 `schemaVersion: 4`、`tmdbScraping: true`、`remoteProviders: true`，来源放行 `localFolder`、`webdav` 与 `smb`，聚合为 false。应用接入阶段依据真实能力判断可用范围；首版最终仍只做来源切换，不做多来源聚合。
 
 ## 已执行的验证
 
@@ -88,3 +88,23 @@ M1/M2/M3 已提交，本批接通 WebDAV 的验证、目录选择、永久索引
 - Swift 文件库 SDK 3 个用例、公开命令／TMDB wire／matcher 合同 15 个用例通过，公开命令清单 404 个。`cargo fmt --check`、Clippy 和仓库校验通过；Clippy 保留 Store API 参数数量及已有模块的提示。macOS 嵌入动态库签名校验通过。
 - 性能诊断：细分计时及进程采样确认长等待在测试 Python 读取仓库脚本时发生。现将共享 fixture 同步嵌入测试代码、通过 `python -c` 在后台执行，使测试无需读取 Documents 项目目录；原 `.py` 完整保留，`sync-webdav-test-fixture.py --check` 检查两者一致。最终新增宿主闭环约 0.39 秒，服务启动约 84 毫秒、Core 打开约 5 毫秒、TMDB 验证约 25 毫秒、播放准备约 6 毫秒、liberika 打开与 seek 约 89 毫秒。测试服务不属于应用播放链路。
 - 未使用真实 NAS／TMDB 账户或 Windows 宿主验收；真实服务的跨域签名播放地址目前明确拒绝。
+
+## SMB 接入（2026-11-20）
+
+- 新增 `ocp-smb`，完整保留并锁定 libsmb2 6.2 上游源码、许可证及归档 SHA-256，通过 `cc` 构建私有静态依赖。构建副本补上目录／数据包大小限制、损坏目录项检查与 MinGW 兼容；原始上游代码不修改。适配层使用异步 API，不调用同步网络等待，也不创建脱离 Core 生命周期的 C worker。
+- SMB 来源为 `smb://主机[:端口]/共享名/`，支持共享下的根目录、用户名／密码、可选域、访客、要求签名及要求 SMB3 加密。默认密码模式要求签名；服务不满足所需加密时连接失败。来源 URL 不包含凭据，首版需手动填写共享名，不做自动发现或系统挂载。
+- 新增访问验证、逐级浏览和原来源凭据恢复接口；首次添加仍需当前草稿的有效 TMDB 回执，并实际打开所选分类目录。来源内的电影／电视剧目录不可重叠，路径保留中文、空格、字面 `%`、`#` 和 `&`，拒绝目录穿越、NTFS 流和尾部点／空格别名。
+- `Library.sqlite` 升级到 schema 4，只扩展 SMB 来源约束，保留本地／WebDAV 原身份、分类、资产、元数据、队列和观看进度，并验证外键。SMB 扫描复用永久检查点、解析器与刮削队列；失败目录保留旧资产，跨重启明确继续，曾失败的扫描以部分失败结束，完整无错误重扫才进行删除对账。
+- 新增 `ocp-resource`，SMB 与 WebDAV 共用本机播放租约和 Range 桥接。每个 SMB HTTP 请求持有独立连接／文件句柄，按偏移读取，单次原生读取最多 256 KiB，桥接窗口最多 4 MiB；起播、重开读者及每个窗口前后核对长度和文件身份／时间版本。变化或断连中止当前读取，用户重新打开生成新快照，未实现透明自动重连。
+- 播放器关闭本机 HTTP 连接、seek 丢弃旧读取或租约释放时，取消对应远程等待并关闭句柄。沿用 Erika 原生 presenter 销毁后才释放租约的规则。文件播放和续播仍归原来源，无 Jellyfin／Emby 会话或上报，无多个来源聚合。
+- macOS 添加页提供 SMB 类型、共享地址、域／访客／签名／加密设置和分类目录浏览；来源页支持更新连接与继续添加分类。凭据使用已有 `LibraryCredentials.json` 仓库，创建前重新读盘确认数据及 0600 权限；写入失败会提示重试。清除 TMDB 后仍能读取旧索引，并在文件源可访问时播放。
+- Swift/C# SDK、公开清单和调用合同同步更新。底层 libsmb2／适配层已编译 macOS arm64、iOS arm64、Windows x64 GNU 静态库；iOS 尚未分发静态 Core，Windows Rust／.NET 宿主链接与应用流程尚未验收，这一步不代表三端功能全部可用。
+
+## SMB 验证记录
+
+- Rust 全套相关用例 108 个通过：Core 48 单元＋3 基础＋6 刮削＋2 SMB＋2 WebDAV；Library 2 解析＋18 catalog；TMDB 18；SMB 1 路径＋4 协议；共用 Range 1；WebDAV XML／路径 3。实际 schema 1／2／3 数据库升级后保留身份、匹配和进度，FK 检查通过。
+- 本机固定 `impacket==0.13.0` 协议服务覆盖签名／域、访客、错误密码、权限拒绝、共享／目录缺失、中文特殊路径、5 GiB 稀疏文件、四个并发随机读取、文件变化、取消、SMB2 服务拒绝所需 SMB3 加密，以及目录失败后跨重启续扫。此服务不能替代真实 NAS 或 SMB3 加密互操作验收。
+- 连接创建／销毁增加独立生命周期锁，保护 libsmb2 未加锁的全局连接链表；网络读取不持此锁。新增八线程、每线程三轮目录／文件读取和连接收尾回归，避免扫描与播放分别在不同线程建立连接时破坏链表。
+- macOS AppTests 21 个通过、无跳过（文件媒体库 10、历史 7、会话回归 4）。新增 SMB 用例生成三秒视频，经过真实 liberika presenter 起播和 seek，并验证凭据保存／重启恢复、租约、独立文件身份及原服务器回归。
+- `verify-smb-native.py` 使用项目同一构建逻辑编译三种目标的 C 静态依赖；iOS 模拟器共享页面构建通过。Swift 文件库 SDK 和公开命令／TMDB wire／matcher 合同沿用实际 FFI 库校验；公开清单更新到 407 个命令。
+- 原分析／V3 方案、libsmb2 原始源码和测试 `.py` 完整保留。SMB AppTest 同步嵌入 Python fixture，`sync-smb-test-fixture.py --check` 验证一致，避免运行时读取仓库脚本。未进行真实用户 NAS、TMDB 账户、iOS 真机或 Windows 应用验收。

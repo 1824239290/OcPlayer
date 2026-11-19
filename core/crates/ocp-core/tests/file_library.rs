@@ -180,7 +180,7 @@ fn capabilities_do_not_advertise_unimplemented_providers_and_queries_require_sco
     let capabilities = f.call("library.capabilities", json!({}));
     assert_eq!(
         capabilities["data"]["sourceKinds"],
-        json!(["localFolder", "webdav"])
+        json!(["localFolder", "webdav", "smb"])
     );
     assert_eq!(capabilities["data"]["aggregation"], false);
     assert!(!f.call("library.query.page", json!({}))["ok"]

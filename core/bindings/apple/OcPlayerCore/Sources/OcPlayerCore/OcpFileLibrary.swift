@@ -219,6 +219,30 @@ public final class OcpFileLibrary: @unchecked Sendable {
         struct Result: Decodable { let released: Bool }
         let _: Result = try await invoke("library.playback.release", ["leaseId": leaseId])
     }
+    public struct SMBCredential: Codable, Sendable, Equatable {
+        public let type: String
+        public let username: String?
+        public let password: String?
+        public let domain: String?
+        public let requireSigning: Bool?
+        public let requireEncryption: Bool?
+        public static var guest: Self { .init(type: "guest", username: nil, password: nil, domain: nil, requireSigning: nil, requireEncryption: nil) }
+        public static func password(username: String, password: String, domain: String = "", requireSigning: Bool = true, requireEncryption: Bool = false) -> Self {
+            .init(type: "password", username: username, password: password, domain: domain, requireSigning: requireSigning, requireEncryption: requireEncryption)
+        }
+    }
+    public func prepareSMB(rootURL: String, credential: SMBCredential, accessRef: String? = nil) async throws -> Access {
+        struct Input: Encodable { let rootUrl: String; let credential: SMBCredential; let accessRef: String? }
+        return try await invoke("library.smb.access.prepare", Input(rootUrl: rootURL, credential: credential, accessRef: accessRef))
+    }
+    public func browseSMB(accessId: String, relativePath: String = "") async throws -> RemoteDirectory {
+        try await invoke("library.smb.browse", ["accessId": accessId, "relativePath": relativePath])
+    }
+    public func restoreSMB(sourceId: String, rootURL: String, credential: SMBCredential) async throws {
+        struct Input: Encodable { let sourceId: String; let rootUrl: String; let credential: SMBCredential }
+        struct Result: Decodable { let restored: Bool }
+        let _: Result = try await invoke("library.smb.credentials.restore", Input(sourceId: sourceId, rootUrl: rootURL, credential: credential))
+    }
     public func create(_ input: Create) async throws -> Creation { try await invoke("library.create", input) }
     public func sources() async throws -> [Source] {
         struct Result: Decodable { let sources: [Source] }

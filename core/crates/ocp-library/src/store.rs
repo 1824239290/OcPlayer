@@ -22,12 +22,12 @@ impl Store {
         db.pragma_update(None, "foreign_keys", true)?;
         db.pragma_update(None, "journal_mode", "WAL")?;
         let version: i64 = db.pragma_query_value(None, "user_version", |r| r.get(0))?;
-        if version > 3 {
+        if version > 4 {
             return Err(Error::Invalid(
                 "library database was created by a newer version".into(),
             ));
         }
-        if version < 3 {
+        if version < 4 {
             // Rebuild the source CHECK constraint without changing child FK targets.
             db.pragma_update(None, "foreign_keys", false)?;
             let tx = rusqlite::Transaction::new_unchecked(
@@ -37,6 +37,11 @@ impl Store {
             // Another handle may have migrated while this one waited for the
             // write lock. Read the version again inside the migration boundary.
             let locked_version: i64 = tx.pragma_query_value(None, "user_version", |r| r.get(0))?;
+            if locked_version > 4 {
+                return Err(Error::Invalid(
+                    "library database was created by a newer version".into(),
+                ));
+            }
             if locked_version == 0 {
                 tx.execute_batch(include_str!("../schema/v1.sql"))?;
             }
@@ -45,7 +50,10 @@ impl Store {
             }
             if locked_version < 3 {
                 tx.execute_batch(include_str!("../schema/v3.sql"))?;
-                tx.pragma_update(None, "user_version", 3)?;
+            }
+            if locked_version < 4 {
+                tx.execute_batch(include_str!("../schema/v4.sql"))?;
+                tx.pragma_update(None, "user_version", 4)?;
             }
             let violations: i64 =
                 tx.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| {
@@ -77,6 +85,7 @@ impl Store {
                     source_id: r.get(0)?,
                     kind: match r.get::<_, String>(5)?.as_str() {
                         "webdav" => SourceKind::Webdav,
+                        "smb" => SourceKind::Smb,
                         _ => SourceKind::LocalFolder,
                     },
                     display_name: r.get(1)?,
@@ -176,6 +185,36 @@ impl Store {
         )
     }
 
+    pub fn create_smb(
+        &self,
+        draft_id: &str,
+        existing_source: Option<&str>,
+        source_name: &str,
+        source_root: &str,
+        access_ref: Option<&str>,
+        name: &str,
+        root: &str,
+        typ: LibraryType,
+    ) -> Result<Library, Error> {
+        let source_root =
+            ocp_smb::root_url(source_root).map_err(|e| Error::Invalid(e.to_string()))?;
+        let root = ocp_smb::root_url(root).map_err(|e| Error::Invalid(e.to_string()))?;
+        if !ocp_smb::within(source_root.as_str(), root.as_str()) {
+            return Err(Error::Invalid("category is outside SMB source root".into()));
+        }
+        self.create_file_source(
+            draft_id,
+            existing_source,
+            source_name,
+            source_root.as_str(),
+            access_ref,
+            name,
+            root.as_str(),
+            typ,
+            SourceKind::Smb,
+        )
+    }
+
     fn create_file_source(
         &self,
         draft_id: &str,
@@ -238,6 +277,8 @@ impl Store {
                 let previous = previous?;
                 let overlap = if kind == SourceKind::Webdav {
                     ocp_webdav::within(root, &previous) || ocp_webdav::within(&previous, root)
+                } else if kind == SourceKind::Smb {
+                    ocp_smb::within(root, &previous) || ocp_smb::within(&previous, root)
                 } else {
                     Path::new(root).starts_with(&previous) || Path::new(&previous).starts_with(root)
                 };

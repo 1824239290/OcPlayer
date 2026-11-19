@@ -27,6 +27,9 @@ xcuserdata/
 # 内核二进制：由 Scripts/fetch-erika.sh 拉取，不入库
 Vendor/
 Packages/ErikaKit/Vendor/
+# libsmb2 is pinned source, including on case-insensitive Apple filesystems.
+!core/crates/ocp-smb/vendor/
+!core/crates/ocp-smb/vendor/**
 
 # 密钥：弹弹play AppId / AppSecret 等，本地生成，不入库
 Secrets.xcconfig

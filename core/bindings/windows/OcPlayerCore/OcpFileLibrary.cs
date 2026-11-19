@@ -35,6 +35,11 @@ public sealed record FileLibraryCreate(string DraftId, string VerificationId, st
     string AccessId, string SourceName, string RootPath, string Name, string Type, string? SourceId = null, string Kind = "localFolder");
 
 public sealed record FileLibraryWebDavCredential(string Type, string? Username = null, string? Password = null, string? Token = null);
+public sealed record FileLibrarySmbCredential(string Type, string? Username = null, string? Password = null,
+    string? Domain = null, bool? RequireSigning = null, bool? RequireEncryption = null)
+{
+    public override string ToString() => "SMB credentials (redacted)";
+}
 public sealed record FileLibraryRemoteEntry(string RelativePath, bool IsDirectory, long Size, double ModifiedAt, string? Etag);
 public sealed record FileLibraryRemoteDirectory(string RootPath, string RelativePath, FileLibraryRemoteEntry[] Entries);
 
@@ -61,6 +66,12 @@ public sealed class OcpFileLibrary(OcpCoreClient client)
         => Invoke<FileLibraryRemoteDirectory>("library.webdav.browse", new { accessId, relativePath }, cancellation);
     public async Task RestoreWebDavAsync(string sourceId, string rootUrl, FileLibraryWebDavCredential credential, CancellationToken cancellation = default)
         => _ = await Invoke<JsonElement>("library.webdav.credentials.restore", new { sourceId, rootUrl, credential }, cancellation).ConfigureAwait(false);
+    public Task<FileLibraryAccess> PrepareSmbAsync(string rootUrl, FileLibrarySmbCredential credential, string? accessRef = null, CancellationToken cancellation = default)
+        => Invoke<FileLibraryAccess>("library.smb.access.prepare", new { rootUrl, credential, accessRef }, cancellation);
+    public Task<FileLibraryRemoteDirectory> BrowseSmbAsync(string accessId, string relativePath = "", CancellationToken cancellation = default)
+        => Invoke<FileLibraryRemoteDirectory>("library.smb.browse", new { accessId, relativePath }, cancellation);
+    public async Task RestoreSmbAsync(string sourceId, string rootUrl, FileLibrarySmbCredential credential, CancellationToken cancellation = default)
+        => _ = await Invoke<JsonElement>("library.smb.credentials.restore", new { sourceId, rootUrl, credential }, cancellation).ConfigureAwait(false);
     public async Task ReleasePlaybackAsync(string leaseId, CancellationToken cancellation = default)
         => _ = await Invoke<JsonElement>("library.playback.release", new { leaseId }, cancellation).ConfigureAwait(false);
     public Task<FileLibraryCreation> CreateAsync(FileLibraryCreate input, CancellationToken cancellation = default)
