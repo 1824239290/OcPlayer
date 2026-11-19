@@ -1,6 +1,6 @@
 # Platform packaging
 
-The ABI has two Apple delivery forms:
+The ABI has three Apple delivery forms:
 
 The workspace includes `Cargo.lock`; build and verification scripts use
 `--locked` so a clean checkout retains the validated dependency resolution.
@@ -18,13 +18,41 @@ The workspace includes `Cargo.lock`; build and verification scripts use
   both macOS architectures for a universal Release app. Copy that file into the app bundle's `Contents/Frameworks` (or
   `Frameworks` on iOS) and keep the checked-in `include/ocplayer_core.h` beside
   the artifact for native consumers.
+- `Scripts/build-ios-static.sh /path/to/library-directory` builds the iOS
+  source checkout for Xcode's `PLATFORM_NAME`, `ARCHS`, `CONFIGURATION` and
+  deployment target. The ordinary iOS App runs it before linking, combines
+  multiple simulator architectures with lipo, and stages `libocp_ffi.a` under
+  `BUILT_PRODUCTS_DIR/OcPlayerCoreNative`. The source package's conditional
+  `NativeFFI` system module imports the canonical header and directly references
+  the ABI. Neither a runtime dylib nor dynamic executable exports are required.
+  CI installs the device/simulator Rust targets; Homebrew Rust with rust-src can
+  explicitly opt into source-built std with `OCP_CORE_BUILD_STD=1`.
 
-The source Swift package searches `OCP_CORE_LIBRARY_PATH` first, then the app's
+On macOS the source Swift package searches `OCP_CORE_LIBRARY_PATH` first, then the app's
 private frameworks/resources directories. The generated static package directly
 links the ABI through `OcPlayerCoreFFI`; it does not require exported executable
 symbols or an embedded dylib. Both support an explicit library path override.
 Enable Core through `OCP_CORE_ENABLED=1` or the `OcpCoreEnabled` bundle flag after
 including the matching library. An explicit `0` remains a comparison fallback.
+File libraries use Core independently of this existing media-server migration
+switch. iOS AppTests run the ordinary App build with static Core and reject an injected
+Core dylib, so tests cannot mask missing or dead-stripped static linkage.
+
+File-library simulator verification (with a booted simulator and Python
+containing `impacket==0.13.0`):
+
+```sh
+Scripts/test-ios-file-library.py SIMULATOR_UDID --smb-python /path/to/venv/bin/python
+```
+
+This builds and signs the ordinary iOS test host, starts the shared SMB fixture
+on the Mac using its unchanged source, and forwards its loopback addresses to
+the test process. TMDB and WebDAV fixtures run inside the test host. The selected
+tests include local movies/TV/S0, offline snapshots/progress, credential recovery,
+actual SMB/WebDAV Erika open and seek, and server progress/source regressions.
+The SMB host test reports a skip when run without the dedicated fixture; that
+skip is not protocol coverage. These fixtures do not replace physical-device
+directory grants or real NAS/SMB3-encryption acceptance.
 
 Static release verification:
 

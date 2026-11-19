@@ -40,8 +40,10 @@ mkdir -p "$derived_data"
 derived_data="$(cd "$derived_data" && pwd -P)"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$repo_root/core/target}"
 library_directory="$derived_data/CoreTestLibrary"
-echo "==> Building real Core for $platform ($target)"
-CARGO_BUILD_TARGET="$target" "$repo_root/core/Scripts/build-apple-dylib.sh" "$library_directory"
+if [[ "$platform" == macos ]]; then
+  echo "==> Building real Core for $platform ($target)"
+  CARGO_BUILD_TARGET="$target" "$repo_root/core/Scripts/build-apple-dylib.sh" "$library_directory"
+fi
 
 build_arguments=(
   -project "$apple_root/OcPlayer.xcodeproj"
@@ -53,14 +55,28 @@ build_arguments=(
 xcodebuild "${build_arguments[@]}" build-for-testing
 app="$derived_data/Build/Products/$product_directory/OcPlayer.app"
 executable="$app/$executable_relative"
-library="$library_directory/libocp_ffi.dylib"
-[[ -f "$executable" && -f "$library" ]] || { echo 'Built test host and real Core library are required' >&2; exit 1; }
-for architecture in $(xcrun lipo -archs "$executable"); do
-  xcrun lipo "$library" -verify_arch "$architecture"
-done
-mkdir -p "$app/$frameworks_relative"
-cp "$library" "$app/$frameworks_relative/libocp_ffi.dylib"
-"$repo_root/core/Scripts/sign-apple-app.sh" "$app" -
+[[ -f "$executable" ]] || { echo 'Built test host is required' >&2; exit 1; }
+if [[ "$platform" == macos ]]; then
+  library="$library_directory/libocp_ffi.dylib"
+  for architecture in $(xcrun lipo -archs "$executable"); do
+    xcrun lipo "$library" -verify_arch "$architecture"
+  done
+  mkdir -p "$app/$frameworks_relative"
+  cp "$library" "$app/$frameworks_relative/libocp_ffi.dylib"
+  "$repo_root/core/Scripts/sign-apple-app.sh" "$app" -
+else
+  # Test the ordinary statically linked app. A copied dylib would mask a
+  # missing archive, dead-stripped ABI, or a loader-only Swift dependency.
+  [[ ! -e "$app/$frameworks_relative/libocp_ffi.dylib" ]] || {
+    echo 'iOS test host must use static Core without an injected dylib' >&2; exit 1;
+  }
+  # Xcode's Debug executable can be a launcher for the app's own debug image.
+  core_image="$executable"
+  if [[ -f "$app/OcPlayer.debug.dylib" ]]; then core_image="$app/OcPlayer.debug.dylib"; fi
+  for architecture in $(xcrun lipo -archs "$executable"); do
+    xcrun nm -arch "$architecture" "$core_image" | awk '$NF == "_ocp_core_create" { found=1 } END { exit !found }'
+  done
+fi
 
 TEST_RUNNER_OCP_CORE_ENABLED=0 TEST_RUNNER_OCP_CORE_LIBRARY_PATH='' \
   xcodebuild "${build_arguments[@]}" test-without-building

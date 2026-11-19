@@ -1,0 +1,5 @@
+module OcPlayerCoreFFI [system] {
+    header "../../../../include/ocplayer_core.h"
+    link "ocp_ffi"
+    export *
+}

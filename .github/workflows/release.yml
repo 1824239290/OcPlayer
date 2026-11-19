@@ -69,6 +69,10 @@ jobs:
           echo "commit=$release_commit" >> "$GITHUB_OUTPUT"
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
 
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios-sim,x86_64-apple-ios
+
       - name: Resolve Erika version
         id: erika-version
         shell: bash
@@ -299,6 +303,10 @@ jobs:
         with:
           ref: ${{ needs.tests.outputs.commit }}
           fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
 
       - name: Validate release environment
         shell: bash

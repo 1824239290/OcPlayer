@@ -202,6 +202,14 @@ copy_license \
     "$ROOT/Packages/DanmakuRenderKit/PROVENANCE.md" \
     "$NOTICES_DIR/DanmakuRenderKit/PROVENANCE.md"
 
+# Core is linked into the ordinary iOS executable, including its pinned SMB
+# dependency. Preserve the notices alongside the existing player notices.
+CORE_ROOT="$ROOT/../../core"
+copy_license "$CORE_ROOT/LICENSE" "$NOTICES_DIR/OcPlayerCore/LICENSE"
+copy_license "$CORE_ROOT/crates/ocp-smb/vendor/README.md" "$NOTICES_DIR/OcPlayerCore/libsmb2/PROVENANCE.md"
+copy_license "$CORE_ROOT/crates/ocp-smb/vendor/libsmb2/COPYING" "$NOTICES_DIR/OcPlayerCore/libsmb2/COPYING"
+copy_license "$CORE_ROOT/crates/ocp-smb/vendor/libsmb2/LICENCE-LGPL-2.1.txt" "$NOTICES_DIR/OcPlayerCore/libsmb2/LICENCE-LGPL-2.1.txt"
+
 # The license list above is hand-written, so a new SwiftPM dependency would
 # otherwise ship without its notice. Fail the build when a resolved checkout has
 # no corresponding entry under THIRD_PARTY_LICENSES.

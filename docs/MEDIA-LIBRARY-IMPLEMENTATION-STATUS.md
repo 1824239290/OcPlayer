@@ -2,7 +2,7 @@
 
 日期：2026-11-20。分支：`codex/media-library-single-source`。实施依据：[V3 方案](/Users/jumusu/Documents/project/OcPlayer/docs/MEDIA-LIBRARY-IMPLEMENTATION-V3.md)。原分析报告和 V2/V3 完整保留。
 
-本地文件夹、WebDAV 与 TMDB 刮削切片已提交，本批接通 SMB 的连接验证、目录选择、永久索引、凭据恢复和原播放器 Range 播放。macOS 可以创建本地文件夹、WebDAV 或 SMB 来源，分别添加电影／电视剧目录，并与 Jellyfin／Emby 切换；**完整方案仍未完成**，iOS 静态 Core 分发、Windows 应用入口及真实 NAS 验收仍待接通。
+本地文件夹、WebDAV、SMB 与 TMDB 刮削切片已提交，本批接通普通 iOS App 的静态 Core 构建与链接。macOS 与 iOS 共用添加、分类、永久索引、刮削、凭据恢复和来源切换流程；iOS 模拟器已实际验证三类文件源及 SMB／WebDAV 的原播放器起播和 seek。**完整方案仍未完成**，Windows 应用入口、iOS 真机目录权限、真实 NAS 和交付管理完善仍待推进。
 
 ## M1 基础（2026-11-19）
 
@@ -55,13 +55,13 @@
 
 | 范围 | 尚需接通 |
 |---|---|
-| iOS / Windows 添加流程 | iOS 静态 Core 接入、Windows 目录授权／来源选择／分类／浏览／播放；macOS 库编辑与删除等管理操作 |
+| iOS / Windows 添加流程 | iOS 普通 App 静态链接与模拟器闭环已接通；仍需 iOS 真机目录授权／File Provider 验收、Windows 目录授权／来源选择／分类／浏览／播放，以及库编辑与删除等管理操作 |
 | 单一来源切换与框架 | macOS 已接通来源边界；文件库暂用独立导航，尚需接入主框架的观影／完整设置分区与统一视觉；其余宿主需沿用同样的来源与收尾规则 |
 | 识别与元数据完善 | NFO 解析、更丰富的文件名／绝对集号规则、同片电影版本分组、题材筛选、稳定离线海报保留预算 |
 | 播放完善 | 文件字幕、集间连播、明确 EOF 事件、同片电影版本分组、长视频／系统权限与真机验收 |
 | WebDAV 完善 | 真实 NAS／长视频 seek 与断网恢复、签名 CDN 资源解析、外置字幕／本地图片、地址迁移和完整管理 |
 | SMB 完善 | 真实 NAS 的 SMB3 加密／权限／断网重开、长路径、DFS／Kerberos、自动发现共享及完整管理 |
-| 发行／平台验收 | macOS 自动嵌入已接通；iOS 静态 Core 分发、Windows 宿主、系统权限与真实视频／NAS 验证 |
+| 发行／平台验收 | macOS 自动嵌入与 iOS 自动静态链接已接通；iOS 设备版 Release 构建通过，仍需真机运行／目录权限、Windows 宿主与真实视频／NAS 验证 |
 
 能力接口明确返回 `schemaVersion: 4`、`tmdbScraping: true`、`remoteProviders: true`，来源放行 `localFolder`、`webdav` 与 `smb`，聚合为 false。应用接入阶段依据真实能力判断可用范围；首版最终仍只做来源切换，不做多来源聚合。
 
@@ -108,3 +108,21 @@
 - macOS AppTests 21 个通过、无跳过（文件媒体库 10、历史 7、会话回归 4）。新增 SMB 用例生成三秒视频，经过真实 liberika presenter 起播和 seek，并验证凭据保存／重启恢复、租约、独立文件身份及原服务器回归。
 - `verify-smb-native.py` 使用项目同一构建逻辑编译三种目标的 C 静态依赖；iOS 模拟器共享页面构建通过。Swift 文件库 SDK 和公开命令／TMDB wire／matcher 合同沿用实际 FFI 库校验；公开清单更新到 407 个命令。
 - 原分析／V3 方案、libsmb2 原始源码和测试 `.py` 完整保留。SMB AppTest 同步嵌入 Python fixture，`sync-smb-test-fixture.py --check` 验证一致，避免运行时读取仓库脚本。未进行真实用户 NAS、TMDB 账户、iOS 真机或 Windows 应用验收。
+
+## iOS 静态 Core 接入（2026-11-20）
+
+- 源码 Swift 包新增仅在 iOS 使用的 `NativeFFI` 系统模块，直接导入原 C ABI 头并引用全部 12 个函数。macOS 沿用内嵌动态库；外部 SDK 使用的完整 XCFramework 打包脚本继续保留。
+- 普通 iOS Xcode target 增加 `build-ios-static.sh` 构建阶段，在链接前按平台／架构构建 Rust 和 SMB C 依赖，生成静态 `libocp_ffi.a`，放入当前构建产物目录。支持 iOS arm64、模拟器 arm64／x86_64 与 Debug／Release；多架构模拟器库使用 lipo 合并。无需向 iOS App 复制 Core 动态库，也不打开原服务器业务的迁移开关。
+- 既有文件媒体库页面依据实际 Core 能力开放本地文件夹、SMB、WebDAV 添加和电影／电视剧分类。TMDB 创建前置、全局共用凭据、已有索引离线可读、单一 active source、文件进度独立和禁止服务器上报的规则沿用原实现。
+- 补齐 iOS 局域网权限说明和 Release CI 的 Rust 目标安装。iOS 打包脚本随原播放器／SwiftPM notices 保留 Core 和锁定 libsmb2 的许可证与来源说明。
+- 普通 iOS AppTests 改为使用静态链接产物，并拒绝注入的旧 Core 动态库；检查同时支持 Xcode 的 App Debug image 和普通 Release executable。保留已安装 Rust targets 的正常构建方式，Homebrew Rust 可通过显式 `OCP_CORE_BUILD_STD=1` 使用 rust-src 构建标准库，不修改全局工具链。
+- 新增可在 iOS 宿主内运行的 TMDB／WebDAV HTTP fixture，以及 29 KiB 的三秒合成 MP4。SMB 继续使用完整保留的共享 Python 协议 fixture，由 Mac 宿主启动后向模拟器只传入回环地址；不要求 iOS 启动 Python 或 ffmpeg。
+
+## iOS 验证记录
+
+- iOS 27.1／iPhone Duo 模拟器：**20 个用例通过，0 失败，0 跳过**（文件库基础 6、跨平台闭环 2、SMB 宿主 fixture 1、观看历史 7、原会话回归 4）。本次使用普通 App 静态 Core，没有注入 Core dylib。实际验证电影／电视剧／S0、仅本地已有集入库、永久元数据／续播、清除凭据后的读取与新建拦截、SMB／WebDAV 凭据跨实例恢复，以及真实 Erika presenter 起播和 seek。
+- SMB 用例经 libsmb2 与真实 SMB2 协议服务读取中文／特殊字符文件，并完成刮削、重开连接和播放。DAV 用例还验证 Core Range 返回的实际文件字节。这是协议 fixture 验证，不等于真实 NAS 或 SMB3 加密互操作验收。
+- macOS 新增跨平台用例：2 个通过、无跳过；Swift 文件库 SDK：3 个通过。继续确认 macOS 动态库接入和已有公开 Swift API 可用。
+- iOS arm64 设备版 Release 构建通过；模拟器 arm64／x86_64 通用 Debug 构建通过。三种架构的 App code image 均检查到全部 12 个 Core ABI 函数，未依赖独立 `libocp_ffi.dylib`。设备版目前仅完成构建／链接，未进行真机运行。
+- `test-ios-file-library.py` 提供可复现的 20 用例运行，读取 xcresult 后要求零跳过。独立运行 SMB 宿主用例而未提供 fixture 时会明确跳过，不能作为 SMB 覆盖成功。日志与 xcresult 保存在 `artifacts/verification/ios-static/` 和 `artifacts/verification/file-library-ios/`。
+- Xcode 工程、shell／Python 脚本语法、仓库布局与 diff 检查通过。本批不改变 Rust 公共命令合同，清单仍为 407 个命令。原报告、V3 方案、原始图片／代码与 libsmb2 全部原文件保留。

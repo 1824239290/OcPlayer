@@ -213,6 +213,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 1A0000000000000000000021 /* Build configuration list for PBXNativeTarget "OcPlayer-iOS" */;
 			buildPhases = (
+				1A00000000000000000000D5 /* Build static file-library Core */,
 				1A0000000000000000000025 /* Sources */,
 				1A0000000000000000000026 /* Frameworks */,
 				1A0000000000000000000027 /* Resources */,
@@ -419,6 +420,18 @@
 /* End PBXTargetDependency section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		1A00000000000000000000D5 /* Build static file-library Core */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = ();
+			name = "Build static file-library Core";
+			outputPaths = ("$(BUILT_PRODUCTS_DIR)/OcPlayerCoreNative/libocp_ffi.a");
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "bash \"$SRCROOT/../../core/Scripts/build-ios-static.sh\" \"$BUILT_PRODUCTS_DIR/OcPlayerCoreNative\"";
+		};
 		1A00000000000000000000D4 /* Embed file-library Core */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -523,14 +536,16 @@
 				ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS = NO;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = WL6395F66C;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "连接 Jellyfin 媒体服务器并播放局域网内容。";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "连接 Jellyfin、Emby、SMB 和 WebDAV 媒体来源并播放局域网内容。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = NO;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LIBRARY_SEARCH_PATHS = ("$(inherited)", "$(BUILT_PRODUCTS_DIR)/OcPlayerCoreNative");
 				PRODUCT_BUNDLE_IDENTIFIER = dev.jumusu.OcPlayer;
 				PRODUCT_NAME = OcPlayer;
 				SDKROOT = iphoneos;
@@ -547,14 +562,16 @@
 				ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS = NO;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = WL6395F66C;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "连接 Jellyfin 媒体服务器并播放局域网内容。";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "连接 Jellyfin、Emby、SMB 和 WebDAV 媒体来源并播放局域网内容。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = NO;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LIBRARY_SEARCH_PATHS = ("$(inherited)", "$(BUILT_PRODUCTS_DIR)/OcPlayerCoreNative");
 				PRODUCT_BUNDLE_IDENTIFIER = dev.jumusu.OcPlayer;
 				PRODUCT_NAME = OcPlayer;
 				SDKROOT = iphoneos;
