@@ -87,6 +87,9 @@ public sealed partial class MainWindow
                 var visibility = (Services.PlayerHudVisibilityController)(typeof(PlayerView)
                     .GetField("_hudVisibility", instance)?.GetValue(player)
                     ?? throw new InvalidOperationException("HUD visibility controller was not found"));
+                var windowedPresenter = (OverlappedPresenter)AppWindow.Presenter;
+                var originalBorder = windowedPresenter.HasBorder;
+                var originalTitleBar = windowedPresenter.HasTitleBar;
                 var movie = DemoCatalog.Movies[0] with { DurationSeconds = 7200, Progress = 25 };
                 player.SetMedia(movie); Call("SetPlaying", false);
                 Check(Element<TextBlock>("MediaTitle").Text == movie.Title
@@ -170,10 +173,14 @@ public sealed partial class MainWindow
                 }
                 Check(hud.Visibility == Visibility.Collapsed && !hud.IsHitTestVisible && hud.Opacity < .01,
                     "A completed hide collapses the HUD and leaves video input unobstructed");
+                Check(!windowedPresenter.HasTitleBar && windowedPresenter.HasBorder == originalBorder,
+                    "Hiding the HUD removes WinUI's native caption surface and preserves the window border");
                 Call("ShowHud");
                 await Task.Delay(300);
                 Check(hud.Visibility == Visibility.Visible && hud.Opacity > .99 && hud.IsHitTestVisible,
                     "Showing a collapsed HUD restores its opacity and controls");
+                Check(windowedPresenter.HasTitleBar == originalTitleBar && windowedPresenter.HasBorder == originalBorder,
+                    "Showing the HUD restores the original native title bar and border");
                 IdleInput(); Call("SetPlaying", false);
                 await Task.Delay(3400);
                 Check(hud.Visibility == Visibility.Visible && hud.Opacity > .99,
@@ -185,6 +192,8 @@ public sealed partial class MainWindow
                 await Task.Delay(800);
                 Check(hud.Visibility == Visibility.Collapsed && !hud.IsHitTestVisible,
                     "Playing automatically fades out the HUD after three idle seconds");
+                Check(!windowedPresenter.HasTitleBar,
+                    "The native caption buttons also hide after the playback idle timeout");
 
                 Call("ShowHud"); await Task.Delay(300);
                 InvokeButton("RateButton"); await Task.Delay(250);
@@ -256,6 +265,8 @@ public sealed partial class MainWindow
                 var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
                 var root = Content;
                 var presenter = (OverlappedPresenter)AppWindow.Presenter;
+                var borderBeforePlayback = presenter.HasBorder;
+                var titleBarBeforePlayback = presenter.HasTitleBar;
                 var media = DemoCatalog.All[4] with { Progress = 10 };
                 _model.SelectedMedia = media; _model.SelectedEpisode = 1;
                 Navigate("detail");
@@ -287,6 +298,8 @@ public sealed partial class MainWindow
                     "The close control disposes playback and removes the overlay");
                 Check(AppWindow.Presenter == presenter && Root.Visibility == Visibility.Visible,
                     "Closing fullscreen playback restores the original window");
+                Check(presenter.HasBorder == borderBeforePlayback && presenter.HasTitleBar == titleBarBeforePlayback,
+                    "Closing playback restores the original native title bar and border");
                 Check(ReferenceEquals(detail, _transitions.Content) && _model.Route == "detail" && _model.SelectedEpisode == 1,
                     "Returning preserves the detail page instance and episode selection");
                 var scroll = new ScrollViewer { Content = new Border { Height = 3000 } };
@@ -311,5 +324,6 @@ public sealed partial class MainWindow
             finally { Close(); }
         };
     }
+
 }
 #endif
