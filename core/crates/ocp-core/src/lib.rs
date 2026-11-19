@@ -16,6 +16,7 @@ use thiserror::Error;
 mod danmaku_load;
 mod diagnostic_export;
 mod events;
+mod library;
 mod media;
 mod network;
 mod preferences;
@@ -75,6 +76,7 @@ pub struct Core {
     state: Arc<Mutex<State>>,
     requests: Arc<Mutex<HashMap<String, RequestControl>>>,
     network_service: Mutex<Option<Arc<network::NetworkService>>>,
+    library: Mutex<library::Runtime>,
 }
 
 struct RequestControl {
@@ -141,6 +143,7 @@ impl Core {
         let core = Self {
             requests: Arc::new(Mutex::new(HashMap::new())),
             network_service: Mutex::new(None),
+            library: Mutex::new(library::Runtime::default()),
             state: Arc::new(Mutex::new(State {
                 config,
                 ready: true,
@@ -353,6 +356,76 @@ impl Core {
             .is_some_and(|c| c.load(Ordering::Acquire))
         {
             return Ok(error_response(1003, false, "request cancelled"));
+        }
+        if method == "tmdb.access.validate" {
+            arguments
+                .as_object_mut()
+                .expect("validated object")
+                .remove("requestId");
+            let result = (|| -> Result<Value, CommandError> {
+                let input: library::ValidateArgs = serde_json::from_value(arguments)
+                    .map_err(|e| CommandError::invalid(e.to_string()))?;
+                input
+                    .check()
+                    .map_err(|e| CommandError::invalid(e.to_string()))?;
+                let generation = self
+                    .library
+                    .lock()
+                    .map_err(|_| CommandError::invalid("library service unavailable"))?
+                    .begin_validation(&input)
+                    .map_err(|e| CommandError::invalid(e.to_string()))?;
+                let service = self.network().map_err(|e| CommandError(1500, false, e))?;
+                let client = ocp_tmdb::TmdbClient::with_http(
+                    input.api_key.trim(),
+                    &input.api_base,
+                    service.http(),
+                );
+                service.run(cancellable(cancelled, async move {
+                    client.validate_access().await?;
+                    Ok(())
+                }))?;
+                self.library
+                    .lock()
+                    .map_err(|_| CommandError::invalid("library service unavailable"))?
+                    .validated(&input, generation)
+                    .map_err(|e| CommandError::invalid(e.to_string()))
+            })();
+            let response = match result {
+                Ok(data) => ApiResponse::ok(data),
+                Err(CommandError(code, retryable, message)) => {
+                    ApiResponse::error(code, retryable, message, Value::Null)
+                }
+            };
+            return serde_json::to_string(&response).map_err(CoreError::InvalidJson);
+        }
+        if method.starts_with("library.") || method == "tmdb.access.invalidate" {
+            arguments
+                .as_object_mut()
+                .expect("validated object")
+                .remove("requestId");
+            let directory = self
+                .state
+                .lock()
+                .map_err(|_| CoreError::StateUnavailable)?
+                .config
+                .data_directory
+                .clone();
+            let result = self
+                .library
+                .lock()
+                .map_err(|_| CoreError::StateUnavailable)?
+                .call(method, arguments, directory.as_deref());
+            let response = match result {
+                Ok(data) => ApiResponse::ok(data),
+                Err(ocp_library::Error::Invalid(message)) => {
+                    ApiResponse::error(1002, false, message, Value::Null)
+                }
+                Err(ocp_library::Error::NotFound) => {
+                    ApiResponse::error(1604, false, "library record not found", Value::Null)
+                }
+                Err(error) => ApiResponse::error(1602, false, error.to_string(), Value::Null),
+            };
+            return serde_json::to_string(&response).map_err(CoreError::InvalidJson);
         }
         if method == "introIDs.resolve" {
             let response = match self.resolve_intro_ids(&arguments, cancelled) {

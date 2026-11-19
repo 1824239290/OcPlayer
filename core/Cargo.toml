@@ -4,6 +4,7 @@ members = [
     "crates/ocp-model",
     "crates/ocp-http",
     "crates/ocp-store",
+    "crates/ocp-library",
     "crates/ocp-jellyfin",
     "crates/ocp-tmdb",
     "crates/ocp-danmaku",
@@ -25,6 +26,7 @@ repository = "http://192.168.5.107:8418/jumusu/OcPlayer"
 ocp-model = { path = "crates/ocp-model" }
 ocp-http = { path = "crates/ocp-http" }
 ocp-store = { path = "crates/ocp-store" }
+ocp-library = { path = "crates/ocp-library" }
 ocp-jellyfin = { path = "crates/ocp-jellyfin" }
 ocp-tmdb = { path = "crates/ocp-tmdb" }
 ocp-danmaku = { path = "crates/ocp-danmaku" }
@@ -49,6 +51,7 @@ unicode-normalization = "0.1"
 unicode-segmentation = "1.12"
 base64 = "0.22"
 libc = "0.2"
+uuid = { version = "1", features = ["v4", "serde"] }
 
 [workspace.metadata.cbindgen]
 config = "cbindgen.toml"

@@ -12,6 +12,7 @@ ocp-tmdb.workspace = true
 ocp-jellyfin.workspace = true
 ocp-http.workspace = true
 ocp-store.workspace = true
+ocp-library.workspace = true
 ocp-bangumi.workspace = true
 ocp-moviepilot.workspace = true
 serde.workspace = true
@@ -26,3 +27,5 @@ regex.workspace = true
 
 chrono.workspace = true
 unicode-segmentation.workspace = true
+sha2.workspace = true
+url.workspace = true

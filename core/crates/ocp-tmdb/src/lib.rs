@@ -167,6 +167,32 @@ impl<T: ocp_http::HttpTransport> TmdbClient<T> {
         serde_json::from_value(value).map_err(Into::into)
     }
 
+    /// Requires authenticated configuration data, not merely a nonempty key or HTTP 200.
+    pub async fn validate_access(&self) -> Result<(), TmdbError> {
+        #[derive(Deserialize)]
+        struct Images {
+            secure_base_url: String,
+            poster_sizes: Vec<String>,
+        }
+        #[derive(Deserialize)]
+        struct Configuration {
+            images: Images,
+            change_keys: Vec<String>,
+        }
+        let config: Configuration = self.get("configuration", "en-US", &[]).await?;
+        let image_url = Url::parse(&config.images.secure_base_url)
+            .map_err(|_| TmdbError::Response("invalid configuration image URL".into()))?;
+        if image_url.scheme() != "https"
+            || config.images.poster_sizes.is_empty()
+            || config.change_keys.is_empty()
+        {
+            return Err(TmdbError::Response(
+                "incomplete TMDB configuration response".into(),
+            ));
+        }
+        Ok(())
+    }
+
     pub async fn search(
         &self,
         query: &str,

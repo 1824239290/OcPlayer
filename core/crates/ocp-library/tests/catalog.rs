@@ -1,0 +1,457 @@
+use ocp_library::{scan, ItemKind, Library, LibraryType, Progress, Query, Store};
+use std::{
+    path::{Path, PathBuf},
+    sync::atomic::AtomicU8,
+};
+
+struct Fixture {
+    directory: PathBuf,
+    root: PathBuf,
+    store: Store,
+}
+impl Fixture {
+    fn new() -> Self {
+        let directory =
+            std::env::temp_dir().join(format!("ocp-library-test-{}", ocp_library::id()));
+        let root = directory.join("videos");
+        std::fs::create_dir_all(&root).unwrap();
+        let store = Store::open(&directory.join("db")).unwrap();
+        Self {
+            directory,
+            root,
+            store,
+        }
+    }
+    fn video(&self, name: &str) {
+        let path = self.root.join(name);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, b"fixture video").unwrap();
+    }
+    fn library(&self, typ: LibraryType) -> Library {
+        self.store
+            .create_local(
+                &ocp_library::id(),
+                None,
+                "Fixture",
+                &self.root,
+                None,
+                "Library",
+                &self.root,
+                typ,
+            )
+            .unwrap()
+    }
+    fn scan(&self, library: &Library) {
+        let job = self
+            .store
+            .start_scan(&library.source_id, &library.library_id)
+            .unwrap();
+        scan::run(&self.store, &job, &AtomicU8::new(scan::RUN)).unwrap();
+        assert_eq!(
+            self.store
+                .job(&library.source_id, &job.job_id)
+                .unwrap()
+                .status,
+            "completed"
+        );
+    }
+    fn query(&self, library: &Library, parent: Option<&str>) -> Vec<ocp_library::Item> {
+        self.store
+            .query(&Query {
+                source_id: library.source_id.clone(),
+                library_id: Some(library.library_id.clone()),
+                library_type: None,
+                parent_id: parent.map(str::to_owned),
+                search: String::new(),
+                start_index: 0,
+                limit: 50,
+            })
+            .unwrap()
+            .0
+    }
+}
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.directory);
+    }
+}
+
+#[test]
+fn movie_ids_and_progress_survive_rescan_reopen_and_cache_removal() {
+    let f = Fixture::new();
+    f.video("1917 (2019).mkv");
+    let library = f.library(LibraryType::Movies);
+    f.scan(&library);
+    let first = f.query(&library, None).remove(0);
+    assert_eq!(
+        (first.kind, first.title.as_str()),
+        (ItemKind::Movie, "1917")
+    );
+    let progress = Progress {
+        source_id: library.source_id.clone(),
+        item_id: first.item_id.clone(),
+        position_seconds: 300.0,
+        duration_seconds: Some(500.0),
+        played: false,
+        completed: false,
+        recorded_at: 20.0,
+    };
+    assert!(f.store.record_progress(&progress).unwrap());
+    let mut old = progress.clone();
+    old.recorded_at = 10.0;
+    old.position_seconds = 100.0;
+    assert!(!f.store.record_progress(&old).unwrap());
+    f.scan(&library);
+    assert_eq!(f.query(&library, None)[0].item_id, first.item_id);
+    let cache = f.directory.join("db/Media.sqlite");
+    std::fs::write(&cache, b"throwaway cache").unwrap();
+    std::fs::remove_file(cache).unwrap();
+    let reopened = Store::open(&f.directory.join("db")).unwrap();
+    assert_eq!(
+        reopened
+            .progress(&library.source_id, &first.item_id)
+            .unwrap(),
+        Some(progress)
+    );
+    assert_eq!(
+        reopened.item(&library.source_id, &first.item_id).unwrap(),
+        first
+    );
+}
+
+#[test]
+fn series_seasons_episodes_and_same_episode_versions_form_one_tree() {
+    let f = Fixture::new();
+    for video in [
+        "Show (2024)/Season 00/Show.S00E01.mkv",
+        "Show (2024)/Season 02/Show.S02E03.1080p.mkv",
+        "Show (2024)/Season 02/Show.S02E03.2160p.mkv",
+    ] {
+        f.video(video);
+    }
+    let library = f.library(LibraryType::Tvshows);
+    f.scan(&library);
+    let shows = f.query(&library, None);
+    assert_eq!(shows.len(), 1);
+    assert_eq!(shows[0].kind, ItemKind::Series);
+    let seasons = f.query(&library, Some(&shows[0].item_id));
+    assert_eq!(seasons.len(), 2);
+    assert_eq!(
+        seasons
+            .iter()
+            .map(|s| s.season_number.unwrap())
+            .collect::<Vec<_>>(),
+        vec![0, 2]
+    );
+    let episodes = f.query(&library, Some(&seasons[1].item_id));
+    assert_eq!(episodes.len(), 1);
+    assert_eq!(episodes[0].episode_number, Some(3));
+    assert_eq!(
+        f.store
+            .assets(&library.source_id, &episodes[0].item_id)
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
+#[test]
+fn scoped_queries_and_playback_reject_foreign_source_and_asset() {
+    let f = Fixture::new();
+    f.video("Movie (2020).mkv");
+    let a = f.library(LibraryType::Movies);
+    let b = f.library(LibraryType::Movies);
+    f.scan(&a);
+    f.scan(&b);
+    let item = f.query(&a, None).remove(0);
+    let asset = f
+        .store
+        .assets(&a.source_id, &item.item_id)
+        .unwrap()
+        .remove(0);
+    assert!(f.store.item(&b.source_id, &item.item_id).is_err());
+    assert!(f
+        .store
+        .playback_path(&b.source_id, &item.item_id, &asset.asset_id)
+        .is_err());
+    assert!(f
+        .store
+        .query(&Query {
+            source_id: b.source_id,
+            library_id: Some(a.library_id),
+            library_type: None,
+            parent_id: None,
+            search: String::new(),
+            start_index: 0,
+            limit: 50
+        })
+        .is_err());
+}
+
+#[test]
+fn drafts_are_idempotent_and_overlapping_roots_are_rejected() {
+    let f = Fixture::new();
+    std::fs::create_dir_all(f.root.join("Movies")).unwrap();
+    std::fs::create_dir_all(f.root.join("TV")).unwrap();
+    let root = f.root.join("Movies");
+    let a = f
+        .store
+        .create_local(
+            "draft",
+            None,
+            "NAS",
+            &f.root,
+            None,
+            "Movies",
+            &root,
+            LibraryType::Movies,
+        )
+        .unwrap();
+    assert_eq!(
+        f.store
+            .create_local(
+                "draft",
+                None,
+                "NAS",
+                &f.root,
+                None,
+                "Movies",
+                &root,
+                LibraryType::Movies
+            )
+            .unwrap(),
+        a
+    );
+    assert!(f
+        .store
+        .create_local(
+            "draft",
+            None,
+            "NAS",
+            &f.root,
+            None,
+            "TV",
+            &root,
+            LibraryType::Tvshows
+        )
+        .is_err());
+    assert!(f
+        .store
+        .create_local(
+            "other",
+            Some(&a.source_id),
+            "NAS",
+            &f.root,
+            None,
+            "All",
+            &f.root,
+            LibraryType::Tvshows
+        )
+        .is_err());
+    let b = f
+        .store
+        .create_local(
+            "tv",
+            Some(&a.source_id),
+            "NAS",
+            &f.root,
+            None,
+            "TV",
+            &f.root.join("TV"),
+            LibraryType::Tvshows,
+        )
+        .unwrap();
+    assert_eq!(a.source_id, b.source_id);
+    assert_eq!(f.store.libraries(&a.source_id).unwrap().len(), 2);
+}
+
+#[test]
+fn interrupted_scan_never_marks_unseen_videos_missing() {
+    let f = Fixture::new();
+    f.video("Movie.mkv");
+    let library = f.library(LibraryType::Movies);
+    f.scan(&library);
+    let item = f.query(&library, None).remove(0);
+    std::fs::remove_file(f.root.join("Movie.mkv")).unwrap();
+    let job = f
+        .store
+        .start_scan(&library.source_id, &library.library_id)
+        .unwrap();
+    scan::run(&f.store, &job, &AtomicU8::new(scan::PAUSE)).unwrap();
+    assert!(
+        f.store
+            .item(&library.source_id, &item.item_id)
+            .unwrap()
+            .playable
+    );
+    scan::run(&f.store, &job, &AtomicU8::new(scan::RUN)).unwrap();
+    assert!(
+        !f.store
+            .item(&library.source_id, &item.item_id)
+            .unwrap()
+            .playable
+    );
+}
+
+#[test]
+fn root_unavailable_keeps_index_and_progress() {
+    let f = Fixture::new();
+    f.video("Movie.mkv");
+    let library = f.library(LibraryType::Movies);
+    f.scan(&library);
+    let item = f.query(&library, None).remove(0);
+    std::fs::rename(&f.root, f.directory.join("disconnected")).unwrap();
+    let job = f
+        .store
+        .start_scan(&library.source_id, &library.library_id)
+        .unwrap();
+    scan::run(&f.store, &job, &AtomicU8::new(scan::RUN)).unwrap();
+    assert_eq!(
+        f.store.job(&library.source_id, &job.job_id).unwrap().status,
+        "waitingPermission"
+    );
+    assert!(
+        f.store
+            .item(&library.source_id, &item.item_id)
+            .unwrap()
+            .playable
+    );
+}
+
+#[test]
+fn manual_matches_are_locked_and_type_mismatch_is_rejected() {
+    let f = Fixture::new();
+    f.video("Movie.mkv");
+    let library = f.library(LibraryType::Movies);
+    f.scan(&library);
+    let item = f.query(&library, None).remove(0);
+    assert!(f
+        .store
+        .bind_metadata(
+            &library.source_id,
+            &item.item_id,
+            1,
+            "tv",
+            "zh-CN",
+            &serde_json::json!({"id":1}),
+            true
+        )
+        .is_err());
+    assert!(f
+        .store
+        .bind_metadata(
+            &library.source_id,
+            &item.item_id,
+            1,
+            "movie",
+            "zh-CN",
+            &serde_json::json!({"id":1,"title":"Matched"}),
+            true
+        )
+        .unwrap());
+    assert!(!f
+        .store
+        .bind_metadata(
+            &library.source_id,
+            &item.item_id,
+            2,
+            "movie",
+            "zh-CN",
+            &serde_json::json!({"id":2}),
+            false
+        )
+        .unwrap());
+    let reopened = Store::open(&f.directory.join("db")).unwrap();
+    assert_eq!(
+        reopened
+            .item(&library.source_id, &item.item_id)
+            .unwrap()
+            .metadata
+            .unwrap()["id"],
+        1
+    );
+}
+
+#[test]
+fn corrupt_permanent_database_is_preserved() {
+    let directory = std::env::temp_dir().join(format!("ocp-library-corrupt-{}", ocp_library::id()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let path = directory.join(ocp_library::FILE_NAME);
+    std::fs::write(&path, b"precious corrupt catalog").unwrap();
+    assert!(Store::open(&directory).is_err());
+    assert_eq!(std::fs::read(path).unwrap(), b"precious corrupt catalog");
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn symlink_to_outside_file_is_not_indexed_or_played() {
+    let f = Fixture::new();
+    let outside = f.directory.join("outside.mkv");
+    std::fs::write(&outside, b"outside").unwrap();
+    std::os::unix::fs::symlink(&outside, f.root.join("escape.mkv")).unwrap();
+    let library = f.library(LibraryType::Movies);
+    f.scan(&library);
+    assert!(f.query(&library, None).is_empty());
+    f.video("legit.mkv");
+    f.scan(&library);
+    let item = f.query(&library, None).remove(0);
+    let asset = f
+        .store
+        .assets(&library.source_id, &item.item_id)
+        .unwrap()
+        .remove(0);
+    std::fs::remove_file(f.root.join("legit.mkv")).unwrap();
+    std::os::unix::fs::symlink(&outside, f.root.join("legit.mkv")).unwrap();
+    assert!(f
+        .store
+        .playback_path(&library.source_id, &item.item_id, &asset.asset_id)
+        .is_err());
+}
+
+#[test]
+fn scan_cancellation_and_recovery_preserve_discovered_items() {
+    let f = Fixture::new();
+    f.video("Movie.mkv");
+    let library = f.library(LibraryType::Movies);
+    let job = f
+        .store
+        .start_scan(&library.source_id, &library.library_id)
+        .unwrap();
+    f.store.set_job_status(&job.job_id, "enumerating").unwrap();
+    f.store.recover_jobs().unwrap();
+    assert_eq!(
+        f.store.job(&library.source_id, &job.job_id).unwrap().status,
+        "interrupted"
+    );
+    scan::run(&f.store, &job, &AtomicU8::new(scan::RUN)).unwrap();
+    assert_eq!(f.query(&library, None).len(), 1);
+    assert!(Path::new(&library.root_path).is_absolute());
+}
+
+#[test]
+fn same_title_in_distinct_directories_is_not_merged_before_matching() {
+    let f = Fixture::new();
+    f.video("A/Show/Season 01/Show.S01E01.mkv");
+    f.video("B/Show/Season 01/Show.S01E01.mkv");
+    let library = f.library(LibraryType::Tvshows);
+    f.scan(&library);
+    let shows = f.query(&library, None);
+    assert_eq!(shows.len(), 2);
+    assert!(shows.iter().all(|show| show.title == "Show"));
+}
+
+#[test]
+fn old_scan_cannot_publish_or_mark_newer_files_missing() {
+    let f = Fixture::new();
+    f.video("Movie.mkv");
+    let library = f.library(LibraryType::Movies);
+    f.scan(&library);
+    let old = f.store.jobs(&library.source_id).unwrap().remove(0);
+    f.video("New.mkv");
+    f.scan(&library);
+    assert!(f.store.finish_scan(&old).is_err());
+    let parsed = ocp_library::parse::parse(Path::new("Movie.mkv"), LibraryType::Movies);
+    assert!(f.store.ingest(&old, "Movie.mkv", 2, 0.0, &parsed).is_err());
+    assert!(f.query(&library, None).iter().all(|item| item.playable));
+}

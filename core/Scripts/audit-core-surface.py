@@ -98,6 +98,10 @@ def inventory():
    for name in names:rows[prefix+name]=path
  for method in ['settings.backup.capabilities','settings.backup.snapshot','settings.backup.decode','settings.backup.prepare','settings.backup.restore','settings.backup.summary','diag.exportFile','diag.exportFile.capabilities','introIDs.resolve','endpoint.probe','moviepilot.clearSessions']:
   rows[method]=main
+ # This service dispatches complete command names rather than stripped suffixes.
+ library='crates/ocp-core/src/library.rs'
+ for method in dispatch((ROOT/library).read_text(encoding='utf-8')):
+  rows[method]=library
  return dict(sorted(rows.items()))
 if __name__=='__main__':
  print(json.dumps(inventory(),indent=2,ensure_ascii=False))
