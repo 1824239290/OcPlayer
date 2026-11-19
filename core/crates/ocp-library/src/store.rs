@@ -439,6 +439,20 @@ impl Store {
         Ok((items, total))
     }
 
+    /// Resume contains playable leaves (including episodes), scoped to one source.
+    pub fn resume(&self, source_id: &str, limit: i64) -> Result<Vec<Item>, Error> {
+        self.source(source_id)?;
+        if !(1..=100).contains(&limit) {
+            return Err(Error::Invalid("resume limit must be in 1...100".into()));
+        }
+        let sql = format!("{ITEM_SELECT} JOIN watch_state w ON w.source_id=c.source_id AND w.item_id=c.item_id WHERE c.source_id=?1 AND w.position_seconds>0 AND w.played=0 AND w.completed=0 AND EXISTS(SELECT 1 FROM item_asset a JOIN entry e ON e.source_id=a.source_id AND e.asset_id=a.asset_id WHERE a.source_id=c.source_id AND a.item_id=c.item_id AND e.available=1) ORDER BY w.recorded_at DESC,c.item_id LIMIT ?2");
+        let mut q = self.db.prepare(&sql)?;
+        let items = q
+            .query_map(params![source_id, limit], read_item)?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(items)
+    }
+
     pub fn item(&self, source_id: &str, item_id: &str) -> Result<Item, Error> {
         self.db
             .query_row(

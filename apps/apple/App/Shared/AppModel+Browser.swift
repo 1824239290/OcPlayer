@@ -61,6 +61,12 @@ extension AppModel {
     /// 只把服务器实例交给数据面，不再在这里包装缓存装饰器：仓储自己等库就绪，
     /// 建库失败退化为内存模式。首屏任务与头像任务并行启动。
     func activate(server: any MediaServer) async {
+        if activeFileSourceID != nil {
+            stopPlaybackForSessionChange()
+            resetBrowseState()
+        }
+        activeFileSourceID = nil
+        preferences.set("server:\(server.profile.id)", forKey: Self.activeMediaSourceKey)
         initialDataTask?.cancel()
         sessionGeneration &+= 1
         // Install one canonical facade for the session. This keeps browsing,

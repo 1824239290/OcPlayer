@@ -1,6 +1,6 @@
 # File-library Core contract, schema 1
 
-This is the first implementation slice of `docs/MEDIA-LIBRARY-IMPLEMENTATION-V3.md`: permanent storage, local enumeration, explicit movie/TV structure, authenticated creation receipts and native SDK projections. App source selection, the folder/bookmark UI, online scraping, artwork, subtitles and SMB/WebDAV IO remain subsequent slices. `library.capabilities` explicitly reports those limits; the existing server APIs keep their original behavior.
+The Core implements permanent storage, local enumeration, explicit movie/TV structure, authenticated creation receipts and native SDK projections from `docs/MEDIA-LIBRARY-IMPLEMENTATION-V3.md`. The macOS host now connects source selection, folder/bookmark UI, classified browsing and the existing player. Online scraping, artwork, subtitles and SMB/WebDAV IO remain subsequent slices. `library.capabilities` explicitly reports those limits; the existing server APIs keep their original behavior.
 
 All commands use the existing `ocp_call` JSON response envelope and request cancellation ownership. No command requires `OCP_CORE_ENABLED`. Swift uses `OcpFileLibrary`; C# uses `OcpFileLibrary`. The host must detect capabilities from the actual bundled Core before exposing features.
 
@@ -31,6 +31,7 @@ At most two scans run per Core handle. Another new creation keeps its draft outs
 | `library.libraries.list` | `sourceId` | Only that source's classified libraries |
 | `library.query.page` | `sourceId`, optional `libraryId`, `type`, `parentId`, `search`, `startIndex`, `limit` | Scoped page and consistent total count; limit 1...500 |
 | `library.query.detail` | `sourceId`, `itemId` | Item, its assets and saved progress |
+| `library.query.resume` | `sourceId`, optional `limit` (1...100, default 20) | Playable movie/episode leaves with positive progress, unplayed and incomplete, sorted by recordedAt descending |
 | `library.scan.start` | `sourceId`, `libraryId` | New job or existing resumable job |
 | `library.scan.pause/resume/cancel` | `sourceId`, `jobId` | Job snapshot; active pause/cancel takes effect at the next checkpoint |
 | `library.jobs.snapshot` | `sourceId` | Latest 100 jobs for that source |
@@ -55,4 +56,5 @@ Progress belongs to the original source/item. Only strictly later timestamps rep
 - Rust parser/store tests use temporary directories and cover numeric titles, TV hierarchy, source isolation, same-title directories, stable identities, manual locks, interrupted scans, stale generations, unavailable roots, corruption preservation and symlink escapes.
 - Core integration tests use a local HTTP fixture to verify API Key/Bearer authentication, malformed mirror/401/403 rejection, real validation-to-playback command flow, idempotent creation and absence of credentials in database files.
 - Swift SDK tests exercise the actual native library for capabilities, access receipts and rejection of invented validation; typed fields retain 64-bit sizes and source identity.
+- macOS host tests use the real native library with a local authenticated HTTP fixture. They cover movie/TV categories within one source, S0, durable bookmarks, canonical-path reauthorization, foreign-directory rejection, credential clearing, permanent resume and switching back to a server. These are catalog/playback-preparation tests, not real video-decoder validation.
 - Public command inventory/negative-boundary contracts include all new commands. C# SDK needs a .NET 10 host for build and platform integration validation.

@@ -208,6 +208,7 @@
   "library.progress.record": "crates/ocp-core/src/library.rs",
   "library.query.detail": "crates/ocp-core/src/library.rs",
   "library.query.page": "crates/ocp-core/src/library.rs",
+  "library.query.resume": "crates/ocp-core/src/library.rs",
   "library.scan.cancel": "crates/ocp-core/src/library.rs",
   "library.scan.pause": "crates/ocp-core/src/library.rs",
   "library.scan.resume": "crates/ocp-core/src/library.rs",

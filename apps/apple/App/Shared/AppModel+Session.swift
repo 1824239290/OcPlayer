@@ -84,6 +84,8 @@ extension AppModel {
         // 网络路径变化 → 地址结论作废（下一个请求重新探活）。
         startEndpointMonitor()
         let restoreStart = launchClock.now
+        try? await fileLibrary.setup()
+        if await restoreSelectedMediaSource() { return }
         let restored = MediaServerFactory.restore(from: store)
         let restoreDone = launchClock.now
         if let restored {
@@ -257,6 +259,7 @@ extension AppModel {
         userAvatarTask?.cancel()
         userAvatarTask = nil
         sessionGeneration &+= 1
+        activeFileSourceID = nil
         server = nil
         serverEndpointURL = nil
         // 头像是**账号身份**，不是内容：换服务器 / 登出 / 401 之后不能还挂着上一个
@@ -378,6 +381,7 @@ extension AppModel {
     /// `switchToServer` 的死 token 分支同口径，而那条路一直调的是 `resetBrowseState`，
     /// 两条路行为并不一致；现在统一。
     func reconnectFlow() {
+        stopPlaybackForSessionChange()
         resetBrowseState()
         resetOnboarding()
         phase = .onboarding

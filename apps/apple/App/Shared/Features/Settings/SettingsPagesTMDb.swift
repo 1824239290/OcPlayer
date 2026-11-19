@@ -58,9 +58,17 @@ struct TMDbSettingsView: View {
                     cleared = false
                 }
                 .disabled(keyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                if tmdb.isConfigured {
+                    SettingsGlassDivider()
+                    SettingsActionRow("移除 TMDB 凭据", role: .destructive) {
+                        tmdb.setAPIKey(nil)
+                        keyInput = ""
+                    }
+                    SettingsNote("移除后不能新建文件媒体库，已有文件索引和观看进度会保留。Jellyfin / Emby 的服务器元数据照常使用。")
+                }
                 if !tmdb.isConfigured {
                     SettingsNote("填入后启用 TMDB 补全：用第三方元数据补充详情页的简介、评分、演员与海报。"
-                         + "留空 = 关闭，不请求、不影响任何现有功能。")
+                         + "新建文件媒体库前需要验证有效凭据；已有文件媒体库可继续浏览和播放。")
                 }
             } footer: {
                 // 去哪儿申请 Key、能不能直连，都是整段的说明而不是某个控件的注解 → 段脚，
@@ -75,102 +83,12 @@ struct TMDbSettingsView: View {
             // 只在配好 Key 之后才出现等于让用户先撞一次墙再找开关。
             TMDbMirrorSection()
 
-            // 刻意**放在 `isConfigured` 闸门之外**：这一项的兜底来源是 Bangumi 章节，
-            // 没配 TMDB key 但关联了 Bangumi 的用户同样会看到占位卡，也该找得到这个开关。
-            SettingsGlassSection("剧集占位") {
-                Toggle("显示未入库剧集占位", isOn: Binding(
-                    get: { tmdb.showPlaceholders },
-                    set: { tmdb.setShowPlaceholders($0) }))
-                .neutralSwitch()
-                SettingsNote(tmdb.showPlaceholders
-                     ? "剧集详情页的选集条会把库里还没有的集画成占位卡（标「未播出」或「未入库」）。"
-                     + "数据优先用 TMDB 的季信息；没有 TMDB 数据时用已关联的 Bangumi 章节。"
-                     : "选集条只显示库里已有的集。")
-            } footer: {
-                // 「不可播放、不进已看记录」是整段功能的边界（与开关状态无关）；
-                // 上面那句才是开关自己的注解。
-                Text("占位卡不可播放，也不会写进已看记录与缓存；关掉只影响占位，不影响补全本身。")
-            }
-
-            if tmdb.isConfigured {
-                SettingsGlassSection("补全选项") {
-                    SettingsPickerRow("语言", selection: Binding(
-                        get: { tmdb.language },
-                        set: { tmdb.setLanguage($0) })) {
-                        ForEach(TMDbLanguageOption.allCases) { option in
-                            Text(option.displayName).tag(option.rawValue)
-                        }
-                    }
-                    SettingsNote("标题与简介按此语言取；该语言缺翻译的字段自动回退到英文。")
-
-                    SettingsGlassDivider()
-
-                    Toggle("文本以 TMDB 优先", isOn: Binding(
-                        get: { tmdb.preferText },
-                        set: { tmdb.setPreferText($0) }))
-                    .neutralSwitch()
-                    SettingsNote(tmdb.preferText
-                         ? "标题/简介/类型用 TMDB 的替换服务端的。"
-                         : "只补服务端缺的字段，已有的不动。")
-
-                    SettingsGlassDivider()
-
-                    Toggle("用 TMDB 图片替换已有的图", isOn: Binding(
-                        get: { tmdb.replaceImages },
-                        set: { tmdb.setReplaceImages($0) }))
-                    .neutralSwitch()
-                    SettingsNote(tmdb.replaceImages
-                         ? "海报/背景/分集剧照优先用 TMDB 的（服务端已有的图会被顶掉）。"
-                         : "只补服务端没有图的条目；已精修过的海报不会被覆盖。")
+            if app.activeFileSourceID != nil {
+                SettingsGlassSection("文件媒体库") {
+                    SettingsNote("文件媒体库共用这份凭据。此版本支持目录扫描和本地播放，在线刮削尚未开放。")
                 }
-
-                SettingsGlassSection("批量补全") {
-                    // 嵌套的独立 View：多根自动平铺成多行（进度 / 取消按钮 / 错误），
-                    // 内部结构不动。
-                    batchSection
-
-                    // 坏 key / 网络不通原先**完全静默**：用户填了 key 却什么都没发生，
-                    // 只会以为功能坏了。这里把最近一次失败摆出来。
-                    if let failure = tmdb.lastError {
-                        Label(failure, systemImage: "exclamationmark.triangle")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                            .settingsCardCompact()
-                    }
-                } footer: {
-                    // 这段说的是整个批量过程（含中途取消后接着做），不只解释那颗按钮 → 段脚；
-                    // 放段脚也让它补全进行中同样可见。
-                    Text("逐条匹配并拉取简介、评分、演员与图片；剧集连同各季一起补（分集标题与剧照需要季数据）。中途取消或退出后再点一次会接着做——已经补好的不会重复请求。")
-                }
-
-                SettingsGlassSection("数据") {
-                    // 脱离 `Form` 后 `LabeledContent` 会左贴紧凑排，用 `KeyValueRow` 保住
-                    // 「标签左 / 值右」的读法。
-                    KeyValueRow(label: "已补全条目", value: "\(tmdb.linkedCount)")
-
-                    SettingsGlassDivider()
-
-                    // **例外（保留原样）**：按钮旁边还挂着「已清除」说明文字，不是单个
-                    // `Button` 行，原样放进卡内（两者共享一行）。
-                    HStack {
-                        Button(role: .destructive) {
-                            confirmClear = true
-                        } label: {
-                            Label(cleared ? "已清除" : "清除 TMDB 补全数据", systemImage: "trash")
-                        }
-                        .disabled(isClearing)
-                        if cleared {
-                            Text("对应关系与已下载的 TMDB 数据已删除")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
-                } footer: {
-                    // 缓存上限与署名要求都是整段（不是某一行）的说明 → 一起进段脚。
-                    // TMDB 的署名要求。完整条款在开源许可证页的「社区数据与服务」分组。
-                    Text("缓存上限 \(tmdb.cacheLifetimeDescription)（TMDB 条款要求不超过 \(tmdb.maxCacheDays) 天）。"
-                         + "本产品使用 TMDB API，但未获得 TMDB 认可或认证。")
-                }
+            } else {
+                serverSettings
             }
         }
         // 「已补全条目」与错误提示进页面时取一次——原先没有任何地方调它，
@@ -189,6 +107,107 @@ struct TMDbSettingsView: View {
             Button("清除", role: .destructive) { clear() }
         } message: {
             Text("对应关系与已下载的 TMDB 数据会一起删除；想恢复只能重新匹配补全。")
+        }
+    }
+
+    @ViewBuilder
+    private var serverSettings: some View {
+        // 刻意**放在 `isConfigured` 闸门之外**：这一项的兜底来源是 Bangumi 章节，
+        // 没配 TMDB key 但关联了 Bangumi 的用户同样会看到占位卡，也该找得到这个开关。
+        SettingsGlassSection("剧集占位") {
+            Toggle("显示未入库剧集占位", isOn: Binding(
+                get: { tmdb.showPlaceholders },
+                set: { tmdb.setShowPlaceholders($0) }))
+            .neutralSwitch()
+            SettingsNote(tmdb.showPlaceholders
+                 ? "剧集详情页的选集条会把库里还没有的集画成占位卡（标「未播出」或「未入库」）。"
+                 + "数据优先用 TMDB 的季信息；没有 TMDB 数据时用已关联的 Bangumi 章节。"
+                 : "选集条只显示库里已有的集。")
+        } footer: {
+            // 「不可播放、不进已看记录」是整段功能的边界（与开关状态无关）；
+            // 上面那句才是开关自己的注解。
+            Text("占位卡不可播放，也不会写进已看记录与缓存；关掉只影响占位，不影响补全本身。")
+        }
+
+        if tmdb.isConfigured {
+            SettingsGlassSection("补全选项") {
+                SettingsPickerRow("语言", selection: Binding(
+                    get: { tmdb.language },
+                    set: { tmdb.setLanguage($0) })) {
+                    ForEach(TMDbLanguageOption.allCases) { option in
+                        Text(option.displayName).tag(option.rawValue)
+                    }
+                }
+                SettingsNote("标题与简介按此语言取；该语言缺翻译的字段自动回退到英文。")
+
+                SettingsGlassDivider()
+
+                Toggle("文本以 TMDB 优先", isOn: Binding(
+                    get: { tmdb.preferText },
+                    set: { tmdb.setPreferText($0) }))
+                .neutralSwitch()
+                SettingsNote(tmdb.preferText
+                     ? "标题/简介/类型用 TMDB 的替换服务端的。"
+                     : "只补服务端缺的字段，已有的不动。")
+
+                SettingsGlassDivider()
+
+                Toggle("用 TMDB 图片替换已有的图", isOn: Binding(
+                    get: { tmdb.replaceImages },
+                    set: { tmdb.setReplaceImages($0) }))
+                .neutralSwitch()
+                SettingsNote(tmdb.replaceImages
+                     ? "海报/背景/分集剧照优先用 TMDB 的（服务端已有的图会被顶掉）。"
+                     : "只补服务端没有图的条目；已精修过的海报不会被覆盖。")
+            }
+
+            SettingsGlassSection("批量补全") {
+                // 嵌套的独立 View：多根自动平铺成多行（进度 / 取消按钮 / 错误），
+                // 内部结构不动。
+                batchSection
+
+                // 坏 key / 网络不通原先**完全静默**：用户填了 key 却什么都没发生，
+                // 只会以为功能坏了。这里把最近一次失败摆出来。
+                if let failure = tmdb.lastError {
+                    Label(failure, systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .settingsCardCompact()
+                }
+            } footer: {
+                // 这段说的是整个批量过程（含中途取消后接着做），不只解释那颗按钮 → 段脚；
+                // 放段脚也让它补全进行中同样可见。
+                Text("逐条匹配并拉取简介、评分、演员与图片；剧集连同各季一起补（分集标题与剧照需要季数据）。中途取消或退出后再点一次会接着做——已经补好的不会重复请求。")
+            }
+
+            SettingsGlassSection("数据") {
+                // 脱离 `Form` 后 `LabeledContent` 会左贴紧凑排，用 `KeyValueRow` 保住
+                // 「标签左 / 值右」的读法。
+                KeyValueRow(label: "已补全条目", value: "\(tmdb.linkedCount)")
+
+                SettingsGlassDivider()
+
+                // **例外（保留原样）**：按钮旁边还挂着「已清除」说明文字，不是单个
+                // `Button` 行，原样放进卡内（两者共享一行）。
+                HStack {
+                    Button(role: .destructive) {
+                        confirmClear = true
+                    } label: {
+                        Label(cleared ? "已清除" : "清除 TMDB 补全数据", systemImage: "trash")
+                    }
+                    .disabled(isClearing)
+                    if cleared {
+                        Text("对应关系与已下载的 TMDB 数据已删除")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            } footer: {
+                // 缓存上限与署名要求都是整段（不是某一行）的说明 → 一起进段脚。
+                // TMDB 的署名要求。完整条款在开源许可证页的「社区数据与服务」分组。
+                Text("缓存上限 \(tmdb.cacheLifetimeDescription)（TMDB 条款要求不超过 \(tmdb.maxCacheDays) 天）。"
+                     + "本产品使用 TMDB API，但未获得 TMDB 认可或认证。")
+            }
         }
     }
 

@@ -43,6 +43,20 @@ final class AppModel {
     var phase: Phase = .boot
 
     let store: ServerStore
+    let fileLibrary: FileLibraryCoordinator
+    var activeFileSourceID: String?
+    var mediaLibrarySheet: MediaLibrarySheet?
+    var isMediaSourcesPresented: Bool {
+        get { if case .sources = mediaLibrarySheet { true } else { false } }
+        set { mediaLibrarySheet = newValue ? .sources : nil }
+    }
+    var addFileLibraryDraft: FileLibraryDraft? {
+        get { if case let .add(draft) = mediaLibrarySheet { draft } else { nil } }
+        set { mediaLibrarySheet = newValue.map(MediaLibrarySheet.add) }
+    }
+    var fileLibraryProgressTask: Task<Void, Never>?
+    var fileLibraryPlaybackIdentity: FileLibraryPlaybackIdentity?
+    var fileLibraryPlaybackCompleted = false
     /// 当前服务器实例。**赋值即切换媒体数据仓储的会话归属**：仓储按服务器实例
     /// 识别会话，换实例就丢弃旧内存投影，磁盘内容仍按租户复用。
     var server: (any MediaServer)? {
@@ -702,6 +716,7 @@ final class AppModel {
         danmakuModel: DanmakuModel = DanmakuModel(),
         metadata: MetadataCoordinator = MetadataCoordinator(),
         tmdb: TMDbCoordinator? = nil,
+        fileLibrary: FileLibraryCoordinator? = nil,
         preferences: UserDefaults = OcPlayerStorage.defaultPreferences
     ) {
         self.store = store
@@ -712,6 +727,8 @@ final class AppModel {
         // 默认用注入的那个 `preferences` 域构造：测试传独立 suite 时，
         // TMDB 的设置项不该落到 `.standard`（否则会与其他测试进程互相污染）。
         self.tmdb = tmdb ?? TMDbCoordinator(defaults: preferences)
+        self.fileLibrary = fileLibrary ?? FileLibraryCoordinator()
+        self.tmdb.onCredentialChanged = { [weak fileLibrary = self.fileLibrary] in fileLibrary?.credentialsChanged() }
         self.preferences = preferences
         // 首屏骨架的条数来自注入域（不是 `HomeData` 默认值里的 `.standard`）。
         home.railPresence = HomeRailPresence.restored(from: preferences)

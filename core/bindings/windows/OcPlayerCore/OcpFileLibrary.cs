@@ -60,6 +60,8 @@ public sealed class OcpFileLibrary(OcpCoreClient client)
         => Invoke<FileLibraryPage>("library.query.page", query, cancellation);
     public Task<FileLibraryDetail> DetailAsync(string sourceId, string itemId, CancellationToken cancellation = default)
         => Invoke<FileLibraryDetail>("library.query.detail", new { sourceId, itemId }, cancellation);
+    public async Task<FileLibraryItem[]> ResumeAsync(string sourceId, int limit = 20, CancellationToken cancellation = default)
+        => (await Invoke<Items>("library.query.resume", new { sourceId, limit }, cancellation).ConfigureAwait(false)).Values;
     public async Task<FileLibraryJob> ScanAsync(string sourceId, string libraryId, CancellationToken cancellation = default)
         => (await Invoke<Job>("library.scan.start", new { sourceId, libraryId }, cancellation).ConfigureAwait(false)).Value;
     public enum ScanAction { Pause, Resume, Cancel }
@@ -80,6 +82,7 @@ public sealed class OcpFileLibrary(OcpCoreClient client)
         return response.DecodeData<T>(Json) ?? throw new JsonException("Core returned an empty file-library payload");
     }
     private sealed record Sources([property: System.Text.Json.Serialization.JsonPropertyName("sources")] FileLibrarySource[] Values);
+    private sealed record Items([property: System.Text.Json.Serialization.JsonPropertyName("items")] FileLibraryItem[] Values);
     private sealed record Libraries([property: System.Text.Json.Serialization.JsonPropertyName("libraries")] FileLibraryDefinition[] Values);
     private sealed record Job([property: System.Text.Json.Serialization.JsonPropertyName("job")] FileLibraryJob Value);
     private sealed record Jobs([property: System.Text.Json.Serialization.JsonPropertyName("jobs")] FileLibraryJob[] Values);

@@ -19,6 +19,7 @@ final class TMDbCoordinator {
 
     /// 用户是否配置了 key。未配置 = 整个功能禁用（不请求、不落库、不叠加）。
     private(set) var isConfigured = false
+    private(set) var credentialGeneration = 0
     /// 当前语言（设置页改它 → 重建客户端无关，语言是每次请求现读的）。
     private(set) var language = "zh-CN"
     /// 文本是否 TMDB 优先。
@@ -35,6 +36,7 @@ final class TMDbCoordinator {
     ///
     /// 由 `refreshLastFailure()` 从补全服务取。**不缓存历史**：它是提示，不是账本。
     private(set) var lastError: String?
+    @ObservationIgnored var onCredentialChanged: (() -> Void)?
 
     // MARK: - 批量补全状态
 
@@ -104,7 +106,9 @@ final class TMDbCoordinator {
     // MARK: - 设置读写
 
     func setAPIKey(_ value: String?) {
+        onCredentialChanged?()
         credentials.setAPIKey(value)
+        credentialGeneration &+= 1
         isConfigured = credentials.apiKey() != nil
         lastError = nil
     }

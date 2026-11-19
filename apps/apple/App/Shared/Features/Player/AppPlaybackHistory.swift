@@ -148,6 +148,9 @@ final class AppPlaybackRecorder {
     }
 
     static func localItem(for request: PlaybackRequest) -> MediaItem {
+        if let identity = request.fileLibraryIdentity {
+            return MediaItem(id: identity.itemID, name: request.title, kind: .other)
+        }
         // Hash the URI so local filenames/URLs cannot collide, without persisting credentials.
         var components = URLComponents(string: request.uri)
         components?.user = nil

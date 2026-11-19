@@ -218,6 +218,8 @@ impl Runtime {
                     json!({"item":self.db()?.item(source,item)?,"assets":self.db()?.assets(source,item)?,"progress":self.db()?.progress(source,item)?}),
                 )
             }
+            "library.query.resume" => Ok(json!({"items":self.db()?.resume(
+                string(&args,"sourceId")?, args.get("limit").and_then(Value::as_i64).unwrap_or(20))?})),
             "library.scan.start" | "library.scan.resume" => {
                 let source = string(&args, "sourceId")?;
                 let job = if method == "library.scan.resume" {

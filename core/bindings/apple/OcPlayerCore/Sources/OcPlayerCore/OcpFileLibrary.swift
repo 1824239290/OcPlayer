@@ -166,6 +166,12 @@ public final class OcpFileLibrary: @unchecked Sendable {
     public func detail(sourceId: String, itemId: String) async throws -> Detail {
         try await invoke("library.query.detail", ["sourceId": sourceId, "itemId": itemId])
     }
+    public func resume(sourceId: String, limit: Int = 20) async throws -> [Item] {
+        struct Input: Encodable { let sourceId: String; let limit: Int }
+        struct Result: Decodable { let items: [Item] }
+        let result: Result = try await invoke("library.query.resume", Input(sourceId: sourceId, limit: limit))
+        return result.items
+    }
     public func scan(sourceId: String, libraryId: String) async throws -> Job {
         struct Result: Decodable { let job: Job }
         let result: Result = try await invoke("library.scan.start", ["sourceId": sourceId, "libraryId": libraryId]); return result.job

@@ -49,6 +49,9 @@ struct ServersView: View {
         // 2026-10-22（B 方案）：设置页整体脱离 `Form`，改成 `ScrollView` + 玻璃卡片流
         // ——与 MoviePilot 下载页同一套承载；一段 = 一张 `SettingsGlassSection`。
         SettingsGlassPage {
+            SettingsGlassSection("媒体来源") {
+                Button("切换媒体来源或添加文件夹媒体库…", systemImage: "externaldrive") { app.isMediaSourcesPresented = true }
+            }
             // **profiles 为空时整段都不出**：段落里一条行都没有时，`SettingsGlassSection`
             // 仍会画出标题留白 + 一块 padding 后的玻璃（视觉上是一条 12pt 的全宽玻璃条）。
             // 理论上管理服务器页总能进（至少有一台已登录的服务器），但换服/登出瞬间

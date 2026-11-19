@@ -550,11 +550,12 @@ extension AppModel {
         finishReporting()
         playbackPreparation = .loading(title: request.title)
         playback?.prepareForPresentation(request)
-        playback?.startLocalViewingRecord(sourceID: AppPlaybackHistoryStore.localSourceID,
+        playback?.startLocalViewingRecord(sourceID: request.fileLibraryIdentity.map { "file-library:\($0.sourceID)" } ?? AppPlaybackHistoryStore.localSourceID,
                                          item: AppPlaybackRecorder.localItem(for: request))
         presentedPlayer = request
         schedulePreparationDismiss(for: request)
         startDanmaku(for: request, item: nil)
+        if request.fileLibraryIdentity != nil { startFileLibraryProgress(for: request) }
     }
 
     /// 异步加载当前源的章节与可跳过片段(耗时网络请求,不阻塞呈现)。
@@ -681,14 +682,16 @@ extension AppModel {
     /// 那条只能手动重试的死路。详见 `PlaybackController.beginSystemSuspension`。
     @discardableResult
     func playbackDidEnterBackground() -> Task<Void, Never>? {
+        let fileWrite = checkpointFileLibraryProgress()
         #if os(iOS)
         backgroundResumeIntent = playback?.beginSystemSuspension() ?? false
         #endif
-        guard let report = playbackReporting?.reportBackgroundSnapshot() else { return nil }
+        guard let report = playbackReporting?.reportBackgroundSnapshot() else { return fileWrite }
         if case .terminal = report {
             clearPlaybackSessionState()
         }
-        return report.task
+        let serverWrite = report.task
+        return Task { await fileWrite?.value; await serverWrite.value }
     }
 
     /// Hook this to the foreground transition（`scenePhase == .active`）。
@@ -821,6 +824,8 @@ extension AppModel {
             title: request.title,
             uri: request.uri,
             authHeader: request.authHeader,
+            headers: request.headers,
+            fileLibraryIdentity: request.fileLibraryIdentity,
             resumeSeconds: resumeSeconds,
             securityScopedURL: request.securityScopedURL,
             sessionContext: request.sessionContext
@@ -1010,6 +1015,7 @@ extension AppModel {
     /// 换片 / 退出播放器：停止上报并固定原租户的末次进度，返回同时等待两者落库的收尾任务。
     @discardableResult
     func finishReporting() -> Task<Void, Never>? {
+        let fileWrite = finishFileLibraryProgress()
         let localWrite = playback?.finishLocalViewingRecord()
         // 退出 / 换片时把这一刻的进度写回媒体数据面：首页 rail 与详情页立刻一致，
         // 离线缓存也不必等下一次服务端刷新。服务端上报仍由 playbackReporting 负责。
@@ -1026,8 +1032,9 @@ extension AppModel {
         }
         clearPlaybackSessionState()
         let stopped = playbackReporting?.stop()
-        if write == nil && stopped == nil { return localWrite }
+        if write == nil && stopped == nil && fileWrite == nil { return localWrite }
         return Task {
+            await fileWrite?.value
             await localWrite?.value
             await write?.value
             await stopped?.value

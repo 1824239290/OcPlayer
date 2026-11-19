@@ -77,6 +77,44 @@ impl Drop for Fixture {
 }
 
 #[test]
+fn resume_includes_episode_leaves_and_excludes_completed_missing_and_foreign_sources() {
+    let f = Fixture::new();
+    f.video("Show/Season 1/Show S01E01.mkv");
+    f.video("Show/Season 1/Show S01E02.mkv");
+    let library = f.library(LibraryType::Tvshows);
+    f.scan(&library);
+    let series = f.query(&library, None).remove(0);
+    let season = f.query(&library, Some(&series.item_id)).remove(0);
+    let episodes = f.query(&library, Some(&season.item_id));
+    for (index, episode) in episodes.iter().enumerate() {
+        f.store
+            .record_progress(&Progress {
+                source_id: library.source_id.clone(),
+                item_id: episode.item_id.clone(),
+                position_seconds: 120.0,
+                duration_seconds: Some(900.0),
+                played: index == 1,
+                completed: index == 1,
+                recorded_at: 20.0 + index as f64,
+            })
+            .unwrap();
+    }
+    let resume = f.store.resume(&library.source_id, 20).unwrap();
+    assert_eq!(resume.len(), 1);
+    assert_eq!(resume[0].item_id, episodes[0].item_id);
+    assert!(f.store.resume("foreign", 20).is_err());
+    assert!(f.store.resume(&library.source_id, 0).is_err());
+    std::fs::remove_file(f.root.join("Show/Season 1/Show S01E01.mkv")).unwrap();
+    f.scan(&library);
+    assert!(f.store.resume(&library.source_id, 20).unwrap().is_empty());
+    assert!(f
+        .store
+        .progress(&library.source_id, &episodes[0].item_id)
+        .unwrap()
+        .is_some());
+}
+
+#[test]
 fn movie_ids_and_progress_survive_rescan_reopen_and_cache_removal() {
     let f = Fixture::new();
     f.video("1917 (2019).mkv");

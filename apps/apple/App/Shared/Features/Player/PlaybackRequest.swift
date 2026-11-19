@@ -8,6 +8,8 @@ struct PlaybackRequest: Hashable, Identifiable {
     let title: String
     let uri: String
     let authHeader: String?
+    let headers: [String: String]
+    let fileLibraryIdentity: FileLibraryPlaybackIdentity?
     /// Security-scoped URL for a user-selected local file.
     let securityScopedURL: URL?
     /// 服务端记录的续播位置（秒）；小于 30 秒视作从头播。
@@ -33,6 +35,8 @@ struct PlaybackRequest: Hashable, Identifiable {
         title: String,
         uri: String,
         authHeader: String? = nil,
+        headers: [String: String] = [:],
+        fileLibraryIdentity: FileLibraryPlaybackIdentity? = nil,
         resumeSeconds: Double? = nil,
         securityScopedURL: URL? = nil,
         sessionContext: PlaybackSessionContext? = nil,
@@ -42,11 +46,19 @@ struct PlaybackRequest: Hashable, Identifiable {
         self.title = title
         self.uri = uri
         self.authHeader = authHeader
+        self.headers = headers
+        self.fileLibraryIdentity = fileLibraryIdentity
         self.resumeSeconds = resumeSeconds
         self.securityScopedURL = securityScopedURL
         self.sessionContext = sessionContext
         self.alternates = alternates
     }
+}
+
+struct FileLibraryPlaybackIdentity: Hashable, Sendable {
+    let sourceID: String
+    let itemID: String
+    let assetID: String
 }
 
 /// 一条**备用媒体源**：已经解析好、可以直接拿起来开播的那几个字段。

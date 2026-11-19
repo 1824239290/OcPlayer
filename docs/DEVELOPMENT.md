@@ -56,7 +56,7 @@ MSI 参数仍是纯数值版本，例如 `1.0.0`；不能直接传入 `windows/v
 ./scripts/package-ios.sh v0.3.0
 ```
 
-打包保留已有签名、内核下载与构建缓存参数，见 [Apple 组件文档](../apps/apple/README.md)。普通打包不自动变成 Core-enabled 分发。
+打包保留已有签名、内核下载与构建缓存参数，见 [Apple 组件文档](../apps/apple/README.md)。macOS 现由 Xcode 的 `Embed file-library Core` 阶段构建并签名嵌入本仓库 `libocp_ffi.dylib`，供独立文件库使用；Rust/Cargo 需可用。它不打开旧 `OCP_CORE_ENABLED` 服务器迁移开关。iOS 普通构建的静态 Core 分发仍需接通，模拟器源码构建不能视为设备端文件库可用。
 
 普通 AppTests 的真实 Core fixture：
 

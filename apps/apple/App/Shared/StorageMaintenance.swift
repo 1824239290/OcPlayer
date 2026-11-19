@@ -22,7 +22,7 @@ enum AppStorageDirectories {
     static let danmaku = OcPlayerStorage.directory("Danmaku")
     /// 本地数据库。**不是普通缓存**：进度/关联/元数据都不能随手删，
     /// 所以它们只参与「体积上报」，不进 `ManagedDirectoryPruner` 的删除路径。
-    static let databaseFileNames = ["Bangumi.sqlite", "Media.sqlite"]
+    static let databaseFileNames = ["Bangumi.sqlite", "Media.sqlite", "Library.sqlite"]
     /// Server snapshots and App playback durations are user history: report size, never prune by age.
     static let viewingHistory = OcPlayerStorage.directory("ViewingHistory")
 

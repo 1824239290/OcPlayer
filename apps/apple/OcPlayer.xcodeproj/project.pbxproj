@@ -180,6 +180,7 @@
 				1A0000000000000000000015 /* Sources */,
 				1A0000000000000000000016 /* Frameworks */,
 				1A0000000000000000000017 /* Resources */,
+				1A00000000000000000000D4 /* Embed file-library Core */,
 			);
 			buildRules = (
 			);
@@ -417,6 +418,21 @@
 		};
 /* End PBXTargetDependency section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		1A00000000000000000000D4 /* Embed file-library Core */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = ();
+			name = "Embed file-library Core";
+			outputPaths = ("$(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/libocp_ffi.dylib");
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "bash \"$SRCROOT/Scripts/embed-file-library-core.sh\"";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin XCBuildConfiguration section */
 		1A0000000000000000000005 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -468,6 +484,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
@@ -488,6 +505,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				MACOSX_DEPLOYMENT_TARGET = 26.0;

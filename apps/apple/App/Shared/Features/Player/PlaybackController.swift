@@ -723,7 +723,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         failedRequestID = nil
         PlaybackLog.info("PlaybackController open(request) title=\(request.title) hasLoadedSource=\(hasLoadedSource)")
         openStartedAt = Date()
-        var headers: [String: String] = [:]
+        var headers = request.headers
         if let authHeader = request.authHeader {
             headers["Authorization"] = authHeader
         }
@@ -832,6 +832,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
 
     func samePlaybackSource(_ lhs: PlaybackRequest, _ rhs: PlaybackRequest) -> Bool {
         lhs.uri == rhs.uri
+            && lhs.headers == rhs.headers
+            && lhs.fileLibraryIdentity == rhs.fileLibraryIdentity
             && lhs.authHeader == rhs.authHeader
             && lhs.securityScopedURL == rhs.securityScopedURL
             && lhs.sessionContext == rhs.sessionContext

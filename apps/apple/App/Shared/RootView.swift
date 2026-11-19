@@ -17,6 +17,8 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(SettingsKeys.bangumiEnabled) private var bangumiEnabled = true
+    @AppStorage(SettingsKeys.tmdbMirrorEnabled) private var tmdbMirrorEnabled = false
+    @AppStorage(SettingsKeys.tmdbMirrorAPIBaseURL) private var tmdbMirrorAPIBase = ""
     /// 启动动画状态机（门控/时钟/撤除都在 presenter，见 LaunchPresenter）。
     @State private var launch = LaunchPresenter()
     /// iOS 预热可能在后台把 UI 建出来：后台不动画，激活再起表。
@@ -44,8 +46,9 @@ struct RootView: View {
             OnboardingView()
                 .transition(.section)
         case .ready:
-            AppShellView()
-                .transition(.section)
+            if let sourceID = app.activeFileSourceID {
+                FileLibraryShellView(sourceID: sourceID).transition(.section)
+            } else { AppShellView().transition(.section) }
         }
     }
 
@@ -227,6 +230,16 @@ struct RootView: View {
                     if case .success(let url) = result { app.presentLocalFile(url) }
                 }
         }
+        .sheet(item: Binding(
+            get: { app.mediaLibrarySheet }, set: { app.mediaLibrarySheet = $0 }
+        )) { sheet in
+            switch sheet {
+            case .sources: MediaSourcesView()
+            case let .add(draft): AddFileLibraryView(draft: draft)
+            }
+        }
+        .onChange(of: tmdbMirrorEnabled) { _, _ in app.fileLibrary.credentialsChanged() }
+        .onChange(of: tmdbMirrorAPIBase) { _, _ in app.fileLibrary.credentialsChanged() }
         .sheet(isPresented: Binding(
             get: { app.isDirectLinkSheetPresented },
             set: { app.isDirectLinkSheetPresented = $0 }
