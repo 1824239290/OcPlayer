@@ -124,6 +124,7 @@ final class TMDbCoordinator {
     var rawAPIKey: String? { credentials.apiKey() }
 
     func setLanguage(_ value: String) {
+        if language != value { onCredentialChanged?(); credentialGeneration &+= 1 }
         preferences.language = value
         language = preferences.language
         // 换语言后旧语言的计数不再准确，且需要重新拉取才有新语言的数据——

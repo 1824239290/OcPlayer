@@ -77,6 +77,243 @@ impl Drop for Fixture {
 }
 
 #[test]
+fn v1_upgrade_preserves_catalog_and_adds_durable_online_queue() {
+    let f = Fixture::new();
+    f.video("Movie (2020).mkv");
+    let library = f.library(LibraryType::Movies);
+    f.scan(&library);
+    let movie = f.query(&library, None).remove(0);
+    f.store
+        .bind_metadata(
+            &library.source_id,
+            &movie.item_id,
+            11,
+            "movie",
+            "zh-CN",
+            &serde_json::json!({"id":11,"title":"持久标题"}),
+            true,
+        )
+        .unwrap();
+    f.store
+        .record_progress(&Progress {
+            source_id: library.source_id.clone(),
+            item_id: movie.item_id.clone(),
+            position_seconds: 35.0,
+            duration_seconds: None,
+            played: false,
+            completed: false,
+            recorded_at: 20.0,
+        })
+        .unwrap();
+    // Construct an actual v1 file rather than just changing user_version on v2.
+    let old = f.directory.join("old.sqlite");
+    let db = rusqlite::Connection::open(&old).unwrap();
+    db.execute_batch(include_str!("../schema/v1.sql")).unwrap();
+    db.pragma_update(None, "user_version", 1).unwrap();
+    db.execute(
+        "ATTACH DATABASE ?1 AS fixture",
+        [f.store.path().to_str().unwrap()],
+    )
+    .unwrap();
+    db.execute_batch("INSERT INTO source SELECT * FROM fixture.source; INSERT INTO library SELECT * FROM fixture.library; INSERT INTO entry SELECT * FROM fixture.entry; INSERT INTO catalog_item SELECT source_id,library_id,item_id,group_key,kind,title,year,parent_id,series_id,season_number,episode_number,first_seen_at FROM fixture.catalog_item; INSERT INTO item_asset SELECT * FROM fixture.item_asset; INSERT INTO item_match SELECT * FROM fixture.item_match; INSERT INTO watch_state SELECT * FROM fixture.watch_state;").unwrap();
+    drop(db);
+    let upgraded = Store::open_path(&old).unwrap();
+    assert_eq!(
+        upgraded.item(&library.source_id, &movie.item_id).unwrap(),
+        f.store.item(&library.source_id, &movie.item_id).unwrap()
+    );
+    assert_eq!(
+        upgraded
+            .progress(&library.source_id, &movie.item_id)
+            .unwrap()
+            .unwrap()
+            .position_seconds,
+        35.0
+    );
+    let run = upgraded
+        .start_scrape(&library.source_id, &library.library_id, "zh-CN", false)
+        .unwrap();
+    upgraded.seed_scrape(&run).unwrap();
+    assert_eq!(
+        upgraded
+            .scrape_run(&library.source_id, &run.run_id)
+            .unwrap()
+            .total,
+        1
+    );
+    upgraded.set_scrape_status(&run.run_id, "running").unwrap();
+    upgraded.claim_scrape(&run).unwrap().unwrap();
+    upgraded.recover_scrapes().unwrap();
+    assert_eq!(
+        upgraded
+            .scrape_run(&library.source_id, &run.run_id)
+            .unwrap()
+            .status,
+        "interrupted"
+    );
+    assert!(upgraded.claim_scrape(&run).unwrap().is_some());
+}
+
+#[test]
+fn late_scrape_and_manual_binding_cannot_overwrite_new_revision() {
+    let f = Fixture::new();
+    f.video("Movie (2020).mkv");
+    let library = f.library(LibraryType::Movies);
+    f.scan(&library);
+    let movie = f.query(&library, None).remove(0);
+    let run = f
+        .store
+        .start_scrape(&library.source_id, &library.library_id, "zh-CN", false)
+        .unwrap();
+    f.store.seed_scrape(&run).unwrap();
+    f.store.set_scrape_status(&run.run_id, "running").unwrap();
+    let old = f.store.claim_scrape(&run).unwrap().unwrap();
+    let manual = f
+        .store
+        .match_target(&library.source_id, &movie.item_id, "zh-CN", true)
+        .unwrap();
+    let metadata = serde_json::json!({"id":2,"title":"Manual title","release_date":"2021-01-01"});
+    f.store
+        .bind_match_checked(&manual, "zh-CN", 2, &metadata)
+        .unwrap();
+    assert!(!f
+        .store
+        .commit_scrape(&run, &old, &serde_json::json!({"id":1,"title":"Old title"}))
+        .unwrap());
+    assert!(f
+        .store
+        .bind_match_checked(&manual, "zh-CN", 1, &serde_json::json!({"id":1}))
+        .is_err());
+    let current = f.store.item(&library.source_id, &movie.item_id).unwrap();
+    assert_eq!(current.title, "Manual title");
+    assert_eq!(current.year, Some(2021));
+    f.scan(&library);
+    assert_eq!(
+        f.store
+            .item(&library.source_id, &movie.item_id)
+            .unwrap()
+            .title,
+        "Manual title"
+    );
+    let current = f
+        .store
+        .match_target(&library.source_id, &movie.item_id, "zh-CN", true)
+        .unwrap();
+    assert!(current.manual);
+    assert_eq!(current.tmdb_id, Some(2));
+    assert_eq!(current.item.title, "Movie");
+    f.store
+        .unbind_match(&library.source_id, &movie.item_id)
+        .unwrap();
+    assert!(f
+        .store
+        .bind_match_checked(&current, "zh-CN", 2, &metadata)
+        .is_err());
+    assert_eq!(
+        f.store
+            .item(&library.source_id, &movie.item_id)
+            .unwrap()
+            .title,
+        "Movie"
+    );
+}
+
+#[test]
+fn rescan_blocks_old_network_result_and_missing_assets_skip_online_work() {
+    let f = Fixture::new();
+    f.video("Movie (2020).mkv");
+    let library = f.library(LibraryType::Movies);
+    f.scan(&library);
+    let run = f
+        .store
+        .start_scrape(&library.source_id, &library.library_id, "zh-CN", false)
+        .unwrap();
+    f.store.seed_scrape(&run).unwrap();
+    f.store.set_scrape_status(&run.run_id, "running").unwrap();
+    let old = f.store.claim_scrape(&run).unwrap().unwrap();
+    std::fs::remove_file(f.root.join("Movie (2020).mkv")).unwrap();
+    f.scan(&library);
+    assert!(!f
+        .store
+        .commit_scrape(&run, &old, &serde_json::json!({"id":1}))
+        .unwrap());
+    f.store.seed_scrape(&run).unwrap();
+    assert!(f.store.claim_scrape(&run).unwrap().is_none());
+}
+
+#[test]
+fn season_metadata_only_updates_local_episodes_and_preserves_specials_progress() {
+    let f = Fixture::new();
+    f.video("Show (2024)/Season 0/Show S00E01.mkv");
+    let library = f.library(LibraryType::Tvshows);
+    f.scan(&library);
+    let series = f.query(&library, None).remove(0);
+    let season = f.query(&library, Some(&series.item_id)).remove(0);
+    let episode = f.query(&library, Some(&season.item_id)).remove(0);
+    f.store
+        .record_progress(&Progress {
+            source_id: library.source_id.clone(),
+            item_id: episode.item_id.clone(),
+            position_seconds: 123.0,
+            duration_seconds: None,
+            played: false,
+            completed: false,
+            recorded_at: 20.0,
+        })
+        .unwrap();
+    let run = f
+        .store
+        .start_scrape(&library.source_id, &library.library_id, "zh-CN", false)
+        .unwrap();
+    f.store.seed_scrape(&run).unwrap();
+    f.store.set_scrape_status(&run.run_id, "running").unwrap();
+    let top = f.store.claim_scrape(&run).unwrap().unwrap();
+    assert!(f.store.commit_scrape(&run,&top,&serde_json::json!({"id":10,"title":null,"name":"整剧标题","first_air_date":"2024-01-01"})).unwrap());
+    assert_eq!(f.query(&library, None)[0].title, "整剧标题");
+    f.store.seed_scrape(&run).unwrap();
+    let target = f.store.claim_scrape(&run).unwrap().unwrap();
+    assert_eq!(target.item.season_number, Some(0));
+    assert!(f
+        .store
+        .commit_scrape(
+            &run,
+            &target,
+            &serde_json::json!({"season_number":1,"episodes":[]})
+        )
+        .is_err());
+    assert!(f.store.commit_scrape(&run,&target,&serde_json::json!({"season_number":0,"name":"特别篇","episodes":[{"episode_number":1,"name":"已入库特别篇","overview":"简介"},{"episode_number":2,"name":"没有本地文件"}]})).unwrap());
+    let episodes = f.query(&library, Some(&season.item_id));
+    assert_eq!(episodes.len(), 1);
+    assert_eq!(episodes[0].title, "已入库特别篇");
+    assert_eq!(
+        f.store
+            .progress(&library.source_id, &episode.item_id)
+            .unwrap()
+            .unwrap()
+            .position_seconds,
+        123.0
+    );
+    let foreign = f
+        .store
+        .start_scrape("foreign", &library.library_id, "zh-CN", false);
+    assert!(foreign.is_err());
+    f.store
+        .unbind_match(&library.source_id, &series.item_id)
+        .unwrap();
+    assert!(f
+        .store
+        .item(&library.source_id, &episode.item_id)
+        .unwrap()
+        .metadata
+        .is_none());
+    assert!(f
+        .store
+        .progress(&library.source_id, &episode.item_id)
+        .unwrap()
+        .is_some());
+}
+
+#[test]
 fn resume_includes_episode_leaves_and_excludes_completed_missing_and_foreign_sources() {
     let f = Fixture::new();
     f.video("Show/Season 1/Show S01E01.mkv");

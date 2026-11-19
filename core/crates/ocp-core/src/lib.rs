@@ -17,6 +17,7 @@ mod danmaku_load;
 mod diagnostic_export;
 mod events;
 mod library;
+mod library_scrape;
 mod media;
 mod network;
 mod preferences;
@@ -380,15 +381,92 @@ impl Core {
                     &input.api_base,
                     service.http(),
                 );
-                service.run(cancellable(cancelled, async move {
+                let validation = service.run(cancellable(cancelled, async move {
                     client.validate_access().await?;
                     Ok(())
-                }))?;
+                }));
+                if let Err(error) = validation {
+                    if matches!(error.0, 2001 | 2003) {
+                        if let Ok(mut library) = self.library.lock() {
+                            library.online_failed(generation);
+                        }
+                    }
+                    return Err(error);
+                }
                 self.library
                     .lock()
                     .map_err(|_| CommandError::invalid("library service unavailable"))?
                     .validated(&input, generation)
                     .map_err(|e| CommandError::invalid(e.to_string()))
+            })();
+            let response = match result {
+                Ok(data) => ApiResponse::ok(data),
+                Err(CommandError(code, retryable, message)) => {
+                    ApiResponse::error(code, retryable, message, Value::Null)
+                }
+            };
+            return serde_json::to_string(&response).map_err(CoreError::InvalidJson);
+        }
+        if matches!(method, "library.match.candidates" | "library.match.bind") {
+            arguments
+                .as_object_mut()
+                .expect("validated object")
+                .remove("requestId");
+            let result = (|| -> Result<Value, CommandError> {
+                let request = self
+                    .library
+                    .lock()
+                    .map_err(|_| CommandError::invalid("library service unavailable"))?
+                    .prepare_match(&arguments, method == "library.match.bind")
+                    .map_err(CommandError::from)?;
+                let service = self.network().map_err(|e| CommandError(1500, false, e))?;
+                let credentials = request.credentials.clone();
+                let client = ocp_tmdb::TmdbClient::with_http(
+                    &credentials.key,
+                    &credentials.api_base,
+                    service.http(),
+                );
+                let item = request.target.item.clone();
+                let query = request.query.clone().unwrap_or_else(|| item.title.clone());
+                let id = request.tmdb_id;
+                let operation = service.run(cancellable(cancelled, async move {
+                    let typ = if item.kind == ocp_library::ItemKind::Movie {
+                        ocp_tmdb::MediaType::Movie
+                    } else {
+                        ocp_tmdb::MediaType::Tv
+                    };
+                    if let Some(id) = id {
+                        Ok(serde_json::to_value(
+                            client
+                                .entity_checked(id, typ, &credentials.language)
+                                .await?,
+                        )
+                        .map_err(|e| CommandError::invalid(e.to_string()))?)
+                    } else {
+                        let results = client
+                            .search_checked(&query, typ, None, &credentials.language)
+                            .await?;
+                        Ok(json!(library_scrape::candidates(&item, results)))
+                    }
+                }));
+                let payload = match operation {
+                    Ok(payload) => payload,
+                    Err(error) => {
+                        if matches!(error.0, 2001 | 2003) {
+                            if let Ok(mut library) = self.library.lock() {
+                                library.online_failed(request.credentials.generation);
+                            }
+                        }
+                        return Err(error);
+                    }
+                };
+                let bound = self
+                    .library
+                    .lock()
+                    .map_err(|_| CommandError::invalid("library service unavailable"))?
+                    .finish_match(&request, payload)
+                    .map_err(CommandError::from)?;
+                Ok(bound)
             })();
             let response = match result {
                 Ok(data) => ApiResponse::ok(data),
@@ -3039,6 +3117,15 @@ impl From<ocp_tmdb::TmdbError> for CommandError {
             },
         };
         Self(code, retryable, error.to_string())
+    }
+}
+impl From<ocp_library::Error> for CommandError {
+    fn from(error: ocp_library::Error) -> Self {
+        match error {
+            ocp_library::Error::Invalid(message) => Self::invalid(message),
+            ocp_library::Error::NotFound => Self(1604, false, "library record not found".into()),
+            error => Self(1602, false, error.to_string()),
+        }
     }
 }
 impl From<ocp_danmaku::DanmakuError> for CommandError {

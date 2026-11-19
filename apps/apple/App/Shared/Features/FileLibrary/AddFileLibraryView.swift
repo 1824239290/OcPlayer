@@ -82,7 +82,7 @@ struct AddFileLibraryView: View {
                 if let error { Section { Text(error).foregroundStyle(.red).textSelection(.enabled) } }
                 if isWorking { Section { ProgressView("正在处理…") } }
                 Section {
-                    Text("本产品使用 TMDB API，但未获得 TMDB 认可或认证。此版本先建立文件索引，在线刮削将在后续接入。")
+                    Text("目录扫描后会自动从 TMDB 获取电影和电视剧元数据。未匹配的文件可在详情页手动选择。本产品使用 TMDB API，但未获得 TMDB 认可或认证。")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -123,7 +123,7 @@ struct AddFileLibraryView: View {
         let revision = app.fileLibraryCredentialRevision
         let apiBase = app.fileLibraryAPIBase
         do {
-            let receipt = try await app.fileLibrary.validate(key: key, apiBase: apiBase, draftID: draft.id)
+            let receipt = try await app.fileLibrary.validate(key: key, apiBase: apiBase, draftID: draft.id, language: app.tmdb.language)
             guard revision == app.fileLibraryCredentialRevision else { throw OcpCoreError(message: "TMDB 配置已变更，请重新验证") }
             verification = receipt; verifiedRevision = revision
             expiresAt = Date().addingTimeInterval(Double(receipt.expiresInSeconds))

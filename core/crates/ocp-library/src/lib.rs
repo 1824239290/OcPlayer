@@ -3,6 +3,7 @@
 pub mod model;
 pub mod parse;
 pub mod scan;
+pub mod scrape;
 pub mod store;
 
 pub use model::*;

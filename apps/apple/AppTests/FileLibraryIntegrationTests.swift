@@ -100,6 +100,64 @@ final class FileLibraryIntegrationTests: XCTestCase {
     }
 
     #if os(macOS)
+    func testOnlineScrapingManualMatchAndOfflineSnapshotsCrossRealCore() async throws {
+        let tmdb = try LibraryTMDBFixture()
+        defer { tmdb.stop() }
+        let (directory, defaults, library, app) = try fixture()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let root = directory.appendingPathComponent("videos")
+        for relative in ["Movies/1917 (2019).mkv", "Movies/1917.mkv", "TV/Show (2024)/Season 0/Show S00E01.mkv"] {
+            let url = root.appendingPathComponent(relative)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("fixture".utf8).write(to: url)
+        }
+        defaults.set(true, forKey: SettingsKeys.tmdbMirrorEnabled)
+        defaults.set(tmdb.apiBase, forKey: SettingsKeys.tmdbMirrorAPIBaseURL)
+        app.tmdb.setAPIKey("test-valid")
+        let revision = app.fileLibraryCredentialRevision
+        let receipt = try await library.validate(key: "test-valid", apiBase: tmdb.apiBase, draftID: "movies")
+        let movies = try await library.create(draftID: "movies", verificationID: receipt.verificationId, credentialRevision: revision,
+            apiBase: tmdb.apiBase, source: nil, root: root, subdirectory: "Movies", sourceName: "Files", name: "Movies", type: .movies)
+        let source = try XCTUnwrap(library.sources.first)
+        try await waitForScrape(library, sourceID: source.sourceId, libraryID: movies.library.libraryId, status: "needsMatch")
+        let page = try await library.page(.init(sourceId: source.sourceId, libraryId: movies.library.libraryId))
+        let unmatched = try XCTUnwrap(page.items.first { $0.year == nil })
+        let automatic = try XCTUnwrap(page.items.first { $0.year == 2019 })
+        XCTAssertEqual(automatic.matchStatus, "matched")
+        XCTAssertNil(unmatched.metadata)
+        XCTAssertNotNil(automatic.metadata)
+        let results = try await library.candidates(item: unmatched, query: "1917", key: "test-valid", apiBase: tmdb.apiBase, language: "zh-CN")
+        XCTAssertEqual(results.candidates.first?.mediaType, "movie")
+        try await library.bind(item: unmatched, inputVersion: results.inputVersion, tmdbID: 18)
+        try await waitForScrape(library, sourceID: source.sourceId, libraryID: movies.library.libraryId, status: "completed")
+        let manualDetail = try await library.detail(sourceID: source.sourceId, itemID: unmatched.itemId)
+        XCTAssertEqual(manualDetail.item.title, "人工选择的电影")
+        let tvReceipt = try await library.validate(key: "test-valid", apiBase: tmdb.apiBase, draftID: "tv")
+        let tv = try await library.create(draftID: "tv", verificationID: tvReceipt.verificationId, credentialRevision: revision,
+            apiBase: tmdb.apiBase, source: source, root: root, subdirectory: "TV", sourceName: "Files", name: "TV", type: .tvshows)
+        try await waitForScrape(library, sourceID: source.sourceId, libraryID: tv.library.libraryId, status: "completed")
+        let shows = try await library.page(.init(sourceId: source.sourceId, libraryId: tv.library.libraryId))
+        let show = try XCTUnwrap(shows.items.first)
+        let seasons = try await library.page(.init(sourceId: source.sourceId, parentId: show.itemId))
+        let season = try XCTUnwrap(seasons.items.first)
+        XCTAssertEqual(season.seasonNumber, 0)
+        XCTAssertEqual(season.title, "特别篇")
+        let episodes = try await library.page(.init(sourceId: source.sourceId, parentId: season.itemId))
+        XCTAssertEqual(episodes.totalCount, 1)
+        XCTAssertEqual(episodes.items.first?.title, "第一特别篇")
+        app.tmdb.setAPIKey(nil)
+        let reopened = FileLibraryCoordinator(directory: directory.appendingPathComponent("catalog"))
+        try await reopened.setup()
+        let retained = try await reopened.detail(sourceID: source.sourceId, itemID: unmatched.itemId)
+        XCTAssertEqual(retained.item.title, "人工选择的电影")
+        XCTAssertNotNil(retained.item.metadata)
+        _ = try await reopened.preparePlayback(item: retained.item, asset: XCTUnwrap(retained.assets.first))
+        try await reopened.unbind(item: retained.item)
+        let unbound = try await reopened.detail(sourceID: source.sourceId, itemID: unmatched.itemId)
+        XCTAssertNil(unbound.item.metadata)
+        XCTAssertEqual(unbound.item.title, "1917")
+    }
+
     func testRealValidationCategoryTreeBookmarkRestoreAndPermanentResume() async throws {
         let tmdb = try LibraryTMDBFixture()
         defer { tmdb.stop() }
@@ -224,6 +282,14 @@ final class FileLibraryIntegrationTests: XCTestCase {
         }
         XCTFail("Directory scan did not finish")
     }
+    private func waitForScrape(_ library: FileLibraryCoordinator, sourceID: String, libraryID: String, status: String) async throws {
+        for _ in 0..<200 {
+            let runs = try await library.scrapes(sourceID: sourceID)
+            if runs.first(where: { $0.libraryId == libraryID })?.status == status { return }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTFail("TMDB scrape did not reach \(status)")
+    }
     #endif
 }
 
@@ -263,12 +329,22 @@ private final class LibraryTMDBFixture {
         import http.server, json, urllib.parse
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
-                query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                parsed = urllib.parse.urlparse(self.path)
+                query = urllib.parse.parse_qs(parsed.query)
                 valid = query.get('api_key') == ['test-valid']
                 self.send_response(200 if valid else 401)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
-                payload = {'images': {'secure_base_url': 'https://image.tmdb.org/t/p/', 'poster_sizes': ['w500']}, 'change_keys': ['title']} if valid else {'status_code': 7}
+                movie = {'id': 17, 'title': '1917', 'release_date': '2019-12-01', 'overview': '电影简介', 'poster_path': '/movie.jpg'}
+                show = {'id': 24, 'name': 'Show', 'first_air_date': '2024-01-01', 'overview': '整剧简介', 'poster_path': '/show.jpg'}
+                if not valid: payload = {'status_code': 7}
+                elif parsed.path.endswith('/search/movie'): payload = {'results': [movie]}
+                elif parsed.path.endswith('/search/tv'): payload = {'results': [show]}
+                elif parsed.path.endswith('/movie/17'): payload = movie
+                elif parsed.path.endswith('/movie/18'): payload = {'id': 18, 'title': '人工选择的电影', 'overview': '人工选择简介'}
+                elif parsed.path.endswith('/tv/24'): payload = show
+                elif parsed.path.endswith('/tv/24/season/0'): payload = {'season_number': 0, 'name': '特别篇', 'episodes': [{'id': 241, 'episode_number': 1, 'name': '第一特别篇'}, {'id': 242, 'episode_number': 2, 'name': '未入库特别篇'}]}
+                else: payload = {'images': {'secure_base_url': 'https://image.tmdb.org/t/p/', 'poster_sizes': ['w500']}, 'change_keys': ['title']}
                 self.wfile.write(json.dumps(payload).encode())
             def log_message(self, *args): pass
         server = http.server.HTTPServer(('127.0.0.1', 0), Handler)

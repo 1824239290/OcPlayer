@@ -200,6 +200,29 @@ impl<T: ocp_http::HttpTransport> TmdbClient<T> {
         year: Option<i64>,
         language: &str,
     ) -> Result<Vec<TmdbSearchResult>, TmdbError> {
+        self.read_search(query, media_type, year, language, false)
+            .await
+    }
+
+    pub async fn search_checked(
+        &self,
+        query: &str,
+        media_type: MediaType,
+        year: Option<i64>,
+        language: &str,
+    ) -> Result<Vec<TmdbSearchResult>, TmdbError> {
+        self.read_search(query, media_type, year, language, true)
+            .await
+    }
+
+    async fn read_search(
+        &self,
+        query: &str,
+        media_type: MediaType,
+        year: Option<i64>,
+        language: &str,
+        strict: bool,
+    ) -> Result<Vec<TmdbSearchResult>, TmdbError> {
         let mut params = vec![("query", query.to_owned())];
         if let Some(year) = year {
             match media_type {
@@ -215,6 +238,11 @@ impl<T: ocp_http::HttpTransport> TmdbClient<T> {
         };
         let raw: serde_json::Value = self.get(endpoint, language, &params).await?;
         let raw = object(&raw)?;
+        if strict && !raw.get("results").is_some_and(serde_json::Value::is_array) {
+            return Err(TmdbError::Response(
+                "search response has no results array".into(),
+            ));
+        }
         Ok(entries(raw, "results")
             .filter_map(|entry| {
                 Some(TmdbSearchResult {
@@ -240,6 +268,25 @@ impl<T: ocp_http::HttpTransport> TmdbClient<T> {
         media_type: MediaType,
         language: &str,
     ) -> Result<TmdbEntity, TmdbError> {
+        self.read_entity(id, media_type, language, false).await
+    }
+
+    pub async fn entity_checked(
+        &self,
+        id: i64,
+        media_type: MediaType,
+        language: &str,
+    ) -> Result<TmdbEntity, TmdbError> {
+        self.read_entity(id, media_type, language, true).await
+    }
+
+    async fn read_entity(
+        &self,
+        id: i64,
+        media_type: MediaType,
+        language: &str,
+        strict: bool,
+    ) -> Result<TmdbEntity, TmdbError> {
         let path = match media_type {
             MediaType::Movie => format!("movie/{id}"),
             MediaType::Tv => format!("tv/{id}"),
@@ -251,6 +298,11 @@ impl<T: ocp_http::HttpTransport> TmdbClient<T> {
         )];
         let raw: serde_json::Value = self.get(&path, language, &query).await?;
         let mut primary = decode_entity(&raw, media_type)?;
+        if strict && primary.id != id {
+            return Err(TmdbError::Response(
+                "entity response identity mismatch".into(),
+            ));
+        }
         let title = if media_type == MediaType::Movie {
             &primary.title
         } else {
@@ -261,6 +313,9 @@ impl<T: ocp_http::HttpTransport> TmdbClient<T> {
             // Cancellation of the enclosing command still drops this entire future.
             if let Ok(raw) = self.get::<serde_json::Value>(&path, "en-US", &query).await {
                 if let Ok(other) = decode_entity(&raw, media_type) {
+                    if strict && other.id != id {
+                        return Ok(primary);
+                    }
                     primary.title = primary.title.or(other.title);
                     primary.name = primary.name.or(other.name);
                     primary.overview = primary.overview.or(other.overview);
@@ -279,10 +334,58 @@ impl<T: ocp_http::HttpTransport> TmdbClient<T> {
         season_number: i64,
         language: &str,
     ) -> Result<TmdbSeason, TmdbError> {
+        self.read_season(tv_id, season_number, language, false)
+            .await
+    }
+
+    /// File catalogs require an explicit matching season number before writing
+    /// permanent local episode projections. Legacy enrichment stays tolerant.
+    pub async fn season_checked(
+        &self,
+        tv_id: i64,
+        season_number: i64,
+        language: &str,
+    ) -> Result<TmdbSeason, TmdbError> {
+        self.read_season(tv_id, season_number, language, true).await
+    }
+
+    async fn read_season(
+        &self,
+        tv_id: i64,
+        season_number: i64,
+        language: &str,
+        strict: bool,
+    ) -> Result<TmdbSeason, TmdbError> {
         let raw: serde_json::Value = self
             .get(&format!("tv/{tv_id}/season/{season_number}"), language, &[])
             .await?;
         let raw = object(&raw)?;
+        if strict
+            && (raw.get("season_number").and_then(serde_json::Value::as_i64) != Some(season_number)
+                || !raw.get("episodes").is_some_and(serde_json::Value::is_array))
+        {
+            return Err(TmdbError::Response(
+                "season response identity mismatch".into(),
+            ));
+        }
+        if strict {
+            let mut numbers = std::collections::HashSet::new();
+            for entry in entries(raw, "episodes") {
+                let number = entry
+                    .get("episode_number")
+                    .and_then(serde_json::Value::as_i64);
+                if number.is_none_or(|n| n < 0 || !numbers.insert(n))
+                    || entry
+                        .get("id")
+                        .and_then(serde_json::Value::as_i64)
+                        .is_none_or(|id| id <= 0)
+                {
+                    return Err(TmdbError::Response(
+                        "season contains invalid episode identities".into(),
+                    ));
+                }
+            }
+        }
         Ok(TmdbSeason {
             season_number: integer(raw, "season_number").unwrap_or(season_number),
             name: text(raw, "name"),

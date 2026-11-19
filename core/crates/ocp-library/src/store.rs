@@ -6,7 +6,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
 
 pub struct Store {
-    db: Connection,
+    pub(crate) db: Connection,
     path: PathBuf,
 }
 
@@ -22,15 +22,26 @@ impl Store {
         db.pragma_update(None, "foreign_keys", true)?;
         db.pragma_update(None, "journal_mode", "WAL")?;
         let version: i64 = db.pragma_query_value(None, "user_version", |r| r.get(0))?;
-        if version > 1 {
+        if version > 2 {
             return Err(Error::Invalid(
                 "library database was created by a newer version".into(),
             ));
         }
-        if version == 0 {
-            let tx = db.unchecked_transaction()?;
-            tx.execute_batch(include_str!("../schema/v1.sql"))?;
-            tx.pragma_update(None, "user_version", 1)?;
+        if version < 2 {
+            let tx = rusqlite::Transaction::new_unchecked(
+                &db,
+                rusqlite::TransactionBehavior::Immediate,
+            )?;
+            // Another handle may have migrated while this one waited for the
+            // write lock. Read the version again inside the migration boundary.
+            let locked_version: i64 = tx.pragma_query_value(None, "user_version", |r| r.get(0))?;
+            if locked_version == 0 {
+                tx.execute_batch(include_str!("../schema/v1.sql"))?;
+            }
+            if locked_version < 2 {
+                tx.execute_batch(include_str!("../schema/v2.sql"))?;
+                tx.pragma_update(None, "user_version", 2)?;
+            }
             tx.commit()?;
         }
         Ok(Self {
@@ -121,7 +132,10 @@ impl Store {
             }
             return Ok(previous);
         }
-        let tx = self.db.unchecked_transaction()?;
+        let tx = rusqlite::Transaction::new_unchecked(
+            &self.db,
+            rusqlite::TransactionBehavior::Immediate,
+        )?;
         let source_id = if let Some(id) = existing_source {
             let stored_root: String = tx
                 .query_row(
@@ -181,7 +195,10 @@ impl Store {
         if let Some(id) = active {
             return self.job(source_id, &id);
         }
-        let tx = self.db.unchecked_transaction()?;
+        let tx = rusqlite::Transaction::new_unchecked(
+            &self.db,
+            rusqlite::TransactionBehavior::Immediate,
+        )?;
         let generation: i64 = tx.query_row(
             "SELECT COALESCE(MAX(generation),0)+1 FROM job WHERE library_id=?1",
             [library_id],
@@ -246,7 +263,10 @@ impl Store {
     }
 
     pub fn directory_done(&self, job_id: &str, relative: &str) -> Result<(), Error> {
-        let tx = self.db.unchecked_transaction()?;
+        let tx = rusqlite::Transaction::new_unchecked(
+            &self.db,
+            rusqlite::TransactionBehavior::Immediate,
+        )?;
         let changed = tx.execute(
             "UPDATE job_directory SET done=1 WHERE job_id=?1 AND relative_path=?2 AND done=0",
             params![job_id, relative],
@@ -268,7 +288,10 @@ impl Store {
     }
 
     pub fn finish_scan(&self, job: &Job) -> Result<(), Error> {
-        let tx = self.db.unchecked_transaction()?;
+        let tx = rusqlite::Transaction::new_unchecked(
+            &self.db,
+            rusqlite::TransactionBehavior::Immediate,
+        )?;
         require_current_generation(&tx, job)?;
         let failures: i64 = tx.query_row(
             "SELECT error_count FROM job WHERE job_id=?1",
@@ -310,7 +333,10 @@ impl Store {
                 "parsed file category conflicts with library type".into(),
             ));
         }
-        let tx = self.db.unchecked_transaction()?;
+        let tx = rusqlite::Transaction::new_unchecked(
+            &self.db,
+            rusqlite::TransactionBehavior::Immediate,
+        )?;
         require_current_generation(&tx, job)?;
         let existing: Option<(String,i64)> = tx.query_row("SELECT asset_id,seen_generation FROM entry WHERE source_id=?1 AND library_id=?2 AND relative_path=?3", params![job.source_id,job.library_id,relative], |r| Ok((r.get(0)?,r.get(1)?))).optional()?;
         let asset_id = existing
@@ -409,7 +435,10 @@ impl Store {
                 "sourceId is required; startIndex >= 0, limit in 1...500".into(),
             ));
         }
-        let tx = self.db.unchecked_transaction()?;
+        let tx = rusqlite::Transaction::new_unchecked(
+            &self.db,
+            rusqlite::TransactionBehavior::Immediate,
+        )?;
         self.source(&input.source_id)?;
         if let Some(id) = &input.library_id {
             self.library(&input.source_id, id)?;
@@ -417,7 +446,7 @@ impl Store {
         if let Some(id) = &input.parent_id {
             self.item(&input.source_id, id)?;
         }
-        let where_clause = "c.source_id=?1 AND (?2 IS NULL OR c.library_id=?2) AND (?3 IS NULL OR l.type=?3) AND ((?4 IS NULL AND c.parent_id IS NULL) OR c.parent_id=?4) AND (?5='' OR instr(lower(c.title),lower(?5))>0 OR instr(lower(COALESCE(json_extract(m.metadata,'$.title'),json_extract(m.metadata,'$.name'),'')),lower(?5))>0)";
+        let where_clause = "c.source_id=?1 AND (?2 IS NULL OR c.library_id=?2) AND (?3 IS NULL OR l.type=?3) AND ((?4 IS NULL AND c.parent_id IS NULL) OR c.parent_id=?4) AND (?5='' OR instr(lower(c.title),lower(?5))>0 OR instr(lower(COALESCE(json_extract(m.metadata,'$.title'),json_extract(m.metadata,'$.name'),json_extract(d.metadata,'$.name'),'')),lower(?5))>0)";
         let keys = params![
             input.source_id,
             input.library_id,
@@ -427,12 +456,12 @@ impl Store {
             input.limit,
             input.start_index
         ];
-        let sql = format!("{ITEM_SELECT} JOIN library l ON l.library_id=c.library_id WHERE {where_clause} ORDER BY c.season_number,c.episode_number,COALESCE(json_extract(m.metadata,'$.title'),json_extract(m.metadata,'$.name'),c.title) COLLATE NOCASE,c.item_id LIMIT ?6 OFFSET ?7");
+        let sql = format!("{ITEM_SELECT} JOIN library l ON l.library_id=c.library_id WHERE {where_clause} ORDER BY c.season_number,c.episode_number,COALESCE(json_extract(m.metadata,'$.title'),json_extract(m.metadata,'$.name'),json_extract(d.metadata,'$.name'),c.title) COLLATE NOCASE,c.item_id LIMIT ?6 OFFSET ?7");
         let mut q = self.db.prepare(&sql)?;
         let items = q
             .query_map(keys, read_item)?
             .collect::<Result<Vec<_>, _>>()?;
-        let total = self.db.query_row(&format!("SELECT COUNT(*) FROM catalog_item c JOIN library l ON l.library_id=c.library_id LEFT JOIN item_match m ON m.source_id=c.source_id AND m.item_id=c.item_id WHERE {where_clause}"),
+        let total = self.db.query_row(&format!("SELECT COUNT(*) FROM catalog_item c JOIN library l ON l.library_id=c.library_id LEFT JOIN item_match m ON m.source_id=c.source_id AND m.item_id=c.item_id LEFT JOIN item_metadata d ON d.source_id=c.source_id AND d.item_id=c.item_id WHERE {where_clause}"),
             params![input.source_id,input.library_id,input.library_type.map(LibraryType::as_str),input.parent_id,input.search], |r| r.get(0))?;
         drop(q);
         tx.commit()?;
@@ -562,13 +591,22 @@ impl Store {
                 "TMDB identity or movie/tv category mismatch".into(),
             ));
         }
-        let changed = self.db.execute("INSERT INTO item_match VALUES(?1,?2,?3,?4,?5,?6,?7,?8) ON CONFLICT(source_id,item_id) DO UPDATE SET media_type=excluded.media_type,tmdb_id=excluded.tmdb_id,language=excluded.language,metadata=excluded.metadata,manual_lock=excluded.manual_lock,fetched_at=excluded.fetched_at WHERE item_match.manual_lock=0 OR excluded.manual_lock=1",
+        let tx = rusqlite::Transaction::new_unchecked(
+            &self.db,
+            rusqlite::TransactionBehavior::Immediate,
+        )?;
+        let changed = tx.execute("INSERT INTO item_match VALUES(?1,?2,?3,?4,?5,?6,?7,?8) ON CONFLICT(source_id,item_id) DO UPDATE SET media_type=excluded.media_type,tmdb_id=excluded.tmdb_id,language=excluded.language,metadata=excluded.metadata,manual_lock=excluded.manual_lock,fetched_at=excluded.fetched_at WHERE item_match.manual_lock=0 OR excluded.manual_lock=1",
             params![source_id,item_id,media_type,tmdb_id,language,metadata.to_string(),manual,crate::now()])?;
+        if changed > 0 {
+            tx.execute("UPDATE catalog_item SET match_revision=match_revision+1 WHERE source_id=?1 AND item_id=?2", params![source_id,item_id])?;
+            tx.execute("DELETE FROM item_metadata WHERE source_id=?1 AND item_id IN (SELECT item_id FROM catalog_item WHERE source_id=?1 AND series_id=?2)", params![source_id,item_id])?;
+        }
+        tx.commit()?;
         Ok(changed > 0)
     }
 }
 
-const ITEM_SELECT: &str = "SELECT c.source_id,c.library_id,c.item_id,c.kind,c.title,c.year,c.parent_id,c.series_id,c.season_number,c.episode_number,c.first_seen_at,m.metadata,EXISTS(SELECT 1 FROM item_asset a JOIN entry e ON e.source_id=a.source_id AND e.asset_id=a.asset_id WHERE a.source_id=c.source_id AND a.item_id=c.item_id AND e.available=1) FROM catalog_item c LEFT JOIN item_match m ON m.source_id=c.source_id AND m.item_id=c.item_id";
+const ITEM_SELECT: &str = "SELECT c.source_id,c.library_id,c.item_id,c.kind,c.title,c.year,c.parent_id,c.series_id,c.season_number,c.episode_number,c.first_seen_at,COALESCE(m.metadata,d.metadata),EXISTS(SELECT 1 FROM item_asset a JOIN entry e ON e.source_id=a.source_id AND e.asset_id=a.asset_id WHERE a.source_id=c.source_id AND a.item_id=c.item_id AND e.available=1) FROM catalog_item c LEFT JOIN item_match m ON m.source_id=c.source_id AND m.item_id=c.item_id LEFT JOIN item_metadata d ON d.source_id=c.source_id AND d.item_id=c.item_id";
 
 fn require_current_generation(db: &Connection, job: &Job) -> Result<(), Error> {
     let generation: i64 = db.query_row(
@@ -607,6 +645,26 @@ fn read_item(r: &rusqlite::Row<'_>) -> rusqlite::Result<Item> {
     } else {
         "unmatched"
     };
+    let parsed: Option<serde_json::Value> =
+        metadata.as_ref().and_then(|m| serde_json::from_str(m).ok());
+    let title = parsed
+        .as_ref()
+        .and_then(|m| {
+            ["title", "name"]
+                .iter()
+                .find_map(|key| m.get(key)?.as_str().filter(|s| !s.is_empty()))
+        })
+        .map(str::to_owned)
+        .unwrap_or(r.get(4)?);
+    let year = parsed
+        .as_ref()
+        .and_then(|m| {
+            ["release_date", "first_air_date"]
+                .iter()
+                .find_map(|key| m.get(key)?.as_str())
+        })
+        .and_then(|date| date.get(..4)?.parse::<i64>().ok())
+        .or(r.get(5)?);
     Ok(Item {
         source_id: r.get(0)?,
         library_id: r.get(1)?,
@@ -618,14 +676,14 @@ fn read_item(r: &rusqlite::Row<'_>) -> rusqlite::Result<Item> {
             "episode" => ItemKind::Episode,
             _ => ItemKind::Unidentified,
         },
-        title: r.get(4)?,
-        year: r.get(5)?,
+        title,
+        year,
         parent_id: r.get(6)?,
         series_id: r.get(7)?,
         season_number: r.get(8)?,
         episode_number: r.get(9)?,
         first_seen_at: r.get(10)?,
-        metadata: metadata.and_then(|m| serde_json::from_str(&m).ok()),
+        metadata: parsed,
         match_status: match_status.into(),
         playable: r.get(12)?,
     })

@@ -16,6 +16,10 @@ public sealed record FileLibraryItem(string SourceId, string LibraryId, string I
 public sealed record FileLibraryAsset(string SourceId, string AssetId, string RelativePath, long Size, bool Available);
 public sealed record FileLibraryJob(string JobId, string SourceId, string LibraryId, long Generation, string Status,
     long FilesFound, long DirectoriesDone, long ErrorCount, string? LastError);
+public sealed record FileLibraryScrapeRun(string RunId, string SourceId, string LibraryId, string Status, string Language,
+    bool Refresh, long Total, long Completed, long Unmatched, long Failed, string? LastError, double? NextRetryAt);
+public sealed record FileLibraryMatchCandidate(long Id, string MediaType, string? Title, string? OriginalTitle, int? Year, string? Overview, string? PosterPath);
+public sealed record FileLibraryMatchCandidates(string InputVersion, FileLibraryMatchCandidate[] Candidates);
 public sealed record FileLibraryProgress(string SourceId, string ItemId, double PositionSeconds, double? DurationSeconds,
     bool Played, bool Completed, double RecordedAt);
 public sealed record FileLibraryValidation(string Status, string VerificationId, int ExpiresInSeconds);
@@ -44,8 +48,8 @@ public sealed class OcpFileLibrary(OcpCoreClient client)
     public async Task OpenAsync(string directory, CancellationToken cancellation = default)
         => _ = await Invoke<JsonElement>("library.open", new { directory }, cancellation).ConfigureAwait(false);
     public Task<FileLibraryValidation> ValidateAsync(string apiKey, string apiBase, string credentialRevision, string draftId,
-        CancellationToken cancellation = default)
-        => Invoke<FileLibraryValidation>("tmdb.access.validate", new { apiKey, apiBase, credentialRevision, draftId }, cancellation);
+        CancellationToken cancellation = default, string language = "zh-CN")
+        => Invoke<FileLibraryValidation>("tmdb.access.validate", new { apiKey, apiBase, credentialRevision, draftId, language }, cancellation);
     public async Task InvalidateCredentialsAsync(CancellationToken cancellation = default)
         => _ = await Invoke<JsonElement>("tmdb.access.invalidate", new { }, cancellation).ConfigureAwait(false);
     public Task<FileLibraryAccess> PrepareAccessAsync(string rootPath, string? accessRef = null, CancellationToken cancellation = default)
@@ -69,6 +73,19 @@ public sealed class OcpFileLibrary(OcpCoreClient client)
         => (await Invoke<Job>($"library.scan.{action.ToString().ToLowerInvariant()}", new { sourceId, jobId }, cancellation).ConfigureAwait(false)).Value;
     public async Task<FileLibraryJob[]> JobsAsync(string sourceId, CancellationToken cancellation = default)
         => (await Invoke<Jobs>("library.jobs.snapshot", new { sourceId }, cancellation).ConfigureAwait(false)).Values;
+    public async Task<FileLibraryScrapeRun> ScrapeAsync(string sourceId, string libraryId, bool refresh = false, CancellationToken cancellation = default)
+        => (await Invoke<ScrapeRun>("library.scrape.start", new { sourceId, libraryId, refresh }, cancellation).ConfigureAwait(false)).Value;
+    public enum ScrapeAction { Pause, Resume, Cancel, Retry }
+    public async Task<FileLibraryScrapeRun> ControlScrapeAsync(string sourceId, string runId, ScrapeAction action, CancellationToken cancellation = default)
+        => (await Invoke<ScrapeRun>($"library.scrape.{action.ToString().ToLowerInvariant()}", new { sourceId, runId }, cancellation).ConfigureAwait(false)).Value;
+    public async Task<FileLibraryScrapeRun[]> ScrapesAsync(string sourceId, CancellationToken cancellation = default)
+        => (await Invoke<ScrapeRuns>("library.scrape.snapshot", new { sourceId }, cancellation).ConfigureAwait(false)).Values;
+    public Task<FileLibraryMatchCandidates> CandidatesAsync(string sourceId, string itemId, string query, CancellationToken cancellation = default)
+        => Invoke<FileLibraryMatchCandidates>("library.match.candidates", new { sourceId, itemId, query }, cancellation);
+    public async Task<FileLibraryItem> BindAsync(string sourceId, string itemId, string inputVersion, long tmdbId, CancellationToken cancellation = default)
+        => (await Invoke<BindResult>("library.match.bind", new { sourceId, itemId, inputVersion, tmdbId }, cancellation).ConfigureAwait(false)).Item;
+    public async Task UnbindAsync(string sourceId, string itemId, CancellationToken cancellation = default)
+        => _ = await Invoke<JsonElement>("library.match.unbind", new { sourceId, itemId }, cancellation).ConfigureAwait(false);
     public Task<FileLibraryPlayback> PreparePlaybackAsync(string sourceId, string itemId, string assetId, CancellationToken cancellation = default)
         => Invoke<FileLibraryPlayback>("library.playback.prepare", new { sourceId, itemId, assetId }, cancellation);
     public async Task<bool> RecordProgressAsync(FileLibraryProgress progress, CancellationToken cancellation = default)
@@ -86,5 +103,8 @@ public sealed class OcpFileLibrary(OcpCoreClient client)
     private sealed record Libraries([property: System.Text.Json.Serialization.JsonPropertyName("libraries")] FileLibraryDefinition[] Values);
     private sealed record Job([property: System.Text.Json.Serialization.JsonPropertyName("job")] FileLibraryJob Value);
     private sealed record Jobs([property: System.Text.Json.Serialization.JsonPropertyName("jobs")] FileLibraryJob[] Values);
+    private sealed record ScrapeRun([property: System.Text.Json.Serialization.JsonPropertyName("run")] FileLibraryScrapeRun Value);
+    private sealed record ScrapeRuns([property: System.Text.Json.Serialization.JsonPropertyName("runs")] FileLibraryScrapeRun[] Values);
+    private sealed record BindResult(bool Bound, FileLibraryItem Item);
     private sealed record ProgressResult(bool Accepted, FileLibraryProgress? Progress);
 }

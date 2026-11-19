@@ -19,6 +19,7 @@ struct RootView: View {
     @AppStorage(SettingsKeys.bangumiEnabled) private var bangumiEnabled = true
     @AppStorage(SettingsKeys.tmdbMirrorEnabled) private var tmdbMirrorEnabled = false
     @AppStorage(SettingsKeys.tmdbMirrorAPIBaseURL) private var tmdbMirrorAPIBase = ""
+    @AppStorage(SettingsKeys.tmdbMirrorImageBaseURL) private var tmdbMirrorImageBase = ""
     /// 启动动画状态机（门控/时钟/撤除都在 presenter，见 LaunchPresenter）。
     @State private var launch = LaunchPresenter()
     /// iOS 预热可能在后台把 UI 建出来：后台不动画，激活再起表。
@@ -240,6 +241,7 @@ struct RootView: View {
         }
         .onChange(of: tmdbMirrorEnabled) { _, _ in app.fileLibrary.credentialsChanged() }
         .onChange(of: tmdbMirrorAPIBase) { _, _ in app.fileLibrary.credentialsChanged() }
+        .onChange(of: tmdbMirrorImageBase) { _, _ in app.fileLibrary.metadataDidChange() }
         .sheet(isPresented: Binding(
             get: { app.isDirectLinkSheetPresented },
             set: { app.isDirectLinkSheetPresented = $0 }

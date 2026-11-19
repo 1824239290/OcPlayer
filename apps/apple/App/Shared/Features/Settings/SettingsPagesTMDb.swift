@@ -85,7 +85,11 @@ struct TMDbSettingsView: View {
 
             if app.activeFileSourceID != nil {
                 SettingsGlassSection("文件媒体库") {
-                    SettingsNote("文件媒体库共用这份凭据。此版本支持目录扫描和本地播放，在线刮削尚未开放。")
+                    SettingsNote("文件媒体库共用这份凭据。目录扫描后会自动刮削，任务可在媒体库首页暂停或重试。删除凭据后已保存的详情和观看进度仍保留。")
+                    SettingsPickerRow("刮削语言", selection: Binding(get: { tmdb.language }, set: { tmdb.setLanguage($0) })) {
+                        ForEach(TMDbLanguageOption.allCases) { option in Text(option.displayName).tag(option.rawValue) }
+                    }
+                    SettingsNote("修改语言后可在媒体库首页刷新元数据；已有内容保留到刷新成功。")
                 }
             } else {
                 serverSettings

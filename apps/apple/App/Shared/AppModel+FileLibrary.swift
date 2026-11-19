@@ -1,6 +1,7 @@
 import Foundation
 import JellyfinKit
 import OcPlayerCore
+import MetadataKit
 
 extension AppModel {
     static let activeMediaSourceKey = "dev.jumusu.ocplayer.activeMediaSource"
@@ -16,6 +17,14 @@ extension AppModel {
     var fileLibraryCredentialRevision: String {
         let _ = tmdb.credentialGeneration
         return FileLibraryCoordinator.credentialRevision(key: tmdb.rawAPIKey ?? "", apiBase: fileLibraryAPIBase)
+    }
+
+    func fileLibraryImageURL(path: String?) -> URL? {
+        let endpoints = MirrorSettings.tmdbEndpoints(
+            enabled: preferences.bool(forKey: SettingsKeys.tmdbMirrorEnabled),
+            apiRawValue: preferences.string(forKey: SettingsKeys.tmdbMirrorAPIBaseURL) ?? "",
+            imageRawValue: preferences.string(forKey: SettingsKeys.tmdbMirrorImageBaseURL) ?? "")
+        return TMDbImageSize.url(path: path, size: .w500, endpoints: endpoints)
     }
 
     /// Old installations without a selection retain the server restore policy.

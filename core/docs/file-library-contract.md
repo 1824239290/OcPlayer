@@ -1,6 +1,6 @@
-# File-library Core contract, schema 1
+# File-library Core contract, schema 2
 
-The Core implements permanent storage, local enumeration, explicit movie/TV structure, authenticated creation receipts and native SDK projections from `docs/MEDIA-LIBRARY-IMPLEMENTATION-V3.md`. The macOS host now connects source selection, folder/bookmark UI, classified browsing and the existing player. Online scraping, artwork, subtitles and SMB/WebDAV IO remain subsequent slices. `library.capabilities` explicitly reports those limits; the existing server APIs keep their original behavior.
+The Core implements permanent storage, local enumeration, explicit movie/TV structure, authenticated creation receipts, durable TMDB scraping and native SDK projections from `docs/MEDIA-LIBRARY-IMPLEMENTATION-V3.md`. The macOS host connects source selection, folder/bookmark UI, classified browsing, TMDB artwork, manual matching and the existing player. Subtitles, offline artwork retention and SMB/WebDAV IO remain subsequent slices. `library.capabilities` reports `schemaVersion: 2`, `tmdbScraping: true`, `remoteProviders: false`, and only `localFolder`; the existing server APIs keep their original behavior.
 
 All commands use the existing `ocp_call` JSON response envelope and request cancellation ownership. No command requires `OCP_CORE_ENABLED`. Swift uses `OcpFileLibrary`; C# uses `OcpFileLibrary`. The host must detect capabilities from the actual bundled Core before exposing features.
 
@@ -8,12 +8,12 @@ All commands use the existing `ocp_call` JSON response envelope and request canc
 
 1. Open the application data directory with `library.open { directory }`. Clients already configured with `dataDirectory` may use its default. The service opens **Library.sqlite**, not the disposable Media.sqlite cache. Corruption and unknown future schema versions produce an error; no automatic deletion/rebuild is permitted.
 2. Hold the platform's authorized directory scope, then call `library.access.prepare { rootPath, accessRef? }`. The reply contains a short-lived opaque `accessId` and canonical root. `accessRef` refers to a host-owned bookmark; the Core does not decode or store bookmark bytes. The host must retain scope for background scans and each playback/subtitle consumer.
-3. Call `tmdb.access.validate { apiKey, apiBase, credentialRevision, draftId }`. API Key uses the existing query authentication; a read token uses Bearer authentication. The command requests `/configuration` and validates its JSON structure. Nonempty keys, invented booleans, HTML mirror pages and 401/403 responses do not grant creation.
+3. Call `tmdb.access.validate { apiKey, apiBase, credentialRevision, draftId, language? }`. Language defaults to `zh-CN`. API Key uses the existing query authentication; a read token uses Bearer authentication. The command requests `/configuration` and validates its JSON structure. Nonempty keys, invented booleans, HTML mirror pages and 401/403 responses do not grant creation. Successful validation also installs the credentials in this Core handle's memory for online work; no credentials are persisted by the Core.
 4. On success, receive `{ status: "valid", verificationId, expiresInSeconds: 600 }`. Only the Core mints this receipt. It belongs to the draft, credential generation and endpoint. Receipts are process-local and are not restored after restart.
 5. Call `library.create` with `draftId`, `verificationId`, `credentialRevision`, `apiBase`, `accessId`, `kind: "localFolder"`, `sourceId?`, `sourceName`, `rootPath`, `name`, `type: "movies" | "tvshows"`. The directory must belong to the authorized source root. An existing source can add nonoverlapping child directories with different types. The reply contains a persistent library and the initial scan job.
-6. Enumeration runs on a Core-owned background worker and independent database connection. Observe `library.jobs.snapshot`. Reusing an unchanged `draftId` returns the same library and initial job, including after that scan finishes; it does not create another source or silently rescan.
+6. Enumeration runs on a Core-owned background worker and independent database connection. Observe `library.jobs.snapshot`. Creation queues TMDB work automatically; it waits for enumeration to finish, then identifies works and downloads locally present seasons. Observe `library.scrape.snapshot` separately. Reusing an unchanged `draftId` returns the same library and initial scan job, including after that scan finishes; it does not create another source or silently rescan.
 
-Changing or clearing the host TMDB configuration calls `tmdb.access.invalidate`, which revokes receipts, including validations still in flight. Starting validation with a changed key, revision or endpoint also revokes previous receipts before the request finishes. Key material never enters source records, job inputs, the permanent catalog or diagnostic snapshots.
+Changing or clearing the host TMDB configuration calls `tmdb.access.invalidate`, which revokes receipts and pauses online work, including results still in flight. Starting validation with a changed key, revision, endpoint or language also revokes previous receipts before the request finishes. Key material never enters source records, job inputs, the permanent catalog or diagnostic snapshots. Revalidating after restart enables explicit continuation of interrupted queues; it does not gate catalog reads or undo user pauses.
 
 At most two scans run per Core handle. Another new creation keeps its draft outside the database until a worker is available. Explicit scan requests may leave a queued job and return a capacity error; retry that request when capacity is available. Destroying the handle signals pause and joins its workers before native unload.
 
@@ -35,6 +35,12 @@ At most two scans run per Core handle. Another new creation keeps its draft outs
 | `library.scan.start` | `sourceId`, `libraryId` | New job or existing resumable job |
 | `library.scan.pause/resume/cancel` | `sourceId`, `jobId` | Job snapshot; active pause/cancel takes effect at the next checkpoint |
 | `library.jobs.snapshot` | `sourceId` | Latest 100 jobs for that source |
+| `library.scrape.start` | `sourceId`, `libraryId`, optional `refresh` | Durable run; a live/paused run is reused, otherwise a new run is created. Missing validated credentials leave online work waiting |
+| `library.scrape.snapshot` | `sourceId` | Latest run per category, status, total/completed/unmatched/failed counts, safe error text and next retry time |
+| `library.scrape.pause/resume/cancel/retry` | `sourceId`, `runId` | Pause/cancel at the online boundary; resume requires current validated credentials. Retry resets failed/unmatched/scheduled targets |
+| `library.match.candidates` | `sourceId`, movie/series `itemId`, optional `query` | Type-scoped TMDB candidates and an opaque `inputVersion` |
+| `library.match.bind` | `sourceId`, `itemId`, candidate `tmdbId`, `inputVersion` | Download checked metadata and save a manual lock; stale versions/configurations are rejected |
+| `library.match.unbind` | `sourceId`, movie/series `itemId` | Remove the match and child projections, retire its pending online work; assets/progress remain |
 | `library.playback.prepare` | `sourceId`, `itemId`, `assetId` | Checked local file URI, original identities, headers and progress |
 | `library.progress.get` | `sourceId`, `itemId` | Permanent progress or null |
 | `library.progress.record` | Leaf identities, position, optional duration, explicit played/completed flags, recordedAt | Whether the event was accepted and current progress |
@@ -49,12 +55,27 @@ The first parser accepts bracketed release years or dotted release-name years, e
 
 Entry and item identities are stored UUIDs, independent of mutable paths/metadata. Same-path rescans keep identities. Rename detection is not implemented in this slice. Durable directory checkpoints survive restart; interrupted jobs resume explicitly. Failure or cancellation never marks unseen assets missing. A completely successful enumeration can mark missing assets while retaining their index and watching facts. A superseded scan generation cannot publish entries or perform deletion reconciliation. Symlinks are skipped; playback checks the real path stays inside the library root.
 
-Progress belongs to the original source/item. Only strictly later timestamps replace a saved record; stop/near-end positions do not automatically set completed. Matching snapshots and manual locks already have a separate permanent storage boundary, but online matching/scraping commands are not exposed yet. Existing catalog reads do not depend on possessing a current TMDB credential.
+Progress belongs to the original source/item. Only strictly later timestamps replace a saved record; stop/near-end positions do not automatically set completed. Existing catalog reads, permanent metadata and watching facts do not depend on possessing a current TMDB credential.
+
+## Online queue semantics
+
+Schema 2 migrates schema 1 in one transaction, preserving catalog, matches and watch state. It adds `scrape_run`, `scrape_target`, local season/episode metadata, and a monotonic match revision. All mutating multi-statement catalog transactions acquire the SQLite write lock before reading their input, preventing concurrent scan/scrape writes from dropping discovered files.
+
+At most two category queues run per Core handle, with one in-flight request per queue. Network calls run on dedicated workers, outside playback state locks and SQLite transactions. Queue targets represent movies, whole series and locally present seasons; episodes reuse their season download. No absent TMDB episodes or fake playable assets are inserted. New locally discovered episodes can refresh the corresponding season.
+
+Automatic matching retains the existing 0.85 threshold and additionally rejects near ties (confidence gap under 0.1). Missing years and ambiguous same-name works normally require manual selection; a failed match never removes the file. Manual refresh uses the already selected TMDB identity and keeps its lock. File-only checked TMDB methods validate search arrays, entity identities, explicit season numbers and episode identities; legacy server enrichment retains its existing wire tolerance.
+
+401/403 pauses online queues and revokes creation access. Network/timeout/5xx and rate limits schedule up to three durable target attempts, honoring Retry-After where available; the underlying HTTP client's own 429 retry policy remains in effect. Exhausted or malformed targets remain failed for explicit retry. Queue states include `queued`, `running`, `paused`, `interrupted`, `waitingCredentials`, `waitingNetwork`, `completed`, `needsMatch`, `partialFailure`, `cancelled`, `failed`.
+
+Each result checks library revision, scan generation, original parsed input, asset state and match revision in a short write transaction. A credential epoch gate serializes final writes with invalidation. Late results cannot replace a manual match, write after credential invalidation, or publish against a newer scan. Old metadata remains readable after failures; cached metadata is refreshed when older than 30 days or explicitly requested.
+
+The macOS host starts online work after creation and offers continuation/retry plus manual movie/series matching. Artwork uses the existing image pipeline with a source-scoped cache and the configured TMDB image mirror, independently of Key availability. Artwork remains an evictable cache; permanent offline poster retention is not implemented.
 
 ## Validation
 
 - Rust parser/store tests use temporary directories and cover numeric titles, TV hierarchy, source isolation, same-title directories, stable identities, manual locks, interrupted scans, stale generations, unavailable roots, corruption preservation and symlink escapes.
 - Core integration tests use a local HTTP fixture to verify API Key/Bearer authentication, malformed mirror/401/403 rejection, real validation-to-playback command flow, idempotent creation and absence of credentials in database files.
+- Scrape integration fixtures verify automatic movie/TV matching, near ties, S0, one download per season, no fabricated episodes, manual locks, stale input rejection, in-flight credential cancellation, 5xx scheduling/retry, revoked credentials and simultaneous enumeration/online writes. Store fixtures also upgrade a real schema-1 database containing matching metadata and watch state.
 - Swift SDK tests exercise the actual native library for capabilities, access receipts and rejection of invented validation; typed fields retain 64-bit sizes and source identity.
 - macOS host tests use the real native library with a local authenticated HTTP fixture. They cover movie/TV categories within one source, S0, durable bookmarks, canonical-path reauthorization, foreign-directory rejection, credential clearing, permanent resume and switching back to a server. These are catalog/playback-preparation tests, not real video-decoder validation.
 - Public command inventory/negative-boundary contracts include all new commands. C# SDK needs a .NET 10 host for build and platform integration validation.

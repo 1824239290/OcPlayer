@@ -15,7 +15,10 @@ final class FileLibraryCoordinator {
     private(set) var availabilityError: String?
     private(set) var permissionErrors: [String: String] = [:]
     private(set) var catalogRevision = 0
+    private(set) var metadataRevision = 0
+    private(set) var configurationRevision = 0
     private(set) var progressError: String?
+    private(set) var scrapingError: String?
 
     @ObservationIgnored private let directory: URL
     @ObservationIgnored private var runtime: FileLibraryRuntime?
@@ -87,18 +90,88 @@ final class FileLibraryCoordinator {
 
     /// Called synchronously on a settings change: an in-flight old validation
     /// cannot authorize creation while an async invalidation is still queued.
-    func credentialsChanged() {
+    func credentialsChanged(notifyUI: Bool = true) {
         lastCredentialRevision = nil
+        scrapingError = nil
+        if notifyUI { configurationRevision &+= 1 }
         if let runtime { _ = try? runtime.sdk.client.call("tmdb.access.invalidate") }
     }
 
-    func validate(key: String, apiBase: String, draftID: String) async throws -> OcpFileLibrary.Validation {
+    func validate(key: String, apiBase: String, draftID: String, language: String = "zh-CN") async throws -> OcpFileLibrary.Validation {
         try await setup()
         let revision = Self.credentialRevision(key: key, apiBase: apiBase)
-        if lastCredentialRevision != revision { credentialsChanged() }
+        if lastCredentialRevision != revision { credentialsChanged(notifyUI: false) }
         lastCredentialRevision = revision
-        return try await withSDK { try await $0.validate(apiKey: key, apiBase: apiBase, credentialRevision: revision, draftId: draftID) }
+        return try await withSDK { try await $0.validate(apiKey: key, apiBase: apiBase, credentialRevision: revision, draftId: draftID, language: language) }
     }
+
+    func scrapes(sourceID: String) async throws -> [OcpFileLibrary.ScrapeRun] {
+        guard capabilities?.tmdbScraping == true else { return [] }
+        return try await withSDK { try await $0.scrapes(sourceId: sourceID) }
+    }
+
+    /// Opening the existing catalog is independent of this online step. User
+    /// pauses/failures stay visible until explicitly resumed or retried.
+    func resumeOnlineWork(sourceID: String, key: String?, apiBase: String, language: String) async {
+        guard capabilities?.tmdbScraping == true else { return }
+        guard let key, !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        do {
+            _ = try await validate(key: key, apiBase: apiBase, draftID: "file-library-online", language: language)
+            let runs = try await scrapes(sourceID: sourceID)
+            let categories = try await libraries(sourceID: sourceID)
+            for category in categories {
+                if let run = runs.first(where: { $0.libraryId == category.libraryId }) {
+                    if ["queued", "interrupted", "waitingCredentials"].contains(run.status) {
+                        try await controlScrape(run, action: .resume)
+                    }
+                } else {
+                    _ = try await withSDK { try await $0.scrape(sourceId: sourceID, libraryId: category.libraryId) }
+                }
+            }
+            scrapingError = nil
+        } catch is CancellationError { return }
+        catch { scrapingError = "在线刮削暂未就绪：\(error.localizedDescription)" }
+    }
+
+    func scrape(sourceID: String, libraryID: String, key: String, apiBase: String, language: String, refresh: Bool = false) async throws {
+        _ = try await validate(key: key, apiBase: apiBase, draftID: "file-library-online", language: language)
+        let run = try await withSDK { try await $0.scrape(sourceId: sourceID, libraryId: libraryID, refresh: refresh) }
+        if ["paused", "interrupted", "waitingCredentials"].contains(run.status) {
+            try await controlScrape(run, action: .resume)
+        }
+        scrapingError = nil
+    }
+
+    func controlScrape(_ run: OcpFileLibrary.ScrapeRun, action: OcpFileLibrary.ScrapeAction) async throws {
+        for attempt in 0..<12 {
+            do {
+                _ = try await withSDK { try await $0.controlScrape(sourceId: run.sourceId, runId: run.runId, action: action) }
+                return
+            } catch {
+                guard [.resume, .retry].contains(action), attempt < 11,
+                      error.localizedDescription.contains("wait for the running scrape") else { throw error }
+                try await Task.sleep(for: .milliseconds(50))
+            }
+        }
+    }
+
+    func candidates(item: OcpFileLibrary.Item, query: String, key: String, apiBase: String, language: String) async throws -> OcpFileLibrary.MatchCandidates {
+        _ = try await validate(key: key, apiBase: apiBase, draftID: "file-library-online", language: language)
+        return try await withSDK { try await $0.candidates(sourceId: item.sourceId, itemId: item.itemId, query: query) }
+    }
+    func bind(item: OcpFileLibrary.Item, inputVersion: String, tmdbID: Int64) async throws {
+        _ = try await withSDK { try await $0.bind(sourceId: item.sourceId, itemId: item.itemId, inputVersion: inputVersion, tmdbId: tmdbID) }
+        // Download only seasons already present in this category.
+        _ = try await withSDK { try await $0.scrape(sourceId: item.sourceId, libraryId: item.libraryId) }
+        metadataDidChange()
+    }
+    func unbind(item: OcpFileLibrary.Item) async throws {
+        try await withSDK { try await $0.unbind(sourceId: item.sourceId, itemId: item.itemId) }
+        metadataDidChange()
+    }
+
+    func metadataDidChange() { metadataRevision &+= 1; catalogRevision &+= 1 }
+    func taskObservationFailed(_ error: Error) { scrapingError = "媒体库任务更新失败：\(error.localizedDescription)" }
 
     func create(draftID: String, verificationID: String, credentialRevision: String, apiBase: String,
                 source: OcpFileLibrary.Source?, root: URL, subdirectory: String,

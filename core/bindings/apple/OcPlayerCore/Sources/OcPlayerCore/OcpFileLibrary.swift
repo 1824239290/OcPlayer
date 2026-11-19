@@ -72,6 +72,34 @@ public final class OcpFileLibrary: @unchecked Sendable {
         public let lastError: String?
         public var id: String { jobId }
     }
+    public struct ScrapeRun: Decodable, Sendable, Identifiable {
+        public let runId: String
+        public let sourceId: String
+        public let libraryId: String
+        public let status: String
+        public let language: String
+        public let refresh: Bool
+        public let total: Int64
+        public let completed: Int64
+        public let unmatched: Int64
+        public let failed: Int64
+        public let lastError: String?
+        public let nextRetryAt: Double?
+        public var id: String { runId }
+    }
+    public struct MatchCandidate: Decodable, Sendable, Identifiable {
+        public let id: Int64
+        public let mediaType: String
+        public let title: String?
+        public let originalTitle: String?
+        public let year: Int?
+        public let overview: String?
+        public let posterPath: String?
+    }
+    public struct MatchCandidates: Decodable, Sendable {
+        public let inputVersion: String
+        public let candidates: [MatchCandidate]
+    }
     public struct Progress: Codable, Sendable {
         public var sourceId: String
         public var itemId: String
@@ -141,8 +169,8 @@ public final class OcpFileLibrary: @unchecked Sendable {
         struct Result: Decodable { let path: String }
         let _: Result = try await invoke("library.open", ["directory": directory.path])
     }
-    public func validate(apiKey: String, apiBase: String, credentialRevision: String, draftId: String) async throws -> Validation {
-        try await invoke("tmdb.access.validate", ["apiKey": apiKey, "apiBase": apiBase, "credentialRevision": credentialRevision, "draftId": draftId])
+    public func validate(apiKey: String, apiBase: String, credentialRevision: String, draftId: String, language: String = "zh-CN") async throws -> Validation {
+        try await invoke("tmdb.access.validate", ["apiKey": apiKey, "apiBase": apiBase, "credentialRevision": credentialRevision, "draftId": draftId, "language": language])
     }
     public func invalidateCredentials() async throws {
         struct Result: Decodable { let invalidated: Bool }
@@ -184,6 +212,34 @@ public final class OcpFileLibrary: @unchecked Sendable {
     public func jobs(sourceId: String) async throws -> [Job] {
         struct Result: Decodable { let jobs: [Job] }
         let result: Result = try await invoke("library.jobs.snapshot", ["sourceId": sourceId]); return result.jobs
+    }
+    public func scrape(sourceId: String, libraryId: String, refresh: Bool = false) async throws -> ScrapeRun {
+        struct Input: Encodable { let sourceId: String; let libraryId: String; let refresh: Bool }
+        struct Result: Decodable { let run: ScrapeRun }
+        let result: Result = try await invoke("library.scrape.start", Input(sourceId: sourceId, libraryId: libraryId, refresh: refresh))
+        return result.run
+    }
+    public enum ScrapeAction: String, Sendable { case pause, resume, cancel, retry }
+    public func controlScrape(sourceId: String, runId: String, action: ScrapeAction) async throws -> ScrapeRun {
+        struct Result: Decodable { let run: ScrapeRun }
+        let result: Result = try await invoke("library.scrape.\(action.rawValue)", ["sourceId": sourceId, "runId": runId])
+        return result.run
+    }
+    public func scrapes(sourceId: String) async throws -> [ScrapeRun] {
+        struct Result: Decodable { let runs: [ScrapeRun] }
+        let result: Result = try await invoke("library.scrape.snapshot", ["sourceId": sourceId]); return result.runs
+    }
+    public func candidates(sourceId: String, itemId: String, query: String) async throws -> MatchCandidates {
+        try await invoke("library.match.candidates", ["sourceId": sourceId, "itemId": itemId, "query": query])
+    }
+    public func bind(sourceId: String, itemId: String, inputVersion: String, tmdbId: Int64) async throws -> Item {
+        struct Input: Encodable { let sourceId: String; let itemId: String; let inputVersion: String; let tmdbId: Int64 }
+        struct Result: Decodable { let bound: Bool; let item: Item }
+        let result: Result = try await invoke("library.match.bind", Input(sourceId: sourceId, itemId: itemId, inputVersion: inputVersion, tmdbId: tmdbId)); return result.item
+    }
+    public func unbind(sourceId: String, itemId: String) async throws {
+        struct Result: Decodable { let unbound: Bool }
+        let _: Result = try await invoke("library.match.unbind", ["sourceId": sourceId, "itemId": itemId])
     }
     public func preparePlayback(sourceId: String, itemId: String, assetId: String) async throws -> Playback {
         try await invoke("library.playback.prepare", ["sourceId": sourceId, "itemId": itemId, "assetId": assetId])
