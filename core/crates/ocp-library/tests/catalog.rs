@@ -77,7 +77,7 @@ impl Drop for Fixture {
 }
 
 #[test]
-fn v1_upgrade_preserves_catalog_and_adds_durable_online_queue() {
+fn v1_and_v2_upgrade_preserve_catalog_and_add_durable_online_queue() {
     let f = Fixture::new();
     f.video("Movie (2020).mkv");
     let library = f.library(LibraryType::Movies);
@@ -105,53 +105,58 @@ fn v1_upgrade_preserves_catalog_and_adds_durable_online_queue() {
             recorded_at: 20.0,
         })
         .unwrap();
-    // Construct an actual v1 file rather than just changing user_version on v2.
-    let old = f.directory.join("old.sqlite");
-    let db = rusqlite::Connection::open(&old).unwrap();
-    db.execute_batch(include_str!("../schema/v1.sql")).unwrap();
-    db.pragma_update(None, "user_version", 1).unwrap();
-    db.execute(
-        "ATTACH DATABASE ?1 AS fixture",
-        [f.store.path().to_str().unwrap()],
-    )
-    .unwrap();
-    db.execute_batch("INSERT INTO source SELECT * FROM fixture.source; INSERT INTO library SELECT * FROM fixture.library; INSERT INTO entry SELECT * FROM fixture.entry; INSERT INTO catalog_item SELECT source_id,library_id,item_id,group_key,kind,title,year,parent_id,series_id,season_number,episode_number,first_seen_at FROM fixture.catalog_item; INSERT INTO item_asset SELECT * FROM fixture.item_asset; INSERT INTO item_match SELECT * FROM fixture.item_match; INSERT INTO watch_state SELECT * FROM fixture.watch_state;").unwrap();
-    drop(db);
-    let upgraded = Store::open_path(&old).unwrap();
-    assert_eq!(
-        upgraded.item(&library.source_id, &movie.item_id).unwrap(),
-        f.store.item(&library.source_id, &movie.item_id).unwrap()
-    );
-    assert_eq!(
-        upgraded
-            .progress(&library.source_id, &movie.item_id)
-            .unwrap()
-            .unwrap()
-            .position_seconds,
-        35.0
-    );
-    let run = upgraded
-        .start_scrape(&library.source_id, &library.library_id, "zh-CN", false)
+    // Construct real older schemas, including source CHECK rebuilding and FK preservation.
+    for version in [1, 2] {
+        let old = f.directory.join(format!("old-{version}.sqlite"));
+        let db = rusqlite::Connection::open(&old).unwrap();
+        db.execute_batch(include_str!("../schema/v1.sql")).unwrap();
+        if version == 2 {
+            db.execute_batch(include_str!("../schema/v2.sql")).unwrap();
+        }
+        db.pragma_update(None, "user_version", version).unwrap();
+        db.execute(
+            "ATTACH DATABASE ?1 AS fixture",
+            [f.store.path().to_str().unwrap()],
+        )
         .unwrap();
-    upgraded.seed_scrape(&run).unwrap();
-    assert_eq!(
-        upgraded
-            .scrape_run(&library.source_id, &run.run_id)
-            .unwrap()
-            .total,
-        1
-    );
-    upgraded.set_scrape_status(&run.run_id, "running").unwrap();
-    upgraded.claim_scrape(&run).unwrap().unwrap();
-    upgraded.recover_scrapes().unwrap();
-    assert_eq!(
-        upgraded
-            .scrape_run(&library.source_id, &run.run_id)
-            .unwrap()
-            .status,
-        "interrupted"
-    );
-    assert!(upgraded.claim_scrape(&run).unwrap().is_some());
+        db.execute_batch("INSERT INTO source SELECT * FROM fixture.source; INSERT INTO library SELECT * FROM fixture.library; INSERT INTO entry SELECT source_id,asset_id,library_id,relative_path,size,mtime,available,seen_generation FROM fixture.entry; INSERT INTO catalog_item(source_id,library_id,item_id,group_key,kind,title,year,parent_id,series_id,season_number,episode_number,first_seen_at) SELECT source_id,library_id,item_id,group_key,kind,title,year,parent_id,series_id,season_number,episode_number,first_seen_at FROM fixture.catalog_item; INSERT INTO item_asset SELECT * FROM fixture.item_asset; INSERT INTO item_match SELECT * FROM fixture.item_match; INSERT INTO watch_state SELECT * FROM fixture.watch_state;").unwrap();
+        drop(db);
+        let upgraded = Store::open_path(&old).unwrap();
+        assert_eq!(
+            upgraded.item(&library.source_id, &movie.item_id).unwrap(),
+            f.store.item(&library.source_id, &movie.item_id).unwrap()
+        );
+        assert_eq!(
+            upgraded
+                .progress(&library.source_id, &movie.item_id)
+                .unwrap()
+                .unwrap()
+                .position_seconds,
+            35.0
+        );
+        let run = upgraded
+            .start_scrape(&library.source_id, &library.library_id, "zh-CN", false)
+            .unwrap();
+        upgraded.seed_scrape(&run).unwrap();
+        assert_eq!(
+            upgraded
+                .scrape_run(&library.source_id, &run.run_id)
+                .unwrap()
+                .total,
+            1
+        );
+        upgraded.set_scrape_status(&run.run_id, "running").unwrap();
+        upgraded.claim_scrape(&run).unwrap().unwrap();
+        upgraded.recover_scrapes().unwrap();
+        assert_eq!(
+            upgraded
+                .scrape_run(&library.source_id, &run.run_id)
+                .unwrap()
+                .status,
+            "interrupted"
+        );
+        assert!(upgraded.claim_scrape(&run).unwrap().is_some());
+    }
 }
 
 #[test]

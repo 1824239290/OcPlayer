@@ -981,7 +981,7 @@ struct PlayerScreen: View {
         #endif
     }
 
-    /// Jellyfin 流依赖 Authorization 请求头，不能只分享裸 URL；这类源不显示分享入口。
+    /// 鉴权流与运行时本机租约不提供可独立使用的分享 URL。
     // 计算 involves FileManager.stat，缓存在 @State 里随 request 变化重算一次，
     // 不在每次 body 求值时都做系统调用。
     private func computeShareURL() -> URL? {
@@ -989,7 +989,7 @@ struct PlayerScreen: View {
         if let uri = request?.uri, FileManager.default.fileExists(atPath: uri) {
             return URL(fileURLWithPath: uri)
         }
-        guard request?.authHeader == nil,
+        guard request?.authHeader == nil, request?.resourceLifetime == nil,
               let uri = request?.uri, let url = URL(string: uri),
               url.scheme == "http" || url.scheme == "https"
         else {

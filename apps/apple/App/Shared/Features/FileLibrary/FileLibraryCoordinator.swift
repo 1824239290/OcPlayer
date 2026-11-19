@@ -4,6 +4,7 @@ import DiagnosticsKit
 import Foundation
 import OcPlayerCore
 import Observation
+import PlaybackKit
 
 /// Host ownership of the permanent Core catalog and Apple directory permissions.
 /// File sources never acquire a MediaServer profile or enter Media.sqlite.
@@ -25,8 +26,13 @@ final class FileLibraryCoordinator {
     @ObservationIgnored private var setupTask: Task<Void, Error>?
     @ObservationIgnored private var pendingWrite: Task<Void, Never>?
     @ObservationIgnored private var lastCredentialRevision: String?
+    @ObservationIgnored private let remoteCredentials: CredentialFileStore
+    @ObservationIgnored private var restoredRemoteSources: Set<String> = []
 
-    init(directory: URL = OcPlayerStorage.defaultRoot) { self.directory = directory }
+    init(directory: URL = OcPlayerStorage.defaultRoot) {
+        self.directory = directory
+        remoteCredentials = CredentialFileStore(directory: directory, fileName: "LibraryCredentials.json")
+    }
 
     func setup() async throws {
         if let setupTask { return try await setupTask.value }
@@ -38,7 +44,7 @@ final class FileLibraryCoordinator {
                 let caps = try await runtime.sdk.capabilities()
                 guard caps.sourceKinds.contains("localFolder"), caps.tmdbAccessValidation,
                       caps.libraryTypes.contains(.movies), caps.libraryTypes.contains(.tvshows), !caps.aggregation else {
-                    throw OcpCoreError(message: "当前 Core 不支持本地文件媒体库")
+                    throw OcpCoreError(message: "当前 Core 不支持文件媒体库")
                 }
                 capabilities = caps
                 try await refreshSources()
@@ -47,9 +53,9 @@ final class FileLibraryCoordinator {
             } catch {
                 if let coreError = error as? OcpCoreError,
                    coreError.message.contains("library") || coreError.message.contains("ABI") {
-                    availabilityError = "此版本尚未提供可用的文件夹媒体库，请更新到支持此功能的版本。"
+                    availabilityError = "此版本尚未提供可用的文件媒体库，请更新到支持此功能的版本。"
                 } else {
-                    availabilityError = "本地媒体库未就绪：\(error.localizedDescription)"
+                    availabilityError = "文件媒体库未就绪：\(error.localizedDescription)"
                 }
                 throw error
             }
@@ -59,7 +65,7 @@ final class FileLibraryCoordinator {
     }
 
     private func withSDK<Value: Sendable>(_ operation: @MainActor (OcpFileLibrary) async throws -> Value) async throws -> Value {
-        guard let runtime else { throw OcpCoreError(message: "本地媒体库尚未初始化") }
+        guard let runtime else { throw OcpCoreError(message: "文件媒体库尚未初始化") }
         // An in-flight ABI call may retain the client beyond its owner. Keep
         // the permission owner alive too, until that call has fully returned.
         defer { withExtendedLifetime(runtime) {} }
@@ -180,7 +186,7 @@ final class FileLibraryCoordinator {
         guard lastCredentialRevision == credentialRevision else {
             throw OcpCoreError(message: "TMDB 配置已变更，请重新验证")
         }
-        guard let runtime else { throw OcpCoreError(message: "本地媒体库未就绪") }
+        guard let runtime else { throw OcpCoreError(message: "文件媒体库未就绪") }
         defer { withExtendedLifetime(runtime) {} }
         let accessRef = source?.accessRef ?? UUID().uuidString
         let authorized = try runtime.authorize(root, ref: accessRef, expectedRoot: source?.rootPath)
@@ -201,12 +207,13 @@ final class FileLibraryCoordinator {
     }
 
     func authorize(source: OcpFileLibrary.Source, root: URL) throws {
-        guard let runtime else { throw OcpCoreError(message: "本地媒体库未就绪") }
+        guard let runtime else { throw OcpCoreError(message: "文件媒体库未就绪") }
         _ = try runtime.authorize(root, ref: source.accessRef ?? source.sourceId, expectedRoot: source.rootPath)
         permissionErrors[source.sourceId] = nil
     }
 
     private func restoreAccess(for source: OcpFileLibrary.Source) {
+        if source.kind == "webdav" { return }
         do {
             guard let runtime else { return }
             let restored = try runtime.restore(ref: source.accessRef ?? source.sourceId)
@@ -222,17 +229,86 @@ final class FileLibraryCoordinator {
     }
 
     func scan(sourceID: String, libraryID: String) async throws {
+        try await ensureRemoteAccess(sourceID)
         try requireAccess(sourceID)
         _ = try await withSDK { try await $0.scan(sourceId: sourceID, libraryId: libraryID) }
     }
     func control(_ job: OcpFileLibrary.Job, action: OcpFileLibrary.ScanAction) async throws {
-        if action == .resume { try requireAccess(job.sourceId) }
-        _ = try await withSDK { try await $0.controlScan(sourceId: job.sourceId, jobId: job.jobId, action: action) }
+        if action == .resume { try await ensureRemoteAccess(job.sourceId); try requireAccess(job.sourceId) }
+        for attempt in 0..<12 {
+            do {
+                _ = try await withSDK { try await $0.controlScan(sourceId: job.sourceId, jobId: job.jobId, action: action) }
+                return
+            } catch {
+                guard action == .resume, attempt < 11, error.localizedDescription.contains("wait for the running scan") else { throw error }
+                try await Task.sleep(for: .milliseconds(50))
+            }
+        }
     }
 
     func preparePlayback(item: OcpFileLibrary.Item, asset: OcpFileLibrary.Asset) async throws -> OcpFileLibrary.Playback {
+        try await ensureRemoteAccess(item.sourceId)
         try requireAccess(item.sourceId)
         return try await withSDK { try await $0.preparePlayback(sourceId: item.sourceId, itemId: item.itemId, assetId: asset.assetId) }
+    }
+
+    func storedWebDAVCredential(for source: OcpFileLibrary.Source) -> OcpFileLibrary.WebDAVCredential? {
+        guard let data = remoteCredentials.data(forKey: source.accessRef ?? source.sourceId) else { return nil }
+        return try? JSONDecoder().decode(OcpFileLibrary.WebDAVCredential.self, from: data)
+    }
+
+    func prepareWebDAV(rootURL: String, credential: OcpFileLibrary.WebDAVCredential, accessRef: String) async throws -> OcpFileLibrary.Access {
+        try await setup()
+        return try await withSDK { try await $0.prepareWebDAV(rootURL: rootURL, credential: credential, accessRef: accessRef) }
+    }
+    func browseWebDAV(accessID: String, relativePath: String) async throws -> OcpFileLibrary.RemoteDirectory {
+        try await withSDK { try await $0.browseWebDAV(accessId: accessID, relativePath: relativePath) }
+    }
+    func createWebDAV(draftID: String, verificationID: String, credentialRevision: String, apiBase: String,
+                      source: OcpFileLibrary.Source?, access: OcpFileLibrary.Access, category: OcpFileLibrary.RemoteDirectory,
+                      credential: OcpFileLibrary.WebDAVCredential, accessRef: String, sourceName: String,
+                      name: String, type: OcpFileLibrary.LibraryType) async throws -> OcpFileLibrary.Creation {
+        guard lastCredentialRevision == credentialRevision else { throw OcpCoreError(message: "TMDB 配置已变更，请重新验证") }
+        // A crash after catalog creation must not discard the only saved credential.
+        remoteCredentials.setData(try JSONEncoder().encode(credential), forKey: accessRef)
+        let result = try await withSDK { try await $0.create(.init(
+            draftId: draftID, verificationId: verificationID, credentialRevision: credentialRevision, apiBase: apiBase,
+            accessId: access.accessId, kind: "webdav", sourceId: source?.sourceId, sourceName: sourceName,
+            rootPath: category.rootPath, name: name, type: type)) }
+        try await refreshSources()
+        restoredRemoteSources.insert(result.library.sourceId)
+        permissionErrors[result.library.sourceId] = nil
+        catalogRevision &+= 1
+        return result
+    }
+    func restoreWebDAV(source: OcpFileLibrary.Source, credential: OcpFileLibrary.WebDAVCredential) async throws {
+        restoredRemoteSources.remove(source.sourceId)
+        do {
+            try await withSDK { try await $0.restoreWebDAV(sourceId: source.sourceId, rootURL: source.rootPath, credential: credential) }
+        } catch {
+            permissionErrors[source.sourceId] = "WebDAV 连接未就绪：\(error.localizedDescription)"
+            throw error
+        }
+        remoteCredentials.setData(try JSONEncoder().encode(credential), forKey: source.accessRef ?? source.sourceId)
+        restoredRemoteSources.insert(source.sourceId)
+        permissionErrors[source.sourceId] = nil
+    }
+    private func ensureRemoteAccess(_ sourceID: String) async throws {
+        guard let source = sources.first(where: { $0.sourceId == sourceID }), source.kind == "webdav",
+              !restoredRemoteSources.contains(sourceID) else { return }
+        do {
+            guard let credential = storedWebDAVCredential(for: source) else { throw OcpCoreError(message: "请在媒体来源中更新 WebDAV 凭据") }
+            try await restoreWebDAV(source: source, credential: credential)
+        } catch {
+            permissionErrors[sourceID] = "WebDAV 连接未就绪：\(error.localizedDescription)"
+            throw error
+        }
+    }
+    func retainPlayback(_ playback: OcpFileLibrary.Playback) -> PlaybackResourceLifetime? {
+        guard let id = playback.leaseId, let runtime else { return nil }
+        return PlaybackResourceLifetime {
+            Task.detached { try? await runtime.sdk.releasePlayback(leaseId: id); withExtendedLifetime(runtime) {} }
+        }
     }
 
     @discardableResult
@@ -253,7 +329,7 @@ final class FileLibraryCoordinator {
 
 /// Leases outlive all scanning workers. Destroying Core pauses and joins workers
 /// before releasing the Apple scopes; the database and bookmarks are permanent.
-private final class FileLibraryRuntime {
+private final class FileLibraryRuntime: @unchecked Sendable {
     private var core: OcpFileLibrary?
     var sdk: OcpFileLibrary { core! }
     private let bookmarkFile: URL

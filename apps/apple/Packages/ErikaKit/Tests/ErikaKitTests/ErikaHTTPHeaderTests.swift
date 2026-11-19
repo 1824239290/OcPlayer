@@ -75,6 +75,21 @@ struct ErikaHTTPHeaderTests {
         return (duration, tracks, failure)
     }
 
+    @Test("播放资源保留到原生 presenter 销毁")
+    func retainsResourceUntilNativeDestruction() throws {
+        var presenter: ErikaPresenter? = try ErikaPresenter()
+        var lifetime: PlaybackResourceLifetime? = PlaybackResourceLifetime {}
+        weak var observed = lifetime
+        do { try presenter?.open(PlaybackSource(uri: "/missing/ocplayer-resource.mkv", resourceLifetime: lifetime)) }
+        catch { /* Opening failure still needs the lease until native teardown. */ }
+        lifetime = nil
+        #expect(observed != nil)
+        try? presenter?.close()
+        #expect(observed != nil)
+        presenter = nil
+        #expect(observed == nil)
+    }
+
     @Test("带 Authorization 头能打开 HTTP 源")
     func opensWithHeader() async throws {
         let movie = try await TestMedia.makeMovieWithTone(seconds: 2)

@@ -5,7 +5,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicU8, Ordering},
@@ -59,6 +59,8 @@ struct Access {
     root: PathBuf,
     access_ref: Option<String>,
     expires: Instant,
+    webdav: Option<ocp_webdav::Provider>,
+    verified_directories: HashSet<String>,
 }
 
 struct Worker {
@@ -80,6 +82,9 @@ pub(crate) struct Runtime {
     credential_digest: Option<Vec<u8>>,
     credential_api_base: Option<String>,
     access_generation: u64,
+    webdav: HashMap<String, ocp_webdav::Provider>,
+    remote_epochs: HashMap<String, u64>,
+    resources: HashMap<String, ocp_webdav::bridge::Lease>,
 }
 
 impl Drop for Runtime {
@@ -175,7 +180,7 @@ impl Runtime {
         match method {
             "library.capabilities" => {
                 return Ok(
-                    json!({"schemaVersion":2,"sourceKinds":["localFolder"],"libraryTypes":["movies","tvshows"],"aggregation":false,"backgroundScan":true,"tmdbAccessValidation":true,"tmdbScraping":true,"remoteProviders":false}),
+                    json!({"schemaVersion":3,"sourceKinds":["localFolder","webdav"],"libraryTypes":["movies","tvshows"],"aggregation":false,"backgroundScan":true,"tmdbAccessValidation":true,"tmdbScraping":true,"remoteProviders":true}),
                 )
             }
             "tmdb.access.invalidate" => {
@@ -210,6 +215,8 @@ impl Runtime {
                         root: root.clone(),
                         access_ref: input.access_ref,
                         expires: Instant::now() + RECEIPT_TTL,
+                        webdav: None,
+                        verified_directories: HashSet::new(),
                     },
                 );
                 return Ok(json!({"accessId":id,"rootPath":root.to_string_lossy()}));
@@ -220,7 +227,10 @@ impl Runtime {
                 if self.store.as_ref().is_some_and(|s| s.path() == path) {
                     return Ok(json!({"path":path.to_string_lossy()}));
                 }
-                if !self.workers.is_empty() || !self.scrapers.is_empty() {
+                if !self.workers.is_empty()
+                    || !self.scrapers.is_empty()
+                    || !self.resources.is_empty()
+                {
                     return Err(Error::Invalid(
                         "pause running scans before changing library database".into(),
                     ));
@@ -229,6 +239,9 @@ impl Runtime {
                 store.recover_jobs()?;
                 store.recover_scrapes()?;
                 self.store = Some(store);
+                self.webdav.clear();
+                self.remote_epochs.clear();
+                self.accesses.clear();
                 return Ok(json!({"path":path.to_string_lossy()}));
             }
             _ => {}
@@ -242,6 +255,10 @@ impl Runtime {
             self.store = Some(store);
         }
         match method {
+            "library.playback.release" => {
+                self.resources.remove(string(&args, "leaseId")?);
+                Ok(json!({"released":true}))
+            }
             "library.create" => self.create(args),
             "library.sources.list" => Ok(json!({"sources":self.db()?.sources()?})),
             "library.libraries.list" => {
@@ -265,8 +282,15 @@ impl Runtime {
                 let source = string(&args, "sourceId")?;
                 let job = if method == "library.scan.resume" {
                     let job = self.db()?.job(source, string(&args, "jobId")?)?;
-                    if !["paused", "interrupted", "waitingPermission", "queued"]
-                        .contains(&job.status.as_str())
+                    if ![
+                        "paused",
+                        "interrupted",
+                        "waitingPermission",
+                        "waitingCredentials",
+                        "waitingNetwork",
+                        "queued",
+                    ]
+                    .contains(&job.status.as_str())
                     {
                         return Err(Error::Invalid(
                             "job cannot be resumed in its current state".into(),
@@ -298,8 +322,15 @@ impl Runtime {
                         },
                         Ordering::Release,
                     );
-                } else if ["queued", "interrupted", "paused", "waitingPermission"]
-                    .contains(&job.status.as_str())
+                } else if [
+                    "queued",
+                    "interrupted",
+                    "paused",
+                    "waitingPermission",
+                    "waitingCredentials",
+                    "waitingNetwork",
+                ]
+                .contains(&job.status.as_str())
                 {
                     self.db()?.set_job_status(
                         id,
@@ -446,9 +477,9 @@ impl Runtime {
             typ: LibraryType,
         }
         let input: Input = serde_json::from_value(args)?;
-        if input.kind != SourceKind::LocalFolder {
+        if input.kind == SourceKind::Smb {
             return Err(Error::Invalid(
-                "SMB/WebDAV providers are not available in this build".into(),
+                "SMB provider is not available in this build".into(),
             ));
         }
         if self.workers.len() >= 2 && self.db()?.created_draft(&input.draft_id)?.is_none() {
@@ -477,23 +508,52 @@ impl Runtime {
             .get(&input.access_id)
             .filter(|a| a.expires > Instant::now())
             .ok_or_else(|| Error::Invalid("directory access lease has expired".into()))?;
-        let root = std::fs::canonicalize(&input.root_path)?;
-        if !root.is_dir() || !root.starts_with(&access.root) {
-            return Err(Error::Invalid(
-                "selected directory is outside the authorized root".into(),
-            ));
-        }
         let previous = self.db()?.created_draft(&input.draft_id)?.is_some();
-        let library = self.db()?.create_local(
-            &input.draft_id,
-            input.source_id.as_deref(),
-            &input.source_name,
-            &access.root,
-            access.access_ref.as_deref(),
-            &input.name,
-            &root,
-            input.typ,
-        )?;
+        let provider = access.webdav.clone();
+        let library = if input.kind == SourceKind::Webdav {
+            let provider = provider
+                .as_ref()
+                .ok_or_else(|| Error::Invalid("validate WebDAV access first".into()))?;
+            let root = ocp_webdav::root_url(&input.root_path).map_err(remote_error)?;
+            if !access.verified_directories.contains(root.as_str()) {
+                return Err(Error::Invalid(
+                    "open the selected WebDAV directory before adding it".into(),
+                ));
+            }
+            self.db()?.create_webdav(
+                &input.draft_id,
+                input.source_id.as_deref(),
+                &input.source_name,
+                provider.root(),
+                access.access_ref.as_deref(),
+                &input.name,
+                root.as_str(),
+                input.typ,
+            )?
+        } else {
+            if provider.is_some() {
+                return Err(Error::Invalid("access belongs to a WebDAV source".into()));
+            }
+            let root = std::fs::canonicalize(&input.root_path)?;
+            if !root.is_dir() || !root.starts_with(&access.root) {
+                return Err(Error::Invalid(
+                    "selected directory is outside the authorized root".into(),
+                ));
+            }
+            self.db()?.create_local(
+                &input.draft_id,
+                input.source_id.as_deref(),
+                &input.source_name,
+                &access.root,
+                access.access_ref.as_deref(),
+                &input.name,
+                &root,
+                input.typ,
+            )?
+        };
+        if let Some(provider) = provider {
+            self.webdav.insert(library.source_id.clone(), provider);
+        }
         if previous {
             if let Some(job) = self
                 .db()?
@@ -513,12 +573,32 @@ impl Runtime {
     }
 
     fn spawn(&mut self, job: &ocp_library::Job) -> Result<(), Error> {
-        if self.workers.contains_key(&job.job_id) {
+        if let Some(worker) = self.workers.get(&job.job_id) {
+            if worker.control.load(Ordering::Acquire) != scan::RUN {
+                return Err(Error::Invalid(
+                    "wait for the running scan to stop before resuming".into(),
+                ));
+            }
             return Ok(());
         }
         let path = self.db()?.path().to_owned();
         // Opening before spawn reports corruption/IO immediately instead of leaving a queued ghost job.
         let store = Store::open_path(&path)?;
+        let source = store.source(&job.source_id)?;
+        let provider = if source.kind == SourceKind::Webdav {
+            let Some(provider) = self.webdav.get(&job.source_id) else {
+                self.db()?
+                    .set_job_status(&job.job_id, "waitingCredentials")?;
+                return Ok(());
+            };
+            Some(
+                provider
+                    .scoped(&store.library(&job.source_id, &job.library_id)?.root_path)
+                    .map_err(remote_error)?,
+            )
+        } else {
+            None
+        };
         let job = job.clone();
         let id = job.job_id.clone();
         let control = Arc::new(AtomicU8::new(scan::RUN));
@@ -526,7 +606,16 @@ impl Runtime {
         let handle = std::thread::Builder::new()
             .name("ocp-library-scan".into())
             .spawn(move || {
-                if let Err(error) = scan::run(&store, &job, &worker_control) {
+                let fallback = Store::open_path(store.path());
+                let result = if let Some(provider) = provider {
+                    crate::library_webdav::run(store, job.clone(), provider, worker_control)
+                } else {
+                    scan::run(&store, &job, &worker_control)
+                };
+                if let Err(error) = result {
+                    let Ok(store) = fallback else {
+                        return;
+                    };
                     let _ = store.scan_error(&job.job_id, &error.to_string());
                     let _ = store.set_job_status(&job.job_id, "failed");
                 }
@@ -792,6 +881,295 @@ fn string<'a>(args: &'a Value, key: &str) -> Result<&'a str, Error> {
         .ok_or_else(|| Error::Invalid(format!("{key} is required")))?;
     nonempty(value)?;
     Ok(value)
+}
+
+fn remote_error(error: ocp_webdav::Error) -> Error {
+    Error::Invalid(error.to_string())
+}
+pub(crate) struct RemoteRequest {
+    provider: Option<ocp_webdav::Provider>,
+    relative: String,
+    purpose: RemotePurpose,
+}
+enum RemotePurpose {
+    Access {
+        access_ref: Option<String>,
+    },
+    Browse {
+        access_id: String,
+    },
+    Restore {
+        source: String,
+        epoch: u64,
+    },
+    Playback {
+        source: String,
+        item: String,
+        asset: String,
+        epoch: u64,
+    },
+    LocalPlayback(Value),
+}
+pub(crate) enum RemoteReply {
+    Entries(Vec<ocp_webdav::Entry>),
+    Size(u64),
+    Local,
+}
+impl RemoteRequest {
+    pub(crate) fn is_local(&self) -> bool {
+        matches!(self.purpose, RemotePurpose::LocalPlayback(_))
+    }
+
+    pub(crate) async fn execute(&self) -> Result<RemoteReply, Error> {
+        let Some(provider) = &self.provider else {
+            return Ok(RemoteReply::Local);
+        };
+        if matches!(self.purpose, RemotePurpose::Playback { .. }) {
+            Ok(RemoteReply::Size(
+                provider.probe(&self.relative).await.map_err(remote_error)?,
+            ))
+        } else {
+            Ok(RemoteReply::Entries(
+                provider.list(&self.relative).await.map_err(remote_error)?,
+            ))
+        }
+    }
+}
+impl Runtime {
+    pub(crate) fn prepare_remote(
+        &mut self,
+        method: &str,
+        args: Value,
+    ) -> Result<RemoteRequest, Error> {
+        self.reap();
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase", deny_unknown_fields)]
+        struct Connection {
+            root_url: String,
+            credential: ocp_webdav::Credential,
+            access_ref: Option<String>,
+            source_id: Option<String>,
+        }
+        match method {
+            "library.webdav.access.prepare" | "library.webdav.credentials.restore" => {
+                let input: Connection = serde_json::from_value(args)?;
+                let provider = ocp_webdav::Provider::new(&input.root_url, input.credential)
+                    .map_err(remote_error)?;
+                let purpose = if method.ends_with("restore") {
+                    let source_id = input
+                        .source_id
+                        .ok_or_else(|| Error::Invalid("sourceId is required".into()))?;
+                    let source = self.db()?.source(&source_id)?;
+                    if source.kind != SourceKind::Webdav || source.root_path != provider.root() {
+                        return Err(Error::Invalid(
+                            "WebDAV credentials belong to a different source root".into(),
+                        ));
+                    }
+                    let epoch = self.remote_epochs.entry(source_id.clone()).or_default();
+                    *epoch = epoch.wrapping_add(1);
+                    let epoch = *epoch;
+                    self.webdav.remove(&source_id);
+                    for job in self.db()?.jobs(&source_id)? {
+                        if let Some(worker) = self.workers.get(&job.job_id) {
+                            worker.control.store(scan::PAUSE, Ordering::Release);
+                        }
+                    }
+                    RemotePurpose::Restore {
+                        source: source_id,
+                        epoch,
+                    }
+                } else {
+                    if input.source_id.is_some() {
+                        return Err(Error::Invalid(
+                            "use credentials.restore for an existing source".into(),
+                        ));
+                    }
+                    RemotePurpose::Access {
+                        access_ref: input.access_ref,
+                    }
+                };
+                Ok(RemoteRequest {
+                    provider: Some(provider),
+                    relative: String::new(),
+                    purpose,
+                })
+            }
+            "library.webdav.browse" => {
+                let access_id = string(&args, "accessId")?.to_owned();
+                let access = self
+                    .accesses
+                    .get(&access_id)
+                    .filter(|a| a.expires > Instant::now())
+                    .ok_or_else(|| Error::Invalid("WebDAV access has expired; reconnect".into()))?;
+                let provider = access
+                    .webdav
+                    .clone()
+                    .ok_or_else(|| Error::Invalid("access is not WebDAV".into()))?;
+                let relative = args
+                    .get("relativePath")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_owned();
+                provider.url(&relative, true).map_err(remote_error)?;
+                Ok(RemoteRequest {
+                    provider: Some(provider),
+                    relative,
+                    purpose: RemotePurpose::Browse { access_id },
+                })
+            }
+            "library.playback.prepare" => {
+                let source = string(&args, "sourceId")?.to_owned();
+                if self.db()?.source(&source)?.kind == SourceKind::LocalFolder {
+                    return Ok(RemoteRequest {
+                        provider: None,
+                        relative: String::new(),
+                        purpose: RemotePurpose::LocalPlayback(args),
+                    });
+                }
+                if self.resources.len() >= 32 {
+                    return Err(Error::Invalid(
+                        "close another file playback before opening more resources".into(),
+                    ));
+                }
+                let item = string(&args, "itemId")?.to_owned();
+                let asset = string(&args, "assetId")?.to_owned();
+                let detail = self.db()?.item(&source, &item)?;
+                let library = self.db()?.library(&source, &detail.library_id)?;
+                let path = self
+                    .db()?
+                    .assets(&source, &item)?
+                    .into_iter()
+                    .find(|a| a.asset_id == asset && a.available)
+                    .ok_or(Error::NotFound)?
+                    .relative_path;
+                let provider = self
+                    .webdav
+                    .get(&source)
+                    .ok_or_else(|| {
+                        Error::Invalid("restore WebDAV credentials before playback".into())
+                    })?
+                    .scoped(&library.root_path)
+                    .map_err(remote_error)?;
+                let epoch = *self.remote_epochs.get(&source).unwrap_or(&0);
+                Ok(RemoteRequest {
+                    provider: Some(provider),
+                    relative: path,
+                    purpose: RemotePurpose::Playback {
+                        source,
+                        item,
+                        asset,
+                        epoch,
+                    },
+                })
+            }
+            _ => Err(Error::Invalid("unknown remote library command".into())),
+        }
+    }
+    pub(crate) fn finish_remote(
+        &mut self,
+        request: RemoteRequest,
+        reply: RemoteReply,
+    ) -> Result<Value, Error> {
+        match request.purpose {
+            RemotePurpose::LocalPlayback(args) => self.call("library.playback.prepare", args, None),
+            RemotePurpose::Access { access_ref } => {
+                self.accesses.retain(|_, a| a.expires > Instant::now());
+                if self.accesses.len() >= 32 {
+                    return Err(Error::Invalid("too many pending directory leases".into()));
+                }
+                let provider = request
+                    .provider
+                    .ok_or_else(|| Error::Invalid("missing provider".into()))?;
+                let id = ocp_library::id();
+                let root = provider.root().to_owned();
+                self.accesses.insert(
+                    id.clone(),
+                    Access {
+                        root: PathBuf::new(),
+                        access_ref,
+                        expires: Instant::now() + RECEIPT_TTL,
+                        webdav: Some(provider),
+                        verified_directories: HashSet::from([root.clone()]),
+                    },
+                );
+                Ok(json!({"accessId":id,"rootPath":root}))
+            }
+            RemotePurpose::Browse { access_id } => {
+                let access = self
+                    .accesses
+                    .get_mut(&access_id)
+                    .filter(|a| a.expires > Instant::now())
+                    .ok_or_else(|| Error::Invalid("directory access has expired".into()))?;
+                let provider = request
+                    .provider
+                    .ok_or_else(|| Error::Invalid("missing provider".into()))?;
+                let root = provider
+                    .url(&request.relative, true)
+                    .map_err(remote_error)?
+                    .to_string();
+                if access.verified_directories.len() >= 256 {
+                    return Err(Error::Invalid(
+                        "too many browsed directories; reconnect".into(),
+                    ));
+                }
+                access.verified_directories.insert(root.clone());
+                let RemoteReply::Entries(entries) = reply else {
+                    return Err(Error::Invalid("invalid directory reply".into()));
+                };
+                Ok(json!({"rootPath":root,"relativePath":request.relative,"entries":entries}))
+            }
+            RemotePurpose::Restore { source, epoch } => {
+                if self.remote_epochs.get(&source) != Some(&epoch) {
+                    return Err(Error::Invalid(
+                        "WebDAV credentials changed during validation".into(),
+                    ));
+                }
+                self.webdav.insert(
+                    source,
+                    request
+                        .provider
+                        .ok_or_else(|| Error::Invalid("missing provider".into()))?,
+                );
+                Ok(json!({"restored":true}))
+            }
+            RemotePurpose::Playback {
+                source,
+                item,
+                asset,
+                epoch,
+            } => {
+                if *self.remote_epochs.get(&source).unwrap_or(&0) != epoch
+                    || !self.webdav.contains_key(&source)
+                {
+                    return Err(Error::Invalid(
+                        "WebDAV credentials changed during playback preparation".into(),
+                    ));
+                }
+                if !self.db()?.assets(&source, &item)?.iter().any(|a| {
+                    a.asset_id == asset && a.available && a.relative_path == request.relative
+                }) {
+                    return Err(Error::NotFound);
+                }
+                let RemoteReply::Size(size) = reply else {
+                    return Err(Error::Invalid("invalid range reply".into()));
+                };
+                if self.resources.len() >= 32 {
+                    return Err(Error::Invalid("too many active playback resources".into()));
+                }
+                let lease = ocp_webdav::bridge::Lease::start(
+                    request
+                        .provider
+                        .ok_or_else(|| Error::Invalid("missing provider".into()))?,
+                    request.relative,
+                    size,
+                )
+                .map_err(remote_error)?;
+                let result = json!({"sourceId":source,"itemId":item,"assetId":asset,"uri":lease.uri,"headers":{},"leaseId":lease.id,"progress":self.db()?.progress(&source,&item)?});
+                self.resources.insert(lease.id.clone(), lease);
+                Ok(result)
+            }
+        }
+    }
 }
 
 #[cfg(test)]

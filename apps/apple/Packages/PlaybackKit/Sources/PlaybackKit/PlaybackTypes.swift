@@ -73,22 +73,35 @@ public enum PlayerEvent: Sendable {
 /// `backBufferBytes` 是 HTTP 源的回退预算——已播数据保留多少在缓存里，
 /// 回退落在这段内就不发网络请求（nil = 内核默认 16 MiB；高码率片源建议按
 /// 码率 × 期望回退时长放大）。
+/// Runtime resource shared by requests, in-flight opens and the engine's native
+/// presenter. Releasing UI state alone cannot tear down a demux resource.
+public final class PlaybackResourceLifetime: Hashable, @unchecked Sendable {
+    private let onRelease: @Sendable () -> Void
+    public init(onRelease: @escaping @Sendable () -> Void) { self.onRelease = onRelease }
+    deinit { onRelease() }
+    public static func == (lhs: PlaybackResourceLifetime, rhs: PlaybackResourceLifetime) -> Bool { lhs === rhs }
+    public func hash(into hasher: inout Hasher) { hasher.combine(ObjectIdentifier(self)) }
+}
+
 public struct PlaybackSource: Sendable, Hashable {
     public let uri: String
     public let headers: [String: String]
     public let readAheadBytes: UInt64?
     public let backBufferBytes: UInt64?
+    public let resourceLifetime: PlaybackResourceLifetime?
 
     public init(
         uri: String,
         headers: [String: String] = [:],
         readAheadBytes: UInt64? = nil,
-        backBufferBytes: UInt64? = nil
+        backBufferBytes: UInt64? = nil,
+        resourceLifetime: PlaybackResourceLifetime? = nil
     ) {
         self.uri = uri
         self.headers = headers
         self.readAheadBytes = readAheadBytes
         self.backBufferBytes = backBufferBytes
+        self.resourceLifetime = resourceLifetime
     }
 
     public init(fileURL: URL, headers: [String: String] = [:]) {

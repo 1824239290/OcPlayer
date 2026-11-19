@@ -8,6 +8,16 @@ pub enum SourceKind {
     Webdav,
 }
 
+impl SourceKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::LocalFolder => "localFolder",
+            Self::Smb => "smb",
+            Self::Webdav => "webdav",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum LibraryType {

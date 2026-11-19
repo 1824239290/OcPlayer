@@ -178,7 +178,10 @@ fn token_authentication_and_malformed_mirror_responses_are_distinct() {
 fn capabilities_do_not_advertise_unimplemented_providers_and_queries_require_scope() {
     let f = Fixture::new();
     let capabilities = f.call("library.capabilities", json!({}));
-    assert_eq!(capabilities["data"]["sourceKinds"], json!(["localFolder"]));
+    assert_eq!(
+        capabilities["data"]["sourceKinds"],
+        json!(["localFolder", "webdav"])
+    );
     assert_eq!(capabilities["data"]["aggregation"], false);
     assert!(!f.call("library.query.page", json!({}))["ok"]
         .as_bool()

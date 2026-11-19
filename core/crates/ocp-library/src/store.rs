@@ -22,12 +22,14 @@ impl Store {
         db.pragma_update(None, "foreign_keys", true)?;
         db.pragma_update(None, "journal_mode", "WAL")?;
         let version: i64 = db.pragma_query_value(None, "user_version", |r| r.get(0))?;
-        if version > 2 {
+        if version > 3 {
             return Err(Error::Invalid(
                 "library database was created by a newer version".into(),
             ));
         }
-        if version < 2 {
+        if version < 3 {
+            // Rebuild the source CHECK constraint without changing child FK targets.
+            db.pragma_update(None, "foreign_keys", false)?;
             let tx = rusqlite::Transaction::new_unchecked(
                 &db,
                 rusqlite::TransactionBehavior::Immediate,
@@ -40,9 +42,22 @@ impl Store {
             }
             if locked_version < 2 {
                 tx.execute_batch(include_str!("../schema/v2.sql"))?;
-                tx.pragma_update(None, "user_version", 2)?;
+            }
+            if locked_version < 3 {
+                tx.execute_batch(include_str!("../schema/v3.sql"))?;
+                tx.pragma_update(None, "user_version", 3)?;
+            }
+            let violations: i64 =
+                tx.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| {
+                    r.get(0)
+                })?;
+            if violations != 0 {
+                return Err(Error::Invalid(
+                    "library migration has invalid relationships".into(),
+                ));
             }
             tx.commit()?;
+            db.pragma_update(None, "foreign_keys", true)?;
         }
         Ok(Self {
             db,
@@ -55,12 +70,15 @@ impl Store {
     }
 
     pub fn sources(&self) -> Result<Vec<Source>, Error> {
-        let mut q = self.db.prepare("SELECT source_id,display_name,root_path,access_ref,created_at FROM source ORDER BY created_at,source_id")?;
+        let mut q = self.db.prepare("SELECT source_id,display_name,root_path,access_ref,created_at,kind FROM source ORDER BY created_at,source_id")?;
         let rows = q
             .query_map([], |r| {
                 Ok(Source {
                     source_id: r.get(0)?,
-                    kind: SourceKind::LocalFolder,
+                    kind: match r.get::<_, String>(5)?.as_str() {
+                        "webdav" => SourceKind::Webdav,
+                        _ => SourceKind::LocalFolder,
+                    },
                     display_name: r.get(1)?,
                     root_path: r.get(2)?,
                     access_ref: r.get(3)?,
@@ -108,6 +126,68 @@ impl Store {
         root: &Path,
         typ: LibraryType,
     ) -> Result<Library, Error> {
+        if !root.is_absolute() || !source_root.is_absolute() || !root.starts_with(source_root) {
+            return Err(Error::Invalid(
+                "library root must be inside the authorized source root".into(),
+            ));
+        }
+        self.create_file_source(
+            draft_id,
+            existing_source,
+            source_name,
+            &source_root.to_string_lossy(),
+            access_ref,
+            name,
+            &root.to_string_lossy(),
+            typ,
+            SourceKind::LocalFolder,
+        )
+    }
+
+    pub fn create_webdav(
+        &self,
+        draft_id: &str,
+        existing_source: Option<&str>,
+        source_name: &str,
+        source_root: &str,
+        access_ref: Option<&str>,
+        name: &str,
+        root: &str,
+        typ: LibraryType,
+    ) -> Result<Library, Error> {
+        let source_root =
+            ocp_webdav::root_url(source_root).map_err(|e| Error::Invalid(e.to_string()))?;
+        let root = ocp_webdav::root_url(root).map_err(|e| Error::Invalid(e.to_string()))?;
+        if !ocp_webdav::within(source_root.as_str(), root.as_str()) {
+            return Err(Error::Invalid(
+                "category is outside WebDAV source root".into(),
+            ));
+        }
+        self.create_file_source(
+            draft_id,
+            existing_source,
+            source_name,
+            source_root.as_str(),
+            access_ref,
+            name,
+            root.as_str(),
+            typ,
+            SourceKind::Webdav,
+        )
+    }
+
+    fn create_file_source(
+        &self,
+        draft_id: &str,
+        existing_source: Option<&str>,
+        source_name: &str,
+        source_root: &str,
+        access_ref: Option<&str>,
+        name: &str,
+        root: &str,
+        typ: LibraryType,
+        kind: SourceKind,
+    ) -> Result<Library, Error> {
         for value in [draft_id, source_name, name] {
             if value.trim().is_empty() || value.contains('\0') {
                 return Err(Error::Invalid(
@@ -115,13 +195,8 @@ impl Store {
                 ));
             }
         }
-        if !root.is_absolute() || !source_root.is_absolute() || !root.starts_with(source_root) {
-            return Err(Error::Invalid(
-                "library root must be inside the authorized source root".into(),
-            ));
-        }
         if let Some(previous) = self.created_draft(draft_id)? {
-            if previous.root_path != root.to_string_lossy()
+            if previous.root_path != root
                 || previous.library_type != typ
                 || previous.name != name
                 || existing_source.is_some_and(|id| id != previous.source_id)
@@ -129,6 +204,10 @@ impl Store {
                 return Err(Error::Invalid(
                     "draftId has already been used with different inputs".into(),
                 ));
+            }
+            let source = self.source(&previous.source_id)?;
+            if source.kind != kind || source.root_path != source_root {
+                return Err(Error::Invalid("draft belongs to a different source".into()));
             }
             return Ok(previous);
         }
@@ -145,15 +224,24 @@ impl Store {
                 )
                 .optional()?
                 .ok_or(Error::NotFound)?;
-            if Path::new(&stored_root) != source_root {
+            let stored_kind: String =
+                tx.query_row("SELECT kind FROM source WHERE source_id=?1", [id], |r| {
+                    r.get(0)
+                })?;
+            if stored_root != source_root || stored_kind != kind.as_str() {
                 return Err(Error::Invalid(
                     "access lease belongs to a different source root".into(),
                 ));
             }
             let mut q = tx.prepare("SELECT root_path FROM library WHERE source_id=?1")?;
             for previous in q.query_map([id], |r| r.get::<_, String>(0))? {
-                let previous = PathBuf::from(previous?);
-                if root.starts_with(&previous) || previous.starts_with(root) {
+                let previous = previous?;
+                let overlap = if kind == SourceKind::Webdav {
+                    ocp_webdav::within(root, &previous) || ocp_webdav::within(&previous, root)
+                } else {
+                    Path::new(root).starts_with(&previous) || Path::new(&previous).starts_with(root)
+                };
+                if overlap {
                     return Err(Error::Invalid(
                         "scan roots must not overlap; select separate subdirectories".into(),
                     ));
@@ -163,13 +251,14 @@ impl Store {
         } else {
             let id = crate::id();
             tx.execute(
-                "INSERT INTO source VALUES(?1,'localFolder',?2,?3,?4,?5)",
+                "INSERT INTO source VALUES(?1,?6,?2,?3,?4,?5)",
                 params![
                     id,
                     source_name,
-                    source_root.to_string_lossy(),
+                    source_root,
                     access_ref,
-                    crate::now()
+                    crate::now(),
+                    kind.as_str()
                 ],
             )?;
             id
@@ -178,7 +267,7 @@ impl Store {
             library_id: crate::id(),
             source_id,
             name: name.into(),
-            root_path: root.to_string_lossy().into_owned(),
+            root_path: root.to_owned(),
             library_type: typ,
             revision: 1,
             created_at: crate::now(),
@@ -191,7 +280,7 @@ impl Store {
 
     pub fn start_scan(&self, source_id: &str, library_id: &str) -> Result<Job, Error> {
         self.library(source_id, library_id)?;
-        let active: Option<String> = self.db.query_row("SELECT job_id FROM job WHERE library_id=?1 AND status IN ('queued','enumerating','paused','interrupted','waitingPermission') ORDER BY generation DESC LIMIT 1", [library_id], |r| r.get(0)).optional()?;
+        let active: Option<String> = self.db.query_row("SELECT job_id FROM job WHERE library_id=?1 AND status IN ('queued','enumerating','paused','interrupted','waitingPermission','waitingCredentials','waitingNetwork') ORDER BY generation DESC LIMIT 1", [library_id], |r| r.get(0)).optional()?;
         if let Some(id) = active {
             return self.job(source_id, &id);
         }
@@ -324,6 +413,18 @@ impl Store {
         mtime: f64,
         parsed: &Parsed,
     ) -> Result<(), Error> {
+        self.ingest_remote(job, relative, size, mtime, None, parsed)
+    }
+
+    pub fn ingest_remote(
+        &self,
+        job: &Job,
+        relative: &str,
+        size: i64,
+        mtime: f64,
+        etag: Option<&str>,
+        parsed: &Parsed,
+    ) -> Result<(), Error> {
         let library = self.library(&job.source_id, &job.library_id)?;
         if (library.library_type == LibraryType::Movies && parsed.kind != ItemKind::Movie)
             || (library.library_type == LibraryType::Tvshows
@@ -343,8 +444,8 @@ impl Store {
             .as_ref()
             .map(|e| e.0.clone())
             .unwrap_or_else(crate::id);
-        tx.execute("INSERT INTO entry(source_id,asset_id,library_id,relative_path,size,mtime,seen_generation) VALUES(?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(source_id,library_id,relative_path) DO UPDATE SET size=excluded.size,mtime=excluded.mtime,available=1,seen_generation=excluded.seen_generation",
-            params![job.source_id,asset_id,job.library_id,relative,size,mtime,job.generation])?;
+        tx.execute("INSERT INTO entry(source_id,asset_id,library_id,relative_path,size,mtime,seen_generation,etag) VALUES(?1,?2,?3,?4,?5,?6,?7,?8) ON CONFLICT(source_id,library_id,relative_path) DO UPDATE SET size=excluded.size,mtime=excluded.mtime,etag=excluded.etag,available=1,seen_generation=excluded.seen_generation",
+            params![job.source_id,asset_id,job.library_id,relative,size,mtime,job.generation,etag])?;
         let upsert = |key: &str,
                       kind: ItemKind,
                       name: &str,
@@ -516,6 +617,11 @@ impl Store {
         item_id: &str,
         asset_id: &str,
     ) -> Result<PathBuf, Error> {
+        if self.source(source_id)?.kind != SourceKind::LocalFolder {
+            return Err(Error::Invalid(
+                "remote assets require a provider resource lease".into(),
+            ));
+        }
         let item = self.item(source_id, item_id)?;
         let library = self.library(source_id, &item.library_id)?;
         let asset = self

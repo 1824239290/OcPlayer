@@ -51,8 +51,11 @@ public final class ErikaPresenter {
         self.handle = handle
     }
 
+    private var resourceLifetime: PlaybackResourceLifetime?
+
     deinit {
         erika_presenter_destroy(handle)
+        withExtendedLifetime(resourceLifetime) {}
     }
 
     // MARK: - 媒体
@@ -61,6 +64,9 @@ public final class ErikaPresenter {
     /// `open_with_options`（两个字段都只影响 HTTP(S) 源：`readAheadBytes` 是前向
     /// 预取窗口、`backBufferBytes` 是回退预算，0/nil = 内核默认）。
     public func open(_ source: PlaybackSource) throws {
+        let previous = resourceLifetime
+        defer { withExtendedLifetime(previous) {} }
+        resourceLifetime = source.resourceLifetime
         guard !source.headers.isEmpty || source.readAheadBytes != nil || source.backBufferBytes != nil else {
             try ErikaError.check(erika_presenter_open(handle, source.uri))
             return

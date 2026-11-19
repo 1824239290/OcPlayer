@@ -2,7 +2,7 @@
 
 日期：2026-11-20。分支：`codex/media-library-single-source`。实施依据：[V3 方案](/Users/jumusu/Documents/project/OcPlayer/docs/MEDIA-LIBRARY-IMPLEMENTATION-V3.md)。原分析报告和 V2/V3 完整保留。
 
-M1/M2 已提交，本批接通本地目录媒体库的 TMDB 刮削、海报和手动匹配。现在可以通过系统目录选择器建库，自动扫描及刮削，浏览电影与电视剧，切换来源并使用原播放器；**完整方案仍未完成**，iOS 静态 Core 分发、Windows 应用入口、SMB/WebDAV 尚未接通。
+M1/M2/M3 已提交，本批接通 WebDAV 的验证、目录选择、永久索引、共用 TMDB 刮削、凭据恢复和原播放器 Range 播放。macOS 可以创建本地文件夹或 WebDAV 来源，分别添加电影／电视剧目录，并与 Jellyfin／Emby 切换；**完整方案仍未完成**，SMB、iOS 静态 Core 分发和 Windows 应用入口仍待接通。
 
 ## M1 基础（2026-11-19）
 
@@ -39,6 +39,18 @@ M1/M2 已提交，本批接通本地目录媒体库的 TMDB 刮削、海报和�
 - 海报复用 `RemoteImage`／现有图片缓存及 TMDB 图片镜像，使用当前视图的显示倍率做下采样，缓存归属当前文件来源。在线任务变化在文件库导航层观察，进入分类／详情后也会刷新结果；观看进度写入不会重置分类分页。图片仍属可淘汰缓存，稳定离线海报预算尚未实现。
 - Swift/C# SDK 和公开命令清单同步新增刮削、候选、手动绑定／解除接口。Apple 依据实际能力开放功能，文件库设置提供刮削语言；用户主动暂停的任务不会因重新打开来源而自动继续。
 
+## M4 WebDAV 接入（2026-11-20）
+
+- 新增 `ocp-webdav`：匿名／Basic／Bearer 连接、`PROPFIND Depth: 1`、DAV 命名空间及成功 propstat 解析，检查 collection、自身目录、64 位文件长度、mtime、ETag。限制响应与条目数量，中文、字面百分号、井号、空格等按路径段保留与编码。
+- 拒绝父目录穿越、编码后的路径分隔符、重复路径、外来源 href 和不完整目录响应。扫描复用永久检查点及分类解析；网络／鉴权失败保留旧资产并等待重试，重启后可从失败目录继续。恢复后保留错误计数，显示部分失败，下一次完整无错误扫描才对账删除。
+- `Library.sqlite` 升级到 schema 3，原来源、分类、文件、匹配、队列和进度保留，扩展 WebDAV 来源约束并新增 ETag。迁移前后验证 FK 归属，远程根保存规范目录 URL，不走本地 `canonicalize`。ETag 纳入刮削输入版本。
+- 首次创建 WebDAV 分类仍需当前草稿的有效 TMDB 验证凭证，并验证／打开实际扫描目录。已有来源单独恢复 WebDAV 连接，清除 TMDB 不阻止索引读取或远程播放。电影、电视剧共用既有刮削队列、匹配界面和海报缓存，S0 与仅本地已有集的规则保持一致。
+- macOS 添加页支持本地文件夹／WebDAV 类型选择、鉴权方式、连接验证和逐级远程目录选择；来源页可更新 WebDAV 凭据，同一来源继续添加不重叠的分类。用户名／密码或 Token 存入项目已有的加固凭据文件仓库 `LibraryCredentials.json`（0600、排除备份），Core 只持运行时副本。采用现有仓库方式与 ad-hoc 签名策略一致，未另引入 Keychain 授权弹窗。
+- 起播实际请求 `bytes=0-0`，要求 206、正确 Content-Range／长度和一个字节响应。Core 给 Erika 返回仅绑定 127.0.0.1 的随机租约 URL，不把 DAV 凭据交给播放器。桥接支持 HEAD、单段闭区间／开放区间／尾部 Range、416，按最多 4 MiB 上游窗口流式读取及背压，不缓存整部影片；每句柄最多 32 个租约，每租约最多 8 个并发读者。
+- 上游最多五次同 origin、同分类根内重定向，拒绝跨 origin、HTTPS 降级、越根或带查询签名的 Location。请求头不由本机请求透传，DAV 凭据不用于 TMDB 或图片 CDN。跨域签名 CDN 跳转暂不支持，需填写可直接读取视频的最终 WebDAV 地址。
+- `PlaybackResourceLifetime` 在播放请求、重试／后台重开和 Erika 原生 presenter 间共享。资源直到 `erika_presenter_destroy` 完成后才释放，避免 UI 退出、换片或取消在飞 open 提前关闭本机地址；销毁 Core 时取消并收尾所有扫描／读取线程。
+- Swift/C# SDK、公开命令清单与 Core 合同同步新增远程访问、浏览、凭据恢复及播放租约释放。文件来源仍只有一次一个 activeSource，无聚合、无伪造服务器、无 Jellyfin／Emby 播放上报。
+
 ## 后续尚需实现
 
 | 范围 | 尚需接通 |
@@ -46,12 +58,12 @@ M1/M2 已提交，本批接通本地目录媒体库的 TMDB 刮削、海报和�
 | iOS / Windows 添加流程 | iOS 静态 Core 接入、Windows 目录授权／来源选择／分类／浏览／播放；macOS 库编辑与删除等管理操作 |
 | 单一来源切换与框架 | macOS 已接通来源边界；文件库暂用独立导航，尚需接入主框架的观影／完整设置分区与统一视觉；其余宿主需沿用同样的来源与收尾规则 |
 | 识别与元数据完善 | NFO 解析、更丰富的文件名／绝对集号规则、同片电影版本分组、题材筛选、稳定离线海报保留预算 |
-| 播放完善 | 文件字幕、集间连播、明确 EOF 事件、同片电影版本分组、真实视频解码与系统权限真机验收 |
-| WebDAV | PROPFIND／路径与 XML、凭据、真实 Range／重定向合同、直连播放／字幕／图片 |
+| 播放完善 | 文件字幕、集间连播、明确 EOF 事件、同片电影版本分组、长视频／系统权限与真机验收 |
+| WebDAV 完善 | 真实 NAS／长视频 seek 与断网恢复、签名 CDN 资源解析、外置字幕／本地图片、地址迁移和完整管理 |
 | SMB | libsmb2 三端依赖与 IO、共享目录、本机 HTTP Range 桥接、句柄及播放租约 |
 | 发行／平台验收 | macOS 自动嵌入已接通；iOS 静态 Core 分发、Windows 宿主、系统权限与真实视频／NAS 验证 |
 
-能力接口明确返回 `schemaVersion: 2`、`tmdbScraping: true`、`remoteProviders: false`，来源仅放行 `localFolder`，聚合为 false。应用接入阶段依据真实能力判断可用范围；首版最终仍只做来源切换，不做多来源聚合。
+能力接口明确返回 `schemaVersion: 3`、`tmdbScraping: true`、`remoteProviders: true`，来源放行 `localFolder` 与 `webdav`，SMB 不放行，聚合为 false。应用接入阶段依据真实能力判断可用范围；首版最终仍只做来源切换，不做多来源聚合。
 
 ## 已执行的验证
 
@@ -64,3 +76,15 @@ M1/M2 已提交，本批接通本地目录媒体库的 TMDB 刮削、海报和�
 - macOS Debug 应用构建和 iOS 模拟器共享代码构建通过；macOS 产物实际包含签名后的 Core dylib。布局检查与 `git diff --check` 通过。
 - M2 的 macOS 隔离实例原生界面检查通过：登录页打开来源选择器、添加入口打开向导、电影／电视剧切换同步分类名称；没有 TMDB 凭据时验证、目录选择、添加扫描按钮均保持禁用。M3 通过构建和上述宿主集成用例验证，尚未用真实账户检查海报加载及手动匹配的原生操作流程。
 - 本机没有 .NET 10 SDK，C# SDK 尚未编译或运行 Windows 验证。测试使用合成文件，不代表真实视频解码、用户媒体目录／NAS 或真实 TMDB 账户已验收；iOS 源码构建成功也不代表静态 Core 已分发。
+
+## M4 验证记录
+
+本批使用本机 DAV／TMDB HTTP fixture 和隔离临时数据库，验证中文特殊路径、多个 propstat、64 位大小、外来源／越界拒绝、206／Content-Range、同来源重定向、跨来源鉴权陷阱、4 MiB 窗口和尾部读取、资源释放、已有匹配与观看进度跨重启、电影／电视剧／S0 分类和失败目录跨重启续扫。Apple 用例生成三秒 ffmpeg 视频并使用真实 liberika presenter 打开及 seek，不再仅使用替身解码器验证远程准备。
+
+- Rust：99 个用例通过（Core 47 单元＋3 基础集成＋6 刮削集成＋2 WebDAV 集成；Library 2 解析＋17 catalog；TMDB 18；WebDAV 1 Range＋3 XML／路径）。旧数据库用例同时验证真实 schema 1 与 schema 2 升级。
+- macOS AppTests：20 个通过（FileLibraryIntegrationTests 9、AppPlaybackHistoryTests 7、ReleaseSessionRegressionTests 4），含真实视频 Range 起播和 seek、凭据文件权限及恢复、文件请求身份、原服务器进度回归。
+- Erika 原生资源生命周期用例：1 个通过，确认失败 open／close 后仍保留租约，直到 native presenter 销毁才释放。
+- iOS 模拟器共享代码构建通过；普通 iOS 仍缺静态 Core 分发，不能宣称设备端 WebDAV 可用。
+- Swift 文件库 SDK 3 个用例、公开命令／TMDB wire／matcher 合同 15 个用例通过，公开命令清单 404 个。`cargo fmt --check`、Clippy 和仓库校验通过；Clippy 保留 Store API 参数数量及已有模块的提示。macOS 嵌入动态库签名校验通过。
+- 性能诊断：细分计时及进程采样确认长等待在测试 Python 读取仓库脚本时发生。现将共享 fixture 同步嵌入测试代码、通过 `python -c` 在后台执行，使测试无需读取 Documents 项目目录；原 `.py` 完整保留，`sync-webdav-test-fixture.py --check` 检查两者一致。最终新增宿主闭环约 0.39 秒，服务启动约 84 毫秒、Core 打开约 5 毫秒、TMDB 验证约 25 毫秒、播放准备约 6 毫秒、liberika 打开与 seek 约 89 毫秒。测试服务不属于应用播放链路。
+- 未使用真实 NAS／TMDB 账户或 Windows 宿主验收；真实服务的跨域签名播放地址目前明确拒绝。

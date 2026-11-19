@@ -1,0 +1,17 @@
+[package]
+name = "ocp-webdav"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+reqwest.workspace = true
+url.workspace = true
+base64.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+tokio = { workspace = true, features = ["net", "io-util", "sync"] }
+percent-encoding = "2"
+roxmltree = "0.20"

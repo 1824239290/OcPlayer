@@ -826,6 +826,7 @@ extension AppModel {
             authHeader: request.authHeader,
             headers: request.headers,
             fileLibraryIdentity: request.fileLibraryIdentity,
+            resourceLifetime: request.resourceLifetime,
             resumeSeconds: resumeSeconds,
             securityScopedURL: request.securityScopedURL,
             sessionContext: request.sessionContext

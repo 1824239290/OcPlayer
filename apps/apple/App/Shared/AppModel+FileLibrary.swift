@@ -83,16 +83,17 @@ extension AppModel {
         // state, including when the user immediately reopens the same movie.
         await finishReporting()?.value
         let prepared = try await fileLibrary.preparePlayback(item: item, asset: asset)
+        let lifetime = fileLibrary.retainPlayback(prepared)
         guard generation == sessionGeneration, activeFileSourceID == item.sourceId else { return }
-        guard let url = URL(string: prepared.uri), url.isFileURL else {
-            throw OcpCoreError(message: "当前文件库只支持本地文件播放")
+        guard let url = URL(string: prepared.uri), (url.isFileURL || (url.scheme == "http" && url.host == "127.0.0.1" && prepared.leaseId != nil)) else {
+            throw OcpCoreError(message: "无法解析文件媒体库播放资源")
         }
         let resume = fromStart || prepared.progress?.completed == true || prepared.progress?.played == true
             ? nil : prepared.progress?.positionSeconds
         let request = PlaybackRequest(
-            title: item.title, uri: url.path, headers: prepared.headers,
+            title: item.title, uri: url.isFileURL ? url.path : url.absoluteString, headers: prepared.headers,
             fileLibraryIdentity: .init(sourceID: prepared.sourceId, itemID: prepared.itemId, assetID: prepared.assetId),
-            resumeSeconds: resume)
+            resourceLifetime: lifetime, resumeSeconds: resume)
         presentRequest(request)
     }
 

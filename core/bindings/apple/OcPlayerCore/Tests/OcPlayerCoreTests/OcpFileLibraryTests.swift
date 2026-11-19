@@ -7,11 +7,11 @@ final class OcpFileLibraryTests: XCTestCase {
         let core = try OcpCoreClient(libraryPath: OcpTestLibrary.path())
         let library = OcpFileLibrary(client: core)
         let capabilities = try await library.capabilities()
-        XCTAssertEqual(capabilities.sourceKinds, ["localFolder"])
+        XCTAssertEqual(capabilities.sourceKinds, ["localFolder", "webdav"])
         XCTAssertEqual(capabilities.libraryTypes, [.movies, .tvshows])
         XCTAssertFalse(capabilities.aggregation)
         XCTAssertTrue(capabilities.tmdbScraping)
-        XCTAssertEqual(capabilities.schemaVersion, 2)
+        XCTAssertEqual(capabilities.schemaVersion, 3)
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }

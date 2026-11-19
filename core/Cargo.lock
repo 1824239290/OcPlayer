@@ -864,6 +864,7 @@ dependencies = [
  "ocp-session",
  "ocp-store",
  "ocp-tmdb",
+ "ocp-webdav",
  "regex",
  "reqwest",
  "serde",
@@ -939,6 +940,7 @@ dependencies = [
 name = "ocp-library"
 version = "0.1.0"
 dependencies = [
+ "ocp-webdav",
  "regex",
  "rusqlite",
  "serde",
@@ -1006,6 +1008,22 @@ dependencies = [
  "unicode-normalization",
  "unicode-segmentation",
  "url",
+]
+
+[[package]]
+name = "ocp-webdav"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "percent-encoding",
+ "reqwest",
+ "roxmltree",
+ "serde",
+ "thiserror",
+ "tokio",
+ "url",
+ "uuid",
 ]
 
 [[package]]
@@ -1254,6 +1272,12 @@ dependencies = [
  "untrusted",
  "windows-sys 0.52.0",
 ]
+
+[[package]]
+name = "roxmltree"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
 
 [[package]]
 name = "rusqlite"

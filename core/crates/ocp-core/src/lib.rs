@@ -18,6 +18,7 @@ mod diagnostic_export;
 mod events;
 mod library;
 mod library_scrape;
+mod library_webdav;
 mod media;
 mod network;
 mod preferences;
@@ -398,6 +399,69 @@ impl Core {
                     .map_err(|_| CommandError::invalid("library service unavailable"))?
                     .validated(&input, generation)
                     .map_err(|e| CommandError::invalid(e.to_string()))
+            })();
+            let response = match result {
+                Ok(data) => ApiResponse::ok(data),
+                Err(CommandError(code, retryable, message)) => {
+                    ApiResponse::error(code, retryable, message, Value::Null)
+                }
+            };
+            return serde_json::to_string(&response).map_err(CoreError::InvalidJson);
+        }
+        if matches!(
+            method,
+            "library.webdav.access.prepare"
+                | "library.webdav.browse"
+                | "library.webdav.credentials.restore"
+                | "library.playback.prepare"
+        ) {
+            arguments
+                .as_object_mut()
+                .expect("validated object")
+                .remove("requestId");
+            let result = (|| -> Result<Value, CommandError> {
+                let directory = self
+                    .state
+                    .lock()
+                    .map_err(|_| CommandError::invalid("state unavailable"))?
+                    .config
+                    .data_directory
+                    .clone();
+                let request = {
+                    let mut runtime = self
+                        .library
+                        .lock()
+                        .map_err(|_| CommandError::invalid("library unavailable"))?;
+                    if matches!(
+                        method,
+                        "library.playback.prepare" | "library.webdav.credentials.restore"
+                    ) {
+                        runtime
+                            .call("library.sources.list", json!({}), directory.as_deref())
+                            .map_err(CommandError::from)?;
+                    }
+                    runtime
+                        .prepare_remote(method, arguments)
+                        .map_err(CommandError::from)?
+                };
+                if request.is_local() {
+                    return self
+                        .library
+                        .lock()
+                        .map_err(|_| CommandError::invalid("library unavailable"))?
+                        .finish_remote(request, library::RemoteReply::Local)
+                        .map_err(CommandError::from);
+                }
+                let service = self.network().map_err(|e| CommandError(1500, false, e))?;
+                let (request, reply) = service.run(cancellable(cancelled, async move {
+                    let reply = request.execute().await.map_err(CommandError::from)?;
+                    Ok((request, reply))
+                }))?;
+                self.library
+                    .lock()
+                    .map_err(|_| CommandError::invalid("library unavailable"))?
+                    .finish_remote(request, reply)
+                    .map_err(CommandError::from)
             })();
             let response = match result {
                 Ok(data) => ApiResponse::ok(data),

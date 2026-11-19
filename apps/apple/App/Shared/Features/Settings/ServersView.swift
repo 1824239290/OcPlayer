@@ -50,7 +50,7 @@ struct ServersView: View {
         // ——与 MoviePilot 下载页同一套承载；一段 = 一张 `SettingsGlassSection`。
         SettingsGlassPage {
             SettingsGlassSection("媒体来源") {
-                Button("切换媒体来源或添加文件夹媒体库…", systemImage: "externaldrive") { app.isMediaSourcesPresented = true }
+                Button("切换媒体来源或添加文件媒体库…", systemImage: "externaldrive") { app.isMediaSourcesPresented = true }
             }
             // **profiles 为空时整段都不出**：段落里一条行都没有时，`SettingsGlassSection`
             // 仍会画出标题留白 + 一块 padding 后的玻璃（视觉上是一条 12pt 的全宽玻璃条）。

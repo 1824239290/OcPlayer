@@ -750,7 +750,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
                 headers: headers,
                 // 本地文件路径没有预取语义，内核会忽略；统一带上无妨。
                 readAheadBytes: readAhead,
-                backBufferBytes: backBuffer
+                backBufferBytes: backBuffer,
+                resourceLifetime: request.resourceLifetime
             ),
             securityScopedURL: request.securityScopedURL,
             request: request

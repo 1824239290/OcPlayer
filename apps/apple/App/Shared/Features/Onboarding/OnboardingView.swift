@@ -168,7 +168,7 @@ struct OnboardingView: View {
     private var serverForm: some View {
         VStack(alignment: .leading, spacing: 12) {
             savedServersSection
-            Button("文件夹媒体库与媒体来源…", systemImage: "folder") { app.isMediaSourcesPresented = true }
+            Button("文件媒体库与媒体来源…", systemImage: "folder") { app.isMediaSourcesPresented = true }
 
             Text("服务器地址")
                 .font(.callout.weight(.medium))

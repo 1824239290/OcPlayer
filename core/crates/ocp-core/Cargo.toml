@@ -13,6 +13,7 @@ ocp-jellyfin.workspace = true
 ocp-http.workspace = true
 ocp-store.workspace = true
 ocp-library.workspace = true
+ocp-webdav.workspace = true
 ocp-bangumi.workspace = true
 ocp-moviepilot.workspace = true
 serde.workspace = true

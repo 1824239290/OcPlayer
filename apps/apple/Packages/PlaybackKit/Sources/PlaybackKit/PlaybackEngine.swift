@@ -104,6 +104,8 @@ public protocol PlaybackEngine: AnyObject, Sendable {
 
     // MARK: - 播放控制
 
+    /// Retain source.resourceLifetime until all native readers are retired,
+    /// including after a failed open, cancellation or UI source replacement.
     func open(_ source: PlaybackSource) throws
     /// open 返回后：本次 open 的成果是否已被让位（open 期间宿主请求过 stop /
     /// surface 拆卸，引擎收尾已补 stop）。宿主据此跳过 play / 参数设置——

@@ -28,20 +28,21 @@ public sealed record FileLibraryCreation(FileLibraryDefinition Library, FileLibr
 public sealed record FileLibraryPage(FileLibraryItem[] Items, long TotalCount, long StartIndex);
 public sealed record FileLibraryDetail(FileLibraryItem Item, FileLibraryAsset[] Assets, FileLibraryProgress? Progress);
 public sealed record FileLibraryPlayback(string SourceId, string ItemId, string AssetId, string Uri,
-    Dictionary<string, string> Headers, FileLibraryProgress? Progress);
+    Dictionary<string, string> Headers, FileLibraryProgress? Progress, string? LeaseId = null);
 public sealed record FileLibraryQuery(string SourceId, string? LibraryId = null, string? Type = null,
     string? ParentId = null, string Search = "", long StartIndex = 0, int Limit = 50);
 public sealed record FileLibraryCreate(string DraftId, string VerificationId, string CredentialRevision, string ApiBase,
-    string AccessId, string SourceName, string RootPath, string Name, string Type, string? SourceId = null)
-{
-    public string Kind => "localFolder";
-}
+    string AccessId, string SourceName, string RootPath, string Name, string Type, string? SourceId = null, string Kind = "localFolder");
+
+public sealed record FileLibraryWebDavCredential(string Type, string? Username = null, string? Password = null, string? Token = null);
+public sealed record FileLibraryRemoteEntry(string RelativePath, bool IsDirectory, long Size, double ModifiedAt, string? Etag);
+public sealed record FileLibraryRemoteDirectory(string RootPath, string RelativePath, FileLibraryRemoteEntry[] Entries);
 
 /// Shared file-library commands. The host owns folder authorization and source
 /// selection; there is no server impersonation or implicit multi-source query.
 public sealed class OcpFileLibrary(OcpCoreClient client)
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
 
     public Task<FileLibraryCapabilities> CapabilitiesAsync(CancellationToken cancellation = default)
         => Invoke<FileLibraryCapabilities>("library.capabilities", new { }, cancellation);
@@ -54,6 +55,14 @@ public sealed class OcpFileLibrary(OcpCoreClient client)
         => _ = await Invoke<JsonElement>("tmdb.access.invalidate", new { }, cancellation).ConfigureAwait(false);
     public Task<FileLibraryAccess> PrepareAccessAsync(string rootPath, string? accessRef = null, CancellationToken cancellation = default)
         => Invoke<FileLibraryAccess>("library.access.prepare", new { rootPath, accessRef }, cancellation);
+    public Task<FileLibraryAccess> PrepareWebDavAsync(string rootUrl, FileLibraryWebDavCredential credential, string? accessRef = null, CancellationToken cancellation = default)
+        => Invoke<FileLibraryAccess>("library.webdav.access.prepare", new { rootUrl, credential, accessRef }, cancellation);
+    public Task<FileLibraryRemoteDirectory> BrowseWebDavAsync(string accessId, string relativePath = "", CancellationToken cancellation = default)
+        => Invoke<FileLibraryRemoteDirectory>("library.webdav.browse", new { accessId, relativePath }, cancellation);
+    public async Task RestoreWebDavAsync(string sourceId, string rootUrl, FileLibraryWebDavCredential credential, CancellationToken cancellation = default)
+        => _ = await Invoke<JsonElement>("library.webdav.credentials.restore", new { sourceId, rootUrl, credential }, cancellation).ConfigureAwait(false);
+    public async Task ReleasePlaybackAsync(string leaseId, CancellationToken cancellation = default)
+        => _ = await Invoke<JsonElement>("library.playback.release", new { leaseId }, cancellation).ConfigureAwait(false);
     public Task<FileLibraryCreation> CreateAsync(FileLibraryCreate input, CancellationToken cancellation = default)
         => Invoke<FileLibraryCreation>("library.create", input, cancellation);
     public async Task<FileLibrarySource[]> SourcesAsync(CancellationToken cancellation = default)

@@ -87,7 +87,7 @@ private struct FileLibraryHomeView: View {
             Section("目录扫描") {
                 ForEach(libraries) { library in
                     Button("扫描「\(library.name)」") { Task { await scan(library) } }
-                        .disabled(jobs.contains { $0.libraryId == library.libraryId && ["running", "queued"].contains($0.status) })
+                        .disabled(jobs.contains { $0.libraryId == library.libraryId && ["enumerating", "queued"].contains($0.status) })
                 }
                 ForEach(jobs) { job in
                     VStack(alignment: .leading, spacing: 6) {
@@ -96,8 +96,8 @@ private struct FileLibraryHomeView: View {
                             .font(.caption).foregroundStyle(.secondary)
                         if let message = job.lastError { Text(message).font(.caption).foregroundStyle(.orange) }
                         HStack {
-                            if ["running", "queued"].contains(job.status) { Button("暂停") { Task { await control(job, .pause) } } }
-                            if ["paused", "interrupted", "waitingPermission"].contains(job.status) { Button("继续") { Task { await control(job, .resume) } } }
+                            if ["enumerating", "queued"].contains(job.status) { Button("暂停") { Task { await control(job, .pause) } } }
+                            if ["paused", "interrupted", "waitingPermission", "waitingCredentials", "waitingNetwork"].contains(job.status) { Button("继续") { Task { await control(job, .resume) } } }
                             if !["completed", "cancelled", "failed"].contains(job.status) { Button("取消扫描") { Task { await control(job, .cancel) } } }
                         }.buttonStyle(.bordered).controlSize(.small)
                     }
@@ -365,6 +365,8 @@ private extension OcpFileLibrary.Job {
         case "paused": "已暂停"
         case "interrupted": "扫描中断"
         case "waitingPermission": "等待目录授权"
+        case "waitingCredentials": "等待 WebDAV 凭据"
+        case "waitingNetwork": "等待网络重试"
         case "completed": "扫描完成"
         case "cancelled": "已取消"
         case "failed": "扫描失败"

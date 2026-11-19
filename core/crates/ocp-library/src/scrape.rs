@@ -158,14 +158,15 @@ impl Store {
             .filter(|_| item.kind == ItemKind::Season)
             .unwrap_or(item_id);
         let matched: Option<(i64,bool,String,f64,i64)> = self.db.query_row("SELECT m.tmdb_id,m.manual_lock,m.language,m.fetched_at,c.match_revision FROM item_match m JOIN catalog_item c ON c.source_id=m.source_id AND c.item_id=m.item_id WHERE m.source_id=?1 AND m.item_id=?2", params![source,work_id], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))).optional()?;
-        let mut q = self.db.prepare("SELECT e.relative_path,e.size,e.mtime,e.available FROM entry e JOIN item_asset a ON a.source_id=e.source_id AND a.asset_id=e.asset_id JOIN catalog_item c ON c.source_id=a.source_id AND c.item_id=a.item_id WHERE e.source_id=?1 AND (c.item_id=?2 OR c.series_id=?2 OR c.parent_id=?2) ORDER BY e.relative_path")?;
+        let mut q = self.db.prepare("SELECT e.relative_path,e.size,e.mtime,e.available,e.etag FROM entry e JOIN item_asset a ON a.source_id=e.source_id AND a.asset_id=e.asset_id JOIN catalog_item c ON c.source_id=a.source_id AND c.item_id=a.item_id WHERE e.source_id=?1 AND (c.item_id=?2 OR c.series_id=?2 OR c.parent_id=?2) ORDER BY e.relative_path")?;
         let assets = q
             .query_map(params![source, item_id], |r| {
                 Ok(json!([
                     r.get::<_, String>(0)?,
                     r.get::<_, i64>(1)?,
                     r.get::<_, f64>(2)?,
-                    r.get::<_, bool>(3)?
+                    r.get::<_, bool>(3)?,
+                    r.get::<_, Option<String>>(4)?
                 ]))
             })?
             .collect::<Result<Vec<_>, _>>()?;

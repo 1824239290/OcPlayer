@@ -127,7 +127,7 @@ public final class OcpFileLibrary: @unchecked Sendable {
     public struct Detail: Decodable, Sendable { public let item: Item; public let assets: [Asset]; public let progress: Progress? }
     public struct Playback: Decodable, Sendable {
         public let sourceId: String; public let itemId: String; public let assetId: String
-        public let uri: String; public let headers: [String: String]; public let progress: Progress?
+        public let uri: String; public let headers: [String: String]; public let progress: Progress?; public let leaseId: String?
     }
     public struct Query: Encodable, Sendable {
         public var sourceId: String
@@ -148,15 +148,15 @@ public final class OcpFileLibrary: @unchecked Sendable {
         public let credentialRevision: String
         public let apiBase: String
         public let accessId: String
-        public let kind = "localFolder"
+        public let kind: String
         public let sourceId: String?
         public let sourceName: String
         public let rootPath: String
         public let name: String
         public let type: LibraryType
-        public init(draftId: String, verificationId: String, credentialRevision: String, apiBase: String, accessId: String, sourceId: String? = nil, sourceName: String, rootPath: String, name: String, type: LibraryType) {
+        public init(draftId: String, verificationId: String, credentialRevision: String, apiBase: String, accessId: String, kind: String = "localFolder", sourceId: String? = nil, sourceName: String, rootPath: String, name: String, type: LibraryType) {
             self.draftId = draftId; self.verificationId = verificationId; self.credentialRevision = credentialRevision
-            self.apiBase = apiBase; self.accessId = accessId; self.sourceId = sourceId; self.sourceName = sourceName
+            self.apiBase = apiBase; self.accessId = accessId; self.kind = kind; self.sourceId = sourceId; self.sourceName = sourceName
             self.rootPath = rootPath; self.name = name; self.type = type
         }
     }
@@ -180,6 +180,44 @@ public final class OcpFileLibrary: @unchecked Sendable {
     public func prepareAccess(root: URL, accessRef: String? = nil) async throws -> Access {
         var args = ["rootPath": root.path]; if let accessRef { args["accessRef"] = accessRef }
         return try await invoke("library.access.prepare", args)
+    }
+    public struct WebDAVCredential: Codable, Sendable, Equatable {
+        public let type: String
+        public let username: String?
+        public let password: String?
+        public let token: String?
+        public static var none: Self { .init(type: "none", username: nil, password: nil, token: nil) }
+        public static func basic(username: String, password: String) -> Self { .init(type: "basic", username: username, password: password, token: nil) }
+        public static func bearer(token: String) -> Self { .init(type: "bearer", username: nil, password: nil, token: token) }
+    }
+    public struct RemoteEntry: Decodable, Sendable, Identifiable {
+        public let relativePath: String
+        public let isDirectory: Bool
+        public let size: Int64
+        public let modifiedAt: Double
+        public let etag: String?
+        public var id: String { relativePath }
+    }
+    public struct RemoteDirectory: Decodable, Sendable {
+        public let rootPath: String
+        public let relativePath: String
+        public let entries: [RemoteEntry]
+    }
+    public func prepareWebDAV(rootURL: String, credential: WebDAVCredential, accessRef: String? = nil) async throws -> Access {
+        struct Input: Encodable { let rootUrl: String; let credential: WebDAVCredential; let accessRef: String? }
+        return try await invoke("library.webdav.access.prepare", Input(rootUrl: rootURL, credential: credential, accessRef: accessRef))
+    }
+    public func browseWebDAV(accessId: String, relativePath: String = "") async throws -> RemoteDirectory {
+        try await invoke("library.webdav.browse", ["accessId": accessId, "relativePath": relativePath])
+    }
+    public func restoreWebDAV(sourceId: String, rootURL: String, credential: WebDAVCredential) async throws {
+        struct Input: Encodable { let sourceId: String; let rootUrl: String; let credential: WebDAVCredential }
+        struct Result: Decodable { let restored: Bool }
+        let _: Result = try await invoke("library.webdav.credentials.restore", Input(sourceId: sourceId, rootUrl: rootURL, credential: credential))
+    }
+    public func releasePlayback(leaseId: String) async throws {
+        struct Result: Decodable { let released: Bool }
+        let _: Result = try await invoke("library.playback.release", ["leaseId": leaseId])
     }
     public func create(_ input: Create) async throws -> Creation { try await invoke("library.create", input) }
     public func sources() async throws -> [Source] {

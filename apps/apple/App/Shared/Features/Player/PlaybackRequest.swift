@@ -1,5 +1,6 @@
 import Foundation
 import JellyfinKit
+import PlaybackKit
 
 /// 一次播放请求：从浏览层（AppModel）带到播放页的纯值。
 /// `authHeader` 是 Jellyfin 的 `MediaBrowser …` 头 —— 只走请求头，绝不进 URL。
@@ -9,6 +10,7 @@ struct PlaybackRequest: Hashable, Identifiable {
     let uri: String
     let authHeader: String?
     let headers: [String: String]
+    let resourceLifetime: PlaybackResourceLifetime?
     let fileLibraryIdentity: FileLibraryPlaybackIdentity?
     /// Security-scoped URL for a user-selected local file.
     let securityScopedURL: URL?
@@ -37,6 +39,7 @@ struct PlaybackRequest: Hashable, Identifiable {
         authHeader: String? = nil,
         headers: [String: String] = [:],
         fileLibraryIdentity: FileLibraryPlaybackIdentity? = nil,
+        resourceLifetime: PlaybackResourceLifetime? = nil,
         resumeSeconds: Double? = nil,
         securityScopedURL: URL? = nil,
         sessionContext: PlaybackSessionContext? = nil,
@@ -48,6 +51,7 @@ struct PlaybackRequest: Hashable, Identifiable {
         self.authHeader = authHeader
         self.headers = headers
         self.fileLibraryIdentity = fileLibraryIdentity
+        self.resourceLifetime = resourceLifetime
         self.resumeSeconds = resumeSeconds
         self.securityScopedURL = securityScopedURL
         self.sessionContext = sessionContext
