@@ -51,12 +51,12 @@ internal sealed partial class IntegrationPages
             info.SizeChanged += (_, _) => ArrangeActions();
             Grid.SetRow(actions, 1); info.Children.Add(actions); Grid.SetColumn(info, 1); grid.Children.Add(info); hero.Children.Add(DashboardCard(grid, 16));
         }
-        async Task ChaptersRefresh() { episodes = await LoadEpisodes(id, page.Token); page.Token.ThrowIfCancellationRequested(); RenderChapters(); }
+        async Task ChaptersRefresh(bool force) { episodes = await LoadEpisodes(id, page.Token, force); page.Token.ThrowIfCancellationRequested(); RenderChapters(); }
         void RenderChapters()
         {
             chapters.Children.Clear();
             if (episodes is null) { chapters.Children.Add(DashboardEmpty("章节尚未同步")); return; }
-            var content = Stack(8); BgmChapters(page, content, id, episodes, ChaptersRefresh); chapters.Children.Add(DashboardCard(content, 10));
+            var content = Stack(8); BgmChapters(page, content, id, episodes, () => ChaptersRefresh(true)); chapters.Children.Add(DashboardCard(content, 10));
         }
         void RenderInformation()
         {
@@ -100,13 +100,13 @@ internal sealed partial class IntegrationPages
                 footer.Children.Add(DashboardSection("全站收藏", null, BgmResponsiveGrid(counts, 100, 8, 5)));
             }
         }
-        async Task Refresh()
+        async Task Refresh(bool force = false)
         {
             if (subject.ValueKind != JsonValueKind.Object && Service.Snapshot("subject:" + id) is { } cached) { subject = cached; if (collection is null && Json.Get(subject, "interest").ValueKind == JsonValueKind.Object) collection = Json.Get(subject, "interest"); RenderHero(); RenderInformation(); }
             RenderChapters();
             subject = await Service.CachedBgm("subject", new { subjectId = id }, "subject:" + id, page.Token); page.Token.ThrowIfCancellationRequested();
             if (collection is null && Json.Get(subject, "interest").ValueKind == JsonValueKind.Object) collection = Json.Get(subject, "interest"); RenderHero(); RenderInformation();
-            var collectionTask = LoadCollection(); var chaptersTask = LoadChapters(); await Task.WhenAll(collectionTask, chaptersTask);
+            var collectionTask = LoadCollection(); var chaptersTask = LoadChapters(force); await Task.WhenAll(collectionTask, chaptersTask);
         }
         async Task LoadCollection()
         {
@@ -114,15 +114,15 @@ internal sealed partial class IntegrationPages
             catch (OperationCanceledException) { }
             catch (Exception ex) { if (!page.Token.IsCancellationRequested) hero.Children.Add(DashboardMuted("收藏读取失败，保留已有状态：" + ex.Message, 11)); }
         }
-        async Task LoadChapters()
+        async Task LoadChapters(bool force)
         {
-            try { await ChaptersRefresh(); }
+            try { await ChaptersRefresh(force); }
             catch (OperationCanceledException) { }
             catch (Exception ex) { if (!page.Token.IsCancellationRequested) chapters.Children.Add(DashboardMuted("章节刷新失败：" + ex.Message, 11)); }
         }
-        HeaderLeading = BgmIcon(page, "\uE72C", "刷新 Bangumi 详情与章节", Refresh);
+        HeaderLeading = BgmIcon(page, "\uE72C", "刷新 Bangumi 详情与章节", () => Refresh(true));
         HeaderTrailing = BgmIcon(page, "\uE774", "在浏览器打开 Bangumi 条目 " + id, () => { Browse(Service.Domains.Main + "subject/" + id); return Task.CompletedTask; });
-        return Show(page, Refresh);
+        return Show(page, () => Refresh(false));
     }
     private static string BgmInfoValue(JsonElement value) => value.ValueKind switch
     {

@@ -49,7 +49,7 @@ internal sealed class DanmakuService
         _bangumiBase = bangumiBase ?? (() => "https://api.bgm.tv/"); _aliasProvider = aliasProvider; _introProvidersEnabled = introProvidersEnabled;
         _directory = Path.GetFullPath(Path.Combine(directory, "Danmaku"));
         AppPaths.RejectReparsePoints(_directory, directory);
-        CacheFiles.Prune(_directory, long.MaxValue, _ => false); // Remove abandoned native temporary writes only.
+        CacheFiles.Prune(_directory, long.MaxValue, _ => false, force: true); // Remove abandoned native temporary writes only.
         PlaybackSession.Require(core.Call("danmakuCache.open", new { directory = _directory, commentsDiskCapacityBytes = CapacityBytes }));
     }
 

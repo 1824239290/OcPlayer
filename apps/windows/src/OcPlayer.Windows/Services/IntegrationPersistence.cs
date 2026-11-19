@@ -42,11 +42,17 @@ internal sealed partial class ViewingIntegrations
     private readonly SemaphoreSlim _moviePilotRefresh = new(1);
     private long _moviePilotRevision;
     private readonly ConcurrentDictionary<string, Action<JsonElement>> _searchObservers = new();
+    // 快照内存索引：页面按卡片/条目读取时不再逐个读盘与重复 SHA256。
+    private readonly Dictionary<string, (JsonElement Value, DateTimeOffset Stored, int Bytes)> _snapshotMemory = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _snapshotGate = new();
+    private long _snapshotBytes;
+    private const int SnapshotMemoryLimit = 2000;
+    private const long SnapshotMemoryBudget = 24L * 1024 * 1024;
     private void InitializePreferences()
     {
         var root = AppPaths.DataDirectory;
         _store = Path.Combine(root, "Integrations", Hash(_resource)); Directory.CreateDirectory(_store);
-        CacheFiles.Prune(Path.Combine(_store, "Bangumi"), 64L * 1024 * 1024, CacheFiles.HashedJson, TimeSpan.FromDays(30));
+        CacheFiles.Prune(Path.Combine(_store, "Bangumi"), 64L * 1024 * 1024, CacheFiles.HashedJson, TimeSpan.FromDays(30), force: true);
         try { if (File.Exists(Path.Combine(_store, "preferences.json"))) _preferences = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(Path.Combine(_store, "preferences.json"))) ?? []; }
         catch (Exception ex) when (ex is IOException or JsonException) { }
         // Enabled is a user preference, independent from an account temporarily invalidated
@@ -144,17 +150,57 @@ internal sealed partial class ViewingIntegrations
         finally { _searchObservers.TryRemove(id, out _); }
     }
     private string SnapshotPath(string key) => Path.Combine(_store, "Bangumi", Hash(Bangumi?.UserName ?? "anonymous"), Hash(key) + ".json");
-    public JsonElement? Snapshot(string key)
+    public JsonElement? Snapshot(string key) => ReadSnapshot(key, TimeSpan.MaxValue);
+    public JsonElement? SnapshotWithin(string key, TimeSpan maxAge) => maxAge <= TimeSpan.Zero ? null : ReadSnapshot(key, maxAge);
+    private JsonElement? ReadSnapshot(string key, TimeSpan maxAge)
     {
-        try { var path = SnapshotPath(key); return File.Exists(path) ? JsonDocument.Parse(File.ReadAllText(path)).RootElement.Clone() : null; }
-        catch (Exception ex) when (ex is IOException or JsonException) { return null; }
+        var path = SnapshotPath(key);
+        lock (_snapshotGate)
+        {
+            if (_snapshotMemory.TryGetValue(path, out var entry))
+                return DateTimeOffset.UtcNow - entry.Stored <= maxAge ? entry.Value : null;
+            try
+            {
+                if (!File.Exists(path)) return null;
+                var text = File.ReadAllText(path);
+                var stored = new DateTimeOffset(File.GetLastWriteTimeUtc(path), TimeSpan.Zero);
+                var value = JsonDocument.Parse(text).RootElement.Clone();
+                RememberLocked(path, value, stored, text.Length);
+                return DateTimeOffset.UtcNow - stored <= maxAge ? value : null;
+            }
+            catch (Exception ex) when (ex is IOException or JsonException) { return null; }
+        }
+    }
+    private void RememberLocked(string path, JsonElement value, DateTimeOffset stored, int bytes)
+    {
+        if (_snapshotMemory.TryGetValue(path, out var previous)) _snapshotBytes -= previous.Bytes;
+        if (_snapshotMemory.Count >= SnapshotMemoryLimit || _snapshotBytes + bytes > SnapshotMemoryBudget) { _snapshotMemory.Clear(); _snapshotBytes = 0; }
+        _snapshotMemory[path] = (value, stored, bytes); _snapshotBytes += bytes;
     }
     public void SaveSnapshot(string key, JsonElement value)
     {
-        var path = SnapshotPath(key); AtomicWrite(path, value.GetRawText());
+        var path = SnapshotPath(key); var text = value.GetRawText(); AtomicWrite(path, text);
+        lock (_snapshotGate) RememberLocked(path, value, DateTimeOffset.UtcNow, text.Length);
         CacheFiles.Prune(Path.Combine(_store, "Bangumi"), 64L * 1024 * 1024, CacheFiles.HashedJson, TimeSpan.FromDays(30), path);
     }
-    public void ClearSnapshot(string key) { var path = SnapshotPath(key); if (File.Exists(path)) File.Delete(path); }
+    /// 批量写入同一目录下的多个快照：只做一次缓存维护，供同步与日历页使用。
+    public void SaveSnapshots(IEnumerable<(string Key, JsonElement Value)> values)
+    {
+        var count = 0; string? last = null;
+        foreach (var (key, value) in values)
+        {
+            var path = SnapshotPath(key); var text = value.GetRawText(); AtomicWrite(path, text);
+            lock (_snapshotGate) RememberLocked(path, value, DateTimeOffset.UtcNow, text.Length);
+            last = path; count++;
+        }
+        if (count > 0) CacheFiles.Prune(Path.Combine(_store, "Bangumi"), 64L * 1024 * 1024, CacheFiles.HashedJson, TimeSpan.FromDays(30), last);
+    }
+    public void ClearSnapshot(string key)
+    {
+        var path = SnapshotPath(key);
+        lock (_snapshotGate) if (_snapshotMemory.TryGetValue(path, out var entry)) { _snapshotMemory.Remove(path); _snapshotBytes -= entry.Bytes; }
+        if (File.Exists(path)) File.Delete(path);
+    }
     public async Task<JsonElement> CachedBgm(string method, object? args, string key, CancellationToken token)
     { var value = await Bgm(method, args, token); SaveSnapshot(key, value); return value; }
     public async Task<JsonElement?> SubjectCollection(long id, CancellationToken token)
@@ -196,20 +242,20 @@ internal sealed partial class ViewingIntegrations
     }
     public Task<JsonElement> CollectionPage(int type, int subjectType, int offset, CancellationToken token, int limit = 100) =>
         Bgm("collections", new { collectionType = type, subjectType, limit, offset }, token);
-    public async Task<JsonElement[]> Watching(CancellationToken token)
-    { var batches = await Task.WhenAll(Collections(3, token, 2), Collections(3, token, 6)); return batches.SelectMany(x => x).ToArray(); }
+    public async Task<JsonElement[]> Watching(CancellationToken token, TimeSpan? maxAge = null)
+    { var batches = await Task.WhenAll(Collections(3, token, 2, maxAge), Collections(3, token, 6, maxAge)); return batches.SelectMany(x => x).ToArray(); }
     public async Task SynchronizeCollections(Action<int>? progress, CancellationToken token)
     {
         var count = 0; var identifiers = new HashSet<long>();
         foreach (var kind in new[] { 1, 2, 3, 4, 6 }) foreach (var type in Enumerable.Range(1, 5))
         {
-            var rows = await Collections(type, token, kind); SaveSnapshot($"collections:{kind}:{type}", JsonSerializer.SerializeToElement(rows));
+            var rows = await Collections(type, token, kind, TimeSpan.Zero); // Collections 已按同一 key 写入快照
             foreach (var row in rows)
             {
                 var subject = Json.Subject(row); var id = (long)Json.Number(subject, "id", Json.Number(row, "subject_id"));
                 identifiers.Add(id);
                 SaveSnapshot("subject:" + id, subject); SaveSnapshot("collection:" + id, row);
-                if (kind is 2 or 6) SaveSnapshot("episodes:" + id, JsonSerializer.SerializeToElement(await Episodes(id, token)));
+                if (kind is 2 or 6) SaveSnapshot("episodes:" + id, JsonSerializer.SerializeToElement(await Episodes(id, token, TimeSpan.Zero)));
                 progress?.Invoke(++count);
             }
         }

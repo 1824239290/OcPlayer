@@ -5,40 +5,61 @@ using System.Text.Json;
 namespace OcPlayer.Windows.Services;
 
 internal sealed record BroadcastEntry(JsonElement Subject, int Weekday, DateTimeOffset? Anchor, string Period, DateTimeOffset? End);
+internal sealed record LibraryCandidate(JsonElement Item, string Id, string ParentId, string Kind, int? SeasonNumber, string TmdbId, string MalId, string AniListId, string[] Titles);
 internal static class BroadcastTimeline
 {
     private static readonly HttpClient PublicData = new() { Timeout = TimeSpan.FromSeconds(20) };
+    private static readonly object ScheduleGate = new();
+    private static (string Path, DateTime Mtime, long Length, JsonElement[] Records)? _schedule;
+    private static readonly object LibraryGate = new();
+    private static (MediaServer Server, DateTimeOffset At, JsonElement[] Items)? _library;
     public static async Task<JsonElement[]> Schedule(string directory, CancellationToken token)
     {
         var file = Path.Combine(directory, "bangumi-data.json");
         try
         {
-            if (File.Exists(file) && DateTime.UtcNow - File.GetLastWriteTimeUtc(file) < TimeSpan.FromHours(6)) return Parse(File.ReadAllText(file));
+            if (File.Exists(file) && DateTime.UtcNow - File.GetLastWriteTimeUtc(file) < TimeSpan.FromHours(6))
+                return await Task.Run(() => ReadSchedule(file), token).ConfigureAwait(false);
             // Public dataset only. No account token, media-server profile or authenticated client.
-            var json = await PublicData.GetStringAsync("https://unpkg.com/bangumi-data@0.3/dist/data.json", token);
-            var records = Parse(json); token.ThrowIfCancellationRequested();
+            var json = await PublicData.GetStringAsync("https://unpkg.com/bangumi-data@0.3/dist/data.json", token).ConfigureAwait(false);
+            token.ThrowIfCancellationRequested();
             var temporary = file + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            File.WriteAllText(temporary, json); File.Move(temporary, file, true); return records;
+            await Task.Run(() => { File.WriteAllText(temporary, json); File.Move(temporary, file, true); }, token).ConfigureAwait(false);
+            return await Task.Run(() => ReadSchedule(file), token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
         catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException or OperationCanceledException or InvalidOperationException)
         {
-            try { return File.Exists(file) ? Parse(File.ReadAllText(file)) : []; }
-            catch (Exception read) when (read is IOException or JsonException or InvalidOperationException) { return []; }
+            try { return await Task.Run(() => ReadSchedule(file), token).ConfigureAwait(false); }
+            catch (Exception read) when (read is IOException or JsonException or InvalidOperationException or OperationCanceledException) { return []; }
         }
-        static JsonElement[] Parse(string value) => Json.Items(JsonDocument.Parse(value).RootElement);
+    }
+    /// 7.9 MB 数据集只在文件变化时解析一次，且始终在线程池上执行，不阻塞 UI。
+    private static JsonElement[] ReadSchedule(string file)
+    {
+        var info = new FileInfo(file); var mtime = info.LastWriteTimeUtc; var length = info.Length;
+        lock (ScheduleGate)
+            if (_schedule is { } cached && cached.Path == file && cached.Mtime == mtime && cached.Length == length) return cached.Records;
+        var records = Json.Items(JsonDocument.Parse(File.ReadAllText(file)).RootElement);
+        lock (ScheduleGate) _schedule = (file, mtime, length, records);
+        return records;
     }
     public static async Task<JsonElement[]> Library(MediaServer server, CancellationToken token)
     {
-        var result = new List<JsonElement>();
+        lock (LibraryGate)
+            if (_library is { } cached && ReferenceEquals(cached.Server, server) && DateTimeOffset.UtcNow - cached.At < TimeSpan.FromMinutes(5)) return cached.Items;
+        var result = new List<JsonElement>(); var complete = false;
         for (var offset = 0; offset < 50000;)
         {
             var page = await server.Request("browse.library", new { startIndex = offset, limit = 500, recursive = true, kinds = new[] { "series", "season" }, sort = new { field = "name", ascending = true } }, token);
             var items = Json.Items(page); result.AddRange(items); offset += items.Length;
             var total = Json.Number(page, "totalRecordCount", Json.Number(page, "total", -1));
-            if (items.Length == 0 || total >= 0 && offset >= total || total < 0 && items.Length < 500) return result.ToArray();
+            if (items.Length == 0 || total >= 0 && offset >= total || total < 0 && items.Length < 500) { complete = true; break; }
         }
-        throw new InvalidOperationException("媒体库过大，放送匹配未完成，请重试。");
+        if (!complete) throw new InvalidOperationException("媒体库过大，放送匹配未完成，请重试。");
+        var rows = result.ToArray();
+        lock (LibraryGate) _library = (server, DateTimeOffset.UtcNow, rows);
+        return rows;
     }
     internal static BroadcastEntry[] Match(JsonElement[] watching, JsonElement[] calendar, JsonElement[] library, JsonElement[] schedule, IEnumerable<BangumiMediaLink>? links = null, string? source = null)
     {
@@ -48,6 +69,22 @@ internal static class BroadcastTimeline
         foreach (var record in schedule)
             foreach (var site in Json.Items(Json.Get(record, "sites")))
                 if (Json.Text(site, "site") == "bangumi" && long.TryParse(Json.Text(site, "id"), out var id)) schedules[id] = record;
+        var linksFiltered = (links ?? []).Where(x => source is null || x.Source == source).ToArray();
+        var bySeries = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in library)
+        {
+            var itemId = Json.Text(item, "id");
+            if (itemId.Length > 0) bySeries.TryAdd(itemId, item);
+        }
+        // 预计算库条目元数据：避免每条在看记录都重复解析 JSON、重复做标题归一化。
+        var candidates = library.Where(item => Json.Number(item, "childCount", 1) > 0).Select(item =>
+        {
+            var kind = Json.Text(item, "kind");
+            return new LibraryCandidate(item, Json.Text(item, "id"), Json.First(item, "seriesID", "seriesId"), kind,
+                kind == "season" ? (int?)Json.Number(item, "seasonNumber") : null,
+                Json.First(item, "tmdbID", "tmdbId"), Json.First(item, "malID", "malId"), Json.First(item, "anilistID", "anilistId", "aniListID"),
+                new[] { Json.Text(item, "name"), Json.Text(item, "originalTitle") }.Select(Normalize).Where(x => x.Length > 0).ToArray());
+        }).ToArray();
         var entries = new List<BroadcastEntry>(); var seen = new HashSet<long>();
         foreach (var row in watching)
         {
@@ -62,37 +99,38 @@ internal static class BroadcastTimeline
             if (translated.ValueKind == JsonValueKind.Object) foreach (var language in translated.EnumerateObject()) foreach (var title in Json.Items(language.Value)) titles.Add(Normalize(title.GetString() ?? ""));
             var season = 0;
             var sites = Json.Get(record, "sites");
-            if (sites.ValueKind == JsonValueKind.Array) foreach (var site in Json.Items(sites))
+            var siteList = sites.ValueKind == JsonValueKind.Array ? Json.OptionalItems(sites) : [];
+            foreach (var site in siteList)
             {
                 var parts = Json.Text(site, "id").Split('/');
                 if (Json.Text(site, "site") == "tmdb" && parts.Length == 4 && parts[2] == "season") int.TryParse(parts[3], out season);
             }
-            long? Explicit(JsonElement item)
+            long? Explicit(LibraryCandidate item)
             {
-                var itemId = Json.Text(item, "id"); var parentId = Json.First(item, "seriesID", "seriesId");
-                var itemSeason = Json.Text(item, "kind") == "season" ? (int?)Json.Number(item, "seasonNumber") : null;
-                var candidates = (links ?? []).Where(x => source is null || x.Source == source);
-                return candidates.FirstOrDefault(x => (x.SeriesId == itemId || x.SeriesId == parentId) && x.Season == itemSeason)?.SubjectId ??
-                    (itemSeason is null or 1 ? candidates.FirstOrDefault(x => (x.SeriesId == itemId || x.SeriesId == parentId) && x.Season is null)?.SubjectId : null);
+                return linksFiltered.FirstOrDefault(x => (x.SeriesId == item.Id || x.SeriesId == item.ParentId) && x.Season == item.SeasonNumber)?.SubjectId ??
+                    (item.SeasonNumber is null or 1 ? linksFiltered.FirstOrDefault(x => (x.SeriesId == item.Id || x.SeriesId == item.ParentId) && x.Season is null)?.SubjectId : null);
             }
-            bool External(JsonElement item)
+            bool External(LibraryCandidate item)
             {
-                foreach (var site in Json.OptionalItems(sites))
+                foreach (var site in siteList)
                 {
                     var provider = Json.Text(site, "site"); var externalId = Json.Text(site, "id");
-                    if (provider == "mal" && externalId == Json.First(item, "malID", "malId")) return true;
-                    if (provider == "aniList" && externalId == Json.First(item, "anilistID", "anilistId", "aniListID")) return true;
+                    if (provider == "mal" && externalId == item.MalId) return true;
+                    if (provider == "aniList" && externalId == item.AniListId) return true;
                     if (provider != "tmdb") continue; var parts = externalId.Split('/'); if (parts.Length < 2 || parts[0] != "tv") continue;
-                    var parent = library.FirstOrDefault(x => Json.Text(x, "id") == Json.First(item, "seriesID", "seriesId"));
-                    var show = Json.Text(item, "kind") == "season" ? parent : item;
-                    if (parts[1] != Json.First(show, "tmdbID", "tmdbId")) continue;
-                    if (parts.Length == 2 && Json.Text(item, "kind") == "series" || parts.Length == 4 && parts[2] == "season" && Json.Text(item, "kind") == "season" && int.TryParse(parts[3], out var number) && Json.Number(item, "seasonNumber") == number) return true;
+                    var showTmdb = item.Kind == "season" ? (bySeries.TryGetValue(item.ParentId, out var parent) ? Json.First(parent, "tmdbID", "tmdbId") : "") : item.TmdbId;
+                    if (parts[1] != showTmdb) continue;
+                    if (parts.Length == 2 && item.Kind == "series" || parts.Length == 4 && parts[2] == "season" && item.Kind == "season" && int.TryParse(parts[3], out var number) && item.SeasonNumber == number) return true;
                 }
                 return false;
             }
-            var available = library.Any(item => Json.Number(item, "childCount", 1) > 0 &&
-                (season <= 1 || Json.Text(item, "kind") == "season" && Json.Number(item, "seasonNumber") == season) &&
-                (Explicit(item) is { } linked ? linked == id : External(item) || new[] { Json.Text(item, "name"), Json.Text(item, "originalTitle") }.Any(title => titles.Contains(Normalize(title)))));
+            var available = false;
+            foreach (var item in candidates)
+            {
+                if (!(season <= 1 || item.Kind == "season" && item.SeasonNumber == season)) continue;
+                if (Explicit(item) is { } linked) { if (linked == id) { available = true; break; } continue; }
+                if (External(item) || item.Titles.Any(title => titles.Contains(title))) { available = true; break; }
+            }
             if (!available) continue;
             var recurrence = broadcast.Split('/');
             var anchor = recurrence.Length == 3 ? Date(recurrence[1]) : begin;

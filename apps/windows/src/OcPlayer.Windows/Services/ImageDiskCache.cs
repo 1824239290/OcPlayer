@@ -8,14 +8,14 @@ internal static class ImageDiskCache
 {
     public const long CapacityBytes = 512L * 1024 * 1024;
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(20) };
-    private static readonly SemaphoreSlim Gate = new(4);
+    private static readonly SemaphoreSlim Gate = new(6);
     private static readonly Dictionary<string, Lazy<Task<string>>> Inflight = [];
     private static readonly object Sync = new();
     private static bool _clearing;
     private static long _generation;
     public static string DirectoryPath => Path.Combine(AppPaths.DataDirectory, "Images");
     public static long UsedBytes { get { lock (Sync) return CacheFiles.UsedBytes(DirectoryPath, x => x.Extension == ".image"); } }
-    public static void Maintain() { lock (Sync) CacheFiles.Prune(DirectoryPath, CapacityBytes, x => x.Extension == ".image"); }
+    public static void Maintain() { lock (Sync) CacheFiles.Prune(DirectoryPath, CapacityBytes, x => x.Extension == ".image", force: true); }
     public static async Task<string> Resolve(string url, CancellationToken token = default)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https")) return url;

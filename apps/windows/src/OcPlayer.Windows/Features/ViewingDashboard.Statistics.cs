@@ -12,7 +12,7 @@ namespace OcPlayer.Windows.Features;
 internal sealed partial class IntegrationPages
 {
     private void BuildDashboardStatistics(StackPanel host, ViewingRecord[] records, ViewingArchive archive, bool bangumi,
-        JsonElement[]? wishes, JsonElement[]? watching, DashboardSelection selection)
+        JsonElement[]? wishes, double? wishesCount, JsonElement[]? watching, DashboardSelection selection)
     {
         var left = Stack(14); var right = Stack(14);
         var day = Stack(12);
@@ -25,7 +25,7 @@ internal sealed partial class IntegrationPages
             day.Children.Add(DashboardMuted(rows.Length == 0 ? "当天还没有留下观看记录" : $"实播 {rows.Sum(x => x.ActualSeconds ?? 0) / 60:0.#} 分钟 · 估算 {rows.Where(x => x.ActualSeconds is null).Sum(x => x.Seconds) / 60:0.#} 分钟", 10));
         }
         SelectDay(selection.Day); left.Children.Add(DashboardCard(day));
-        if (bangumi) left.Children.Add(DashboardPair(DashboardCollection("待看", 1, wishes), DashboardCollection("在看", 3, watching), 0));
+        if (bangumi) left.Children.Add(DashboardPair(DashboardCollection("待看", 1, wishes, wishesCount), DashboardCollection("在看", 3, watching), 0));
         left.Children.Add(DashboardGenres(records)); left.Children.Add(DashboardTrends(records, archive));
         right.Children.Add(DashboardActivity(records, archive, selection.Day, SelectDay));
         right.Children.Add(DashboardMonth(records, archive, selection));

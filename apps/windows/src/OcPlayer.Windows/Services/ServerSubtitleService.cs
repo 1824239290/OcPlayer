@@ -16,7 +16,7 @@ internal sealed class ServerSubtitleService
     public static string DirectoryPath => Path.Combine(AppPaths.DataDirectory, "SubtitleCache");
     private static bool CacheFile(FileInfo file) => file.Extension is ".srt" or ".ass" or ".ssa" or ".vtt";
     public static long UsedBytes => CacheFiles.UsedBytes(DirectoryPath, CacheFile);
-    public static void Maintain() => CacheFiles.Prune(DirectoryPath, CapacityBytes, CacheFile, TimeSpan.FromDays(30));
+    public static void Maintain() => CacheFiles.Prune(DirectoryPath, CapacityBytes, CacheFile, TimeSpan.FromDays(30), force: true);
     public static void Clear()
     {
         var state = CacheFiles.For(DirectoryPath);

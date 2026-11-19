@@ -36,8 +36,7 @@ internal sealed partial class IntegrationPages
         details.Children.Add(Muted($"在看 {Json.Number(Json.Get(subject, "collection"), "doing", Json.Number(Json.Get(subject, "collection"), "3")):0} 人"));
         return Item(subject, new[] { details }.Concat(actions).ToArray());
     }
-    private async Task<JsonElement[]> LoadEpisodes(long id, CancellationToken token)
-    { var rows = await Service.Episodes(id, token); Service.SaveSnapshot("episodes:" + id, JsonSerializer.SerializeToElement(rows)); return rows; }
+    private Task<JsonElement[]> LoadEpisodes(long id, CancellationToken token, bool force = false) => Service.Episodes(id, token, force ? TimeSpan.Zero : null);
     private MenuFlyout EpisodeCollectionMenu(Page page, long subjectId, JsonElement episode, Func<Task> refresh)
     {
         var episodeId = (long)Json.Number(episode, "id"); var status = ViewingIntegrations.EpisodeStatus(episode);
@@ -108,22 +107,31 @@ internal sealed partial class IntegrationPages
             }
             if (list.Children.Count == 0) list.Children.Add(Muted("暂无符合条件的放送作品"));
         }
-        async Task Load()
+        void Apply()
         {
-            calendar = Json.Items(await Service.Bgm("calendar", null, page.Token));
             int Count(int day) => calendar.Where(x => day == 0 || Json.Number(Json.Get(x, "weekday"), "id") == day).Sum(x => Json.OptionalItems(Json.Get(x, "items")).Length);
             var index = Math.Max(0, days.SelectedIndex); days.ItemsSource = new[] { $"今天 ({Count(today)})" }.Concat(Enumerable.Range(1, 7).Select(x => $"周{new[] { "一", "二", "三", "四", "五", "六", "日" }[x - 1]} ({Count(x)})")).Append($"全部 ({Count(0)})").ToArray(); days.SelectedIndex = index;
             title.Text = $"{now.Year} 年第 {(now.Month - 1) / 3 + 1} 季度 · 全周 {Count(0)} 部"; Render();
+        }
+        async Task Load(bool force = false)
+        {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            if (Service.Snapshot("calendar") is { } cachedCalendar) { calendar = Json.Items(cachedCalendar); Apply(); }
+            calendar = Json.Items(await Service.Calendar(page.Token, force ? TimeSpan.Zero : null));
+            Apply();
             try
             {
                 var collections = await Task.WhenAll(Enumerable.Range(1, 5).Select(type => Service.Collections(type, page.Token))); var collected = collections.SelectMany(x => x).ToArray(); var ids = collected.Select(SubjectId).ToHashSet();
-                foreach (var row in collected) Service.SaveSnapshot("collection:" + SubjectId(row), row);
-                foreach (var subject in calendar.SelectMany(day => Json.OptionalItems(Json.Get(day, "items"))).Where(x => !ids.Contains(SubjectId(x)))) Service.ClearSnapshot("collection:" + SubjectId(subject)); Render();
+                var saved = collected.Select(row => ("collection:" + SubjectId(row), row)).ToArray();
+                var stale = calendar.SelectMany(day => Json.OptionalItems(Json.Get(day, "items"))).Where(x => !ids.Contains(SubjectId(x))).Select(x => "collection:" + SubjectId(x)).ToArray();
+                await Task.Run(() => { Service.SaveSnapshots(saved); foreach (var key in stale) Service.ClearSnapshot(key); });
+                Render();
             }
             catch (Exception ex) when (ex is not OperationCanceledException) { page.Status.Text = "日历已显示；个人收藏读取失败：" + ex.Message; }
+            AppDiagnostics.Write("debug", $"追番日历加载：{watch.ElapsedMilliseconds} ms，条目 {calendar.Sum(day => Json.OptionalItems(Json.Get(day, "items")).Length)}");
         }
         days.SelectionChanged += (_, _) => Render(); search.TextChanged += (_, _) => Render(); page.Body.Children.Add(title); page.Body.Children.Add(days); page.Body.Children.Add(search);
-        var toolbar = Row(8); toolbar.Children.Add(page.Action("刷新 / 重试", Load)); toolbar.Children.Add(Button("打开 Bangumi 放送日历", () => Browse(Service.Domains.Main + "calendar"))); page.Body.Children.Add(toolbar); page.Body.Children.Add(list); return Show(page, Load);
+        var toolbar = Row(8); toolbar.Children.Add(page.Action("刷新 / 重试", () => Load(true))); toolbar.Children.Add(Button("打开 Bangumi 放送日历", () => Browse(Service.Domains.Main + "calendar"))); page.Body.Children.Add(toolbar); page.Body.Children.Add(list); return Show(page, () => Load(false));
     }
     public UIElement MediaAssociation(DemoMedia media)
     {

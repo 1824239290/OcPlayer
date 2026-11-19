@@ -83,7 +83,7 @@ internal sealed class TmdbService
     public TmdbService(OcpCoreClient core, string directory, string credentialResource = "OcPlayer.Windows")
     {
         _core = core; _directory = Path.Combine(directory, "Tmdb"); Directory.CreateDirectory(_directory); Settings = new(credentialResource);
-        CacheFiles.Prune(_directory, CapacityBytes, CacheFiles.HashedJson, TimeSpan.FromDays(30));
+        CacheFiles.Prune(_directory, CapacityBytes, CacheFiles.HashedJson, TimeSpan.FromDays(30), force: true);
         foreach (var path in Directory.EnumerateFiles(_directory, "*.json"))
         {
             try

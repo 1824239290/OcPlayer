@@ -61,7 +61,7 @@ internal sealed class BrowserCache(ServerProfile profile)
         if (Directory.Exists(DirectoryPath))
             foreach (var file in new DirectoryInfo(DirectoryPath).EnumerateFiles("*.json"))
                 if ((file.Attributes & FileAttributes.ReparsePoint) == 0) file.Delete();
-        CacheFiles.Prune(DirectoryPath, CapacityBytes, CacheFiles.HashedJson, TimeSpan.FromDays(30));
+        CacheFiles.Prune(DirectoryPath, CapacityBytes, CacheFiles.HashedJson, TimeSpan.FromDays(30), force: true);
     }
     private JsonNode? Transform(JsonNode? value, bool restore)
     {
