@@ -88,24 +88,24 @@ internal sealed partial class DemoPages(DemoViewModel model, PageLayout pageLayo
         var media=model.SelectedMedia;
         var layout=new Grid { Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
         DetailPageWheelNavigation.Attach(layout, () => navigate("detail-info"));
-        var body=new Grid{Margin=new Thickness(52,12,40,20),RowSpacing=20};
-        pageLayout.ApplyInset(body, FrameworkElement.MarginProperty, new Thickness(52,12,40,20));
+        var body=new Grid{Margin=new Thickness(52,8,40,12),RowSpacing=10};
+        pageLayout.ApplyInset(body, FrameworkElement.MarginProperty, new Thickness(52,8,40,12));
         body.RowDefinitions.Add(new RowDefinition{Height=new GridLength(1,GridUnitType.Star)});body.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});
-        var content=Stack(18);content.Width=410;content.HorizontalAlignment=HorizontalAlignment.Left;
-        if(media.LogoArtwork.Length>0){var logo=Image(media.LogoPath,Stretch.Uniform);logo.Width=230;logo.Height=108;logo.HorizontalAlignment=HorizontalAlignment.Left;content.Children.Add(logo);}else content.Children.Add(Text(media.Title,32,true));
-        content.Children.Add(Muted(media.OriginalTitle,13));
+        var content=Stack(10);content.Width=430;content.HorizontalAlignment=HorizontalAlignment.Left;
+        if(media.LogoArtwork.Length>0){var logo=Image(media.LogoPath,Stretch.Uniform);logo.MaxWidth=220;logo.MaxHeight=72;logo.HorizontalAlignment=HorizontalAlignment.Left;content.Children.Add(logo);}else content.Children.Add(Text(media.Title,26,true));
+        if(!string.IsNullOrWhiteSpace(media.OriginalTitle) && media.OriginalTitle != media.Title) content.Children.Add(Muted(media.OriginalTitle,12));
         content.Children.Add(Muted($"{media.Year}   ·   {media.Category}   ·   {(int)(media.DurationSeconds/60)} 分钟"+(media.Kind=="series"?$"   ·   {media.Seasons?.Length ?? 1} 季":""),11));
         var tags = Row(6);
         foreach (var genre in media.Category.Split(" / ", StringSplitOptions.RemoveEmptyEntries))
         {
-            var tag = new Button { Content = genre, Padding = new Thickness(12, 4, 12, 4) };
+            var tag = new Button { Content = genre, Padding = new Thickness(10, 3, 10, 3), FontSize = 12 };
             tag.Click += (_, _) => navigate("genre:" + genre);
             tags.Children.Add(tag);
         }
-        content.Children.Add(tags);
         if (media.CommunityRating is { } rating) tags.Children.Add(Muted($"★ {rating:0.0}", 12));
         if (!string.IsNullOrEmpty(media.OfficialRating)) tags.Children.Add(Muted(media.OfficialRating, 12));
-        content.Children.Add(ExpandableSynopsis(string.IsNullOrWhiteSpace(media.SeasonOverview) ? media.Description : media.SeasonOverview));
+        content.Children.Add(tags);
+        content.Children.Add(ExpandableSynopsis(string.IsNullOrWhiteSpace(media.SeasonOverview) ? media.Description : media.SeasonOverview, 2));
         if (media.DetailWarning is { } detailWarning) { content.Children.Add(Muted(detailWarning)); content.Children.Add(Button("重试", () => navigate("detail:retry"))); }
         var actions = Row(10);
         var playButton = new PlaybackProgressButton(() => play(media));
@@ -158,8 +158,9 @@ internal sealed partial class DemoPages(DemoViewModel model, PageLayout pageLayo
         }
         actions.Children.Add(watched);
         content.Children.Add(actions);
-        var contentScroll=Scroll(content, new Thickness(0));body.Children.Add(contentScroll);
-        var lower=Stack(16);Grid.SetRow(lower,1);
+        Grid.SetRow(content, 0);
+        body.Children.Add(content);
+        var lower=Stack(10);Grid.SetRow(lower,1);
         if(media.Kind=="series")
         {
             lower.Children.Add(CreateEpisodePicker(media, false, () =>
@@ -182,7 +183,7 @@ internal sealed partial class DemoPages(DemoViewModel model, PageLayout pageLayo
     {
         var media=model.SelectedMedia;var page=Stack(26);
         var synopsis = new ContentControl();
-        void UpdateSynopsis() => synopsis.Content = ExpandableSynopsis(media.Episodes?.FirstOrDefault(x => x.Number == model.SelectedEpisode)?.Overview is { Length: > 0 } overview ? overview : media.SeasonOverview is { Length: > 0 } seasonOverview ? seasonOverview : media.Description);
+        void UpdateSynopsis() => synopsis.Content = ExpandableSynopsis(media.Episodes?.FirstOrDefault(x => x.Number == model.SelectedEpisode)?.Overview is { Length: > 0 } overview ? overview : media.SeasonOverview is { Length: > 0 } seasonOverview ? seasonOverview : media.Description, 4);
         UpdateSynopsis(); page.Children.Add(synopsis);
         var fileInfo = new ContentControl();
         if(media.Kind=="series")

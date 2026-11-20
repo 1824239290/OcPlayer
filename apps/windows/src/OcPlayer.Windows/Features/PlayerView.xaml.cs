@@ -137,7 +137,9 @@ public sealed partial class PlayerView : UserControl, IDisposable
             AppDiagnostics.ConfigureNativeTrace();
             _session = new PlaybackSession(App.Core.Client);
             InitializeDanmaku();
-            _session.Failed += ShowError; _session.Failure += OnNativeFailure; _session.Ended += OnNativeEnded; _session.VideoDimensionsChanged += OnNativeDimensions; _surface = new SwapChainPanelHost(VideoPanel);
+            _session.Failed += ShowError; _session.Failure += OnNativeFailure; _session.Ended += OnNativeEnded; _session.VideoDimensionsChanged += OnNativeDimensions;
+            _surface = new SwapChainPanelHost(VideoPanel);
+            _surface.CompositionScaleChanged += (_, _) => ResizeNative();
             var (width, height, scale) = Geometry();
             var hwnd = (ulong)WinRT.Interop.WindowNative.GetWindowHandle(_window).ToInt64();
             _session.Attach(hwnd, width, height, scale); _surface.Bind(_session.GetSwapChain());

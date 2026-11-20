@@ -21,7 +21,7 @@ internal sealed class EpisodePicker : StackPanel
     public EpisodePicker(UIElement seasonSelector, DemoEpisode[] episodes, int selectedNumber,
         Action<DemoEpisode> select, Action<DemoEpisode> play, Action<DemoEpisode, bool> markWatched, bool expanded = false)
     {
-        Spacing = 16;
+        Spacing = expanded ? 16 : 10;
         var header = new Grid { ColumnSpacing = 6, Height = SelectorHeight };
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -35,7 +35,7 @@ internal sealed class EpisodePicker : StackPanel
         Grid.SetColumn(_numberRail, 1);
         header.Children.Add(_numberRail);
         Children.Add(header);
-        var cardRows = new Grid { RowSpacing = 7 };
+        var cardRows = new Grid { RowSpacing = expanded ? 7 : 4 };
         cardRows.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         cardRows.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         cardRows.Children.Add(_cards);

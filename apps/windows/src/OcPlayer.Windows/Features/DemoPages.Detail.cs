@@ -27,14 +27,14 @@ internal sealed partial class DemoPages
         for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++) if (FindChild<T>(VisualTreeHelper.GetChild(parent, i)) is { } child) return child;
         return null;
     }
-    private static UIElement ExpandableSynopsis(string text)
+    private static UIElement ExpandableSynopsis(string text, int maxLines = 2)
     {
-        var panel = Stack(6); var body = Text(string.IsNullOrWhiteSpace(text) ? "暂无简介" : text, 14);
-        body.MaxLines = 3; body.LineHeight = 26; body.TextTrimming = TextTrimming.CharacterEllipsis; panel.Children.Add(body);
-        var toggle = new Button { Content = "展开全文", Padding = new Thickness(6) };
+        var panel = Stack(4); var body = Text(string.IsNullOrWhiteSpace(text) ? "暂无简介" : text, 13);
+        body.MaxLines = maxLines; body.LineHeight = 20; body.TextTrimming = TextTrimming.CharacterEllipsis; panel.Children.Add(body);
+        var toggle = new Button { Content = "展开全文", Padding = new Thickness(8, 2, 8, 2), FontSize = 12 };
         toggle.Click += async (_, _) =>
         {
-            var fullText = Text(text, 14); fullText.LineHeight = 26; fullText.IsTextSelectionEnabled = true;
+            var fullText = Text(text, 14); fullText.LineHeight = 24; fullText.IsTextSelectionEnabled = true;
             var dialog = new ContentDialog
             {
                 XamlRoot = panel.XamlRoot, Title = "简介", CloseButtonText = "关闭", DefaultButton = ContentDialogButton.Close,

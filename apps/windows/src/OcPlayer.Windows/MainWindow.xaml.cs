@@ -388,6 +388,17 @@ public sealed partial class MainWindow : Window
             if (_presenterBeforePlayback is { } presenter && AppWindow.Presenter != presenter)
                 AppWindow.SetPresenter(presenter);
             if (_sizeBeforePlayback is { } size) AppWindow.Resize(size);
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            var dpi = hwnd != IntPtr.Zero ? GetDpiForWindow(hwnd) : 96;
+            var scale = dpi > 0 ? dpi / 96.0 : (Root.XamlRoot?.RasterizationScale ?? 1.0);
+            var area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
+            int minWidth = Math.Min(area.Width, (int)Math.Round(1062 * scale));
+            int minHeight = Math.Min(area.Height, (int)Math.Round(640 * scale));
+            if (AppWindow.Presenter is OverlappedPresenter curPresenter)
+            {
+                curPresenter.PreferredMinimumWidth = minWidth;
+                curPresenter.PreferredMinimumHeight = minHeight;
+            }
             SetTitleBar(TitleBar);
             SetCaptionTheme();
             Root.UpdateLayout();
@@ -594,6 +605,12 @@ public sealed partial class MainWindow : Window
         if (_closing || Root.XamlRoot is not { } xamlRoot) return;
         if (_player is not null) { _player.UpdateWindowChrome(); return; }
         var scale = xamlRoot.RasterizationScale;
+        if (AppWindow.Presenter is OverlappedPresenter presenter && presenter.State == OverlappedPresenterState.Restored)
+        {
+            var area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
+            presenter.PreferredMinimumWidth = Math.Min(area.Width, (int)Math.Round(1062 * scale));
+            presenter.PreferredMinimumHeight = Math.Min(area.Height, (int)Math.Round(640 * scale));
+        }
         // AppWindow metrics are physical pixels; XAML layout uses logical pixels.
         // Keep content and native caption buttons on the same vertical center,
         // and reserve the real caption width across DPI and presenter changes.
@@ -612,8 +629,11 @@ public sealed partial class MainWindow : Window
             var point = element.TransformToVisual(Root).TransformPoint(new global::Windows.Foundation.Point());
             return new RectInt32((int)(point.X * scale), (int)(point.Y * scale), (int)(element.ActualWidth * scale), (int)(element.ActualHeight * scale));
         }
-        if (IntegrationHeaderTrailing.Content is AutoSuggestBox search) search.Width = Root.ActualWidth < 800 ? 170 : 280;
-        PageTitle.MaxWidth = Root.ActualWidth < 800 ? 160 : 280;
+        var availableHeaderWidth = Root.ActualWidth;
+        if (IntegrationHeaderTrailing.Content is AutoSuggestBox search) search.Width = availableHeaderWidth < 800 ? 170 : 280;
+        GlobalSearch.Width = availableHeaderWidth < 1080 ? (availableHeaderWidth < 920 ? 160 : 200) : 280;
+        PageTitle.MaxWidth = availableHeaderWidth < 800 ? 160 : (availableHeaderWidth < 1000 ? 200 : 280);
+        AccountLabel.MaxWidth = availableHeaderWidth < 1000 ? 180 : 260;
         IntegrationSubtitle.MaxWidth = PageTitle.MaxWidth;
         var regions = new FrameworkElement[] { NavGroup, BackButton, SortButton, ServerButton, HeaderActions, ViewingActions, IntegrationHeaderLeading, IntegrationHeaderTrailing }.Where(x => x.Visibility == Visibility.Visible && x.ActualWidth > 0).Select(Bounds).ToArray();
         InputNonClientPointerSource.GetForWindowId(AppWindow.Id).SetRegionRects(NonClientRegionKind.Passthrough, regions);
@@ -852,10 +872,18 @@ public sealed partial class MainWindow : Window
         catch (Exception ex) { Notify("无法打开媒体：" + ex.Message); }
     }
 
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr hwnd);
+
     private void RestoreWindowPlacement()
     {
-        const int minWidth = 1062;
-        const int minHeight = 640;
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        var dpi = hwnd != IntPtr.Zero ? GetDpiForWindow(hwnd) : 96;
+        var scale = dpi > 0 ? dpi / 96.0 : (Root.XamlRoot?.RasterizationScale ?? 1.0);
+
+        var area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
+        int minWidth = Math.Min(area.Width, (int)Math.Round(1062 * scale));
+        int minHeight = Math.Min(area.Height, (int)Math.Round(640 * scale));
 
         if (AppWindow.Presenter is OverlappedPresenter presenter)
         {
@@ -865,16 +893,16 @@ public sealed partial class MainWindow : Window
 
         if (App.DemoMode)
         {
-            AppWindow.ResizeClient(new SizeInt32(1130, 700));
+            AppWindow.ResizeClient(new SizeInt32((int)Math.Round(1130 * scale), (int)Math.Round(700 * scale)));
             return;
         }
 
-        var area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
         var prefs = WindowPreferences.Load(AppPaths.DataDirectory);
+        int defaultWidth = Math.Min(area.Width, (int)Math.Round(1280 * scale));
+        int defaultHeight = Math.Min(area.Height, (int)Math.Round(800 * scale));
 
-        // Fall back to a spacious default (1280x800) bounded by display work area and minimum dimensions.
-        int targetWidth = prefs.Width ?? Math.Clamp(1280, minWidth, Math.Max(minWidth, (int)(area.Width * 0.85)));
-        int targetHeight = prefs.Height ?? Math.Clamp(800, minHeight, Math.Max(minHeight, (int)(area.Height * 0.85)));
+        int targetWidth = prefs.Width ?? Math.Clamp(defaultWidth, minWidth, Math.Max(minWidth, (int)(area.Width * 0.85)));
+        int targetHeight = prefs.Height ?? Math.Clamp(defaultHeight, minHeight, Math.Max(minHeight, (int)(area.Height * 0.85)));
 
         targetWidth = Math.Clamp(targetWidth, minWidth, Math.Max(minWidth, area.Width));
         targetHeight = Math.Clamp(targetHeight, minHeight, Math.Max(minHeight, area.Height));

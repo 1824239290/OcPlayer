@@ -88,12 +88,16 @@ public sealed partial class MainWindow
     private static async Task SafeSync(Task task) { try { await task; } catch (Exception ex) { AppDiagnostics.Write("warning", "Bangumi 章节同步失败：" + ex.Message); } }
     private void Player_VideoDimensionsAvailable(uint width, uint height)
     {
-        if (width == 0 || height == 0 || _player is null || AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Restored }) return;
+        if (width == 0 || height == 0 || _player is null || AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Restored } presenter) return;
         var area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
         var aspect = (double)width / height;
         var targetWidth = Math.Min(Math.Max(Math.Max(720, 360 * aspect), AppWindow.ClientSize.Width), area.Width * .9);
         var targetHeight = targetWidth / aspect;
         if (targetHeight > area.Height * .9) { targetHeight = area.Height * .9; targetWidth = targetHeight * aspect; }
-        AppWindow.ResizeClient(new SizeInt32(Math.Max(1, (int)Math.Round(targetWidth)), Math.Max(1, (int)Math.Round(targetHeight))));
+        var desiredWidth = Math.Max(1, (int)Math.Round(targetWidth));
+        var desiredHeight = Math.Max(1, (int)Math.Round(targetHeight));
+        if (presenter.PreferredMinimumHeight > desiredHeight) presenter.PreferredMinimumHeight = desiredHeight;
+        if (presenter.PreferredMinimumWidth > desiredWidth) presenter.PreferredMinimumWidth = desiredWidth;
+        AppWindow.ResizeClient(new SizeInt32(desiredWidth, desiredHeight));
     }
 }
