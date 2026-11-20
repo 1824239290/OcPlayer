@@ -9,7 +9,7 @@ $Installer = (Resolve-Path -LiteralPath $Installer).Path
 $UpgradeInstaller = (Resolve-Path -LiteralPath $UpgradeInstaller).Path
 $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
 [IO.Directory]::CreateDirectory($OutputDirectory) | Out-Null
-$installedDirectory = Join-Path $OutputDirectory 'installed-app'
+$installedDirectory = Join-Path $OutputDirectory '自定义安装目录\OcPlayer App'
 $dataDirectory = Join-Path $OutputDirectory 'user-data'
 [IO.Directory]::CreateDirectory($dataDirectory) | Out-Null
 $installerApi = New-Object -ComObject WindowsInstaller.Installer
@@ -80,6 +80,7 @@ function Restore-Protocol {
 try {
     [IO.File]::WriteAllText($sentinel, 'preserve user playback history')
     Invoke-Msi @('/i', $Installer, '/qn', '/norestart', "INSTALLFOLDER=$installedDirectory", '/l*v', (Join-Path $OutputDirectory 'install.log'))
+    Assert-Installer ($installerApi.ProductInfo($originalProduct, 'InstallLocation').TrimEnd('\') -eq $installedDirectory.TrimEnd('\')) 'installation records the custom directory containing spaces and Unicode characters'
     Probe-Runtime 'first-runtime' $originalVersion
     Assert-Installer ((Read-MsiProperty $Installer 'ARPPRODUCTICON') -eq 'OcPlayerIcon') 'the installed product uses the OcPlayer icon'
     $handler = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\Classes\ocplayer\shell\open\command')
@@ -89,8 +90,9 @@ try {
     [IO.File]::WriteAllText((Join-Path $dataDirectory 'runtime-settings.json'), '{"UserAgent":"installer-fixture"}')
     $databasePath = Join-Path $dataDirectory 'Media.sqlite'
     $databaseHash = (Get-FileHash -LiteralPath $databasePath).Hash
-    Invoke-Msi @('/i', $UpgradeInstaller, '/qn', '/norestart', "INSTALLFOLDER=$installedDirectory", '/l*v', (Join-Path $OutputDirectory 'upgrade.log'))
+    Invoke-Msi @('/i', $UpgradeInstaller, '/qn', '/norestart', '/l*v', (Join-Path $OutputDirectory 'upgrade.log'))
     Assert-Installer ($installerApi.ProductState($originalProduct) -eq -1 -and $installerApi.ProductState($upgradeProduct) -eq 5) 'major upgrade removes the earlier product and installs the new version'
+    Assert-Installer ($installerApi.ProductInfo($upgradeProduct, 'InstallLocation').TrimEnd('\') -eq $installedDirectory.TrimEnd('\')) 'upgrade reuses the custom installation directory without an INSTALLFOLDER override'
     Assert-Installer ((Get-FileHash -LiteralPath $databasePath).Hash -eq $databaseHash) 'upgrade leaves the actual Core database unchanged'
     Probe-Runtime 'upgraded-runtime' $upgradeVersion
     Assert-Installer ([IO.File]::ReadAllText($sentinel) -eq 'preserve user playback history') 'upgrade preserves application data outside the installation directory'

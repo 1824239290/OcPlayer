@@ -3,8 +3,10 @@
 ## 生成安装包
 
 Windows 使用按当前用户安装的 MSI。默认安装到
-`%LOCALAPPDATA%\Programs\OcPlayer`，创建开始菜单快捷方式并注册
-`ocplayer://` 的 Bangumi 回调。安装、升级和卸载均不要求管理员权限。
+`%LOCALAPPDATA%\Programs\OcPlayer`。安装向导提供“目标文件夹”页，可以直接
+输入路径或通过“更改…”浏览当前用户有写入权限的目录，例如 `D:\Apps\OcPlayer`。
+安装后创建开始菜单快捷方式并注册 `ocplayer://` 的 Bangumi 回调。
+安装、升级和卸载均不要求管理员权限；选择的目标目录也需要当前用户可写。
 MSI 内置 .NET、Windows App SDK 和 Visual C++ release CRT，目标电脑无需
 预先安装这些运行库，也不需要 SDK 或 Core 源码仓库。
 
@@ -44,6 +46,8 @@ Studio 时，用 `-VcRuntimeDirectory` 指向官方 `Microsoft.VC143.CRT` 目录
 所有 Windows 服务通过 `AppPaths` 解析同一个默认目录：
 `%LOCALAPPDATA%\OcPlayer\Windows`。安装文件和用户数据分离；MSI 不拥有
 数据目录内的文件，升级与卸载保留设置、数据库、播放记录与系统凭据。
+安装程序记录选定的安装目录，后续升级默认沿用该目录。静默安装时可通过
+`INSTALLFOLDER="D:\Apps\OcPlayer"` 指定路径；显式指定的路径优先于已记录的目录。
 账号和私有 API key 继续使用原来的 PasswordVault resource，安装版不改变
 应用身份，也不转存成明文。
 
@@ -96,6 +100,7 @@ dotnet run --project tests/OcPlayer.Integration/OcPlayer.Integration.csproj `
 
 安装验证使用独立安装与数据目录，检查实际 apphost/Core/Erika 初始化、
 app-local .NET/WinUI/CRT 加载、协议注册、major upgrade 和卸载数据保留，
+并验证包含中文与空格的自定义安装目录以及未指定路径时的升级目录继承，
 最后卸载测试产品并恢复原有协议处理器。它不会替代用户在 Windows 10
 最低版本、ARM64 和干净虚拟机上的验收。
 
@@ -107,6 +112,13 @@ app-local .NET/WinUI/CRT 加载、协议注册、major upgrade 和卸载数据�
 `artifacts/storage-verification-20261117-final/results.json` 和
 `artifacts/installer-verification-final/results.json`。测试产品已卸载；
 用户的默认数据目录未用于本次安装验收。当前生成的 MSI 未签名。
+
+2026-11-19 的安装目录验收：实际打开 x64 MSI，确认中文“目标文件夹”页、
+默认路径和“更改目标文件夹”浏览对话框。重新构建的 1.0.0 / 1.0.1 MSI
+通过 31 项安装、升级与卸载断言，包含中文与空格目录安装、未传
+`INSTALLFOLDER` 的升级目录继承、运行库加载位置和用户数据保留。
+结果保存在 `artifacts/verification/installer-directory-20261119/lifecycle/results.json`；
+测试产品已卸载，原有协议处理器已恢复。
 
 Core 提交 `7e3968e` 仅新增可选 `commentsDiskCapacityBytes` 和
 `clearComments` / `pruneComments`。未提供磁盘限额的 Apple 客户端保留
