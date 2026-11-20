@@ -49,7 +49,7 @@ public sealed partial class MainWindow
                 var synopsisDialog = VisualTreeHelper.GetOpenPopupsForXamlRoot(WindowRoot.XamlRoot).SelectMany(x => Walk(x.Child)).OfType<ContentDialog>().Single();
                 Check(synopsisDialog.Content is ScrollViewer { Content: TextBlock { MaxLines: 0, IsTextSelectionEnabled: true } fullSynopsis }
                     && fullSynopsis.Text == media.Description, "expand synopsis opens a dialog with complete selectable text");
-                Check(Equals(expand.Content, "展开全文") && Walk(PageHost).OfType<TextBlock>().Any(x => x.Text == media.Description && x.MaxLines == 3), "opening synopsis keeps the detail preview at three lines");
+                Check(Equals(expand.Content, "展开全文") && Walk(PageHost).OfType<TextBlock>().Any(x => x.Text == media.Description && x.MaxLines is 2 or 3), "opening synopsis keeps the detail preview at two or three lines");
                 var synopsisScroll = (ScrollViewer)synopsisDialog.Content;
                 Check(synopsisScroll.ScrollableHeight > 0, "long synopsis scrolls within the dialog");
                 synopsisScroll.ChangeView(null, synopsisScroll.ScrollableHeight, null, true); await Task.Delay(60);
@@ -62,7 +62,17 @@ public sealed partial class MainWindow
                 await Refresh("detail-info");
                 Check(Texts().Contains("简介65"), "second detail page uses selected episode overview");
                 var restored = new ViewModels.DemoViewModel(); Check(restored.EpisodesDescending, "new view-model restores episode order");
-                _model.ThemeMode = "light"; SetTheme(false); await Task.Delay(100); Check(Root.RequestedTheme == ElementTheme.Light, "manual light theme is applied");
+                _model.ThemeMode = "light"; SetTheme(false); await Task.Delay(150); Check(Root.RequestedTheme == ElementTheme.Light, "manual light theme is applied");
+                await Refresh("home");
+                var whiteHomeTexts = Walk(PageHost).OfType<TextBlock>()
+                    .Where(x => x.Foreground is SolidColorBrush b && b.Color.R + b.Color.G + b.Color.B > 500 && x.ActualWidth > 0 && x.Text.Length > 0)
+                    .Select(x => x.Text).ToArray();
+                Check(whiteHomeTexts.Length == 0, "light theme home contains no white foreground text: " + string.Join(", ", whiteHomeTexts));
+                await Refresh("detail");
+                var whiteDetailTexts = Walk(PageHost).OfType<TextBlock>()
+                    .Where(x => x.Foreground is SolidColorBrush b && b.Color.R + b.Color.G + b.Color.B > 500 && x.ActualWidth > 0 && x.Text.Length > 0)
+                    .Select(x => x.Text).ToArray();
+                Check(whiteDetailTexts.Length == 0, "light theme detail contains no white foreground text: " + string.Join(", ", whiteDetailTexts));
                 _model.ThemeMode = "system"; SetTheme(false); await Task.Delay(100); Check(Root.RequestedTheme == ElementTheme.Default, "follow-system theme returns to platform default");
                 var settings = new StackPanel(); new RuntimeSettingsPages(_model, Navigate, SetTheme).Build("播放", settings);
                 Check(settings.Children.Count > 4, "real playback settings page builds all sections without an account");

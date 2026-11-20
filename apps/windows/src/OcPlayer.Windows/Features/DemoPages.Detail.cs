@@ -38,6 +38,7 @@ internal sealed partial class DemoPages
             var dialog = new ContentDialog
             {
                 XamlRoot = panel.XamlRoot, Title = "简介", CloseButtonText = "关闭", DefaultButton = ContentDialogButton.Close,
+                RequestedTheme = panel.ActualTheme,
                 Content = new ScrollViewer
                 {
                     Content = fullText, MaxHeight = Math.Max(120, Math.Min(480, panel.XamlRoot.Size.Height - 200)),

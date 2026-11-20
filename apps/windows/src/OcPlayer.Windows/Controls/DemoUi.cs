@@ -11,8 +11,29 @@ namespace OcPlayer.Windows.Controls;
 
 internal static class DemoUi
 {
+    public static bool IsDark { get; set; } = true;
     public static Brush Accent => new SolidColorBrush(Color.FromArgb(255, 236, 166, 107));
-    public static Brush Resource(string key) => (Brush)Application.Current.Resources[key];
+    public static Brush Resource(string key)
+    {
+        var themeKey = IsDark ? "Dark" : "Light";
+        if (Application.Current.Resources.ThemeDictionaries.TryGetValue(themeKey, out var dictObj)
+            && dictObj is ResourceDictionary themeDict
+            && themeDict.TryGetValue(key, out var themeResource)
+            && themeResource is Brush themeBrush)
+        {
+            return themeBrush;
+        }
+        if (!IsDark)
+        {
+            if (key == "TextFillColorSecondaryBrush") return new SolidColorBrush(Color.FromArgb(160, 0, 0, 0));
+            if (key == "TextFillColorPrimaryBrush") return new SolidColorBrush(Color.FromArgb(228, 0, 0, 0));
+            if (key == "CardBackgroundFillColorDefaultBrush") return new SolidColorBrush(Color.FromArgb(255, 255, 255, 255));
+            if (key == "CardStrokeColorDefaultBrush") return new SolidColorBrush(Color.FromArgb(32, 0, 0, 0));
+            if (key == "SolidBackgroundFillColorBaseBrush") return new SolidColorBrush(Color.FromArgb(255, 243, 243, 243));
+            if (key == "ControlFillColorSecondaryBrush") return new SolidColorBrush(Color.FromArgb(20, 0, 0, 0));
+        }
+        return (Brush)Application.Current.Resources[key];
+    }
     public static TextBlock Text(string text, double size = 14, bool strong = false) => new()
     {
         Text = text, FontSize = size, FontWeight = strong ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
@@ -21,7 +42,8 @@ internal static class DemoUi
     public static TextBlock Muted(string text, double size = 13)
     {
         var block = Text(text, size);
-        block.Foreground = Resource("TextFillColorSecondaryBrush");
+        block.Style = (Style)Application.Current.Resources["MutedTextStyle"];
+        block.FontSize = size;
         return block;
     }
     public static Button Button(string label, Action action, bool primary = false)
@@ -51,9 +73,8 @@ internal static class DemoUi
     public static StackPanel Row(double spacing = 12) => new() { Orientation = Orientation.Horizontal, Spacing = spacing };
     public static Border Panel(UIElement child, Thickness? padding = null)
     {
-        var border = new Border { Child = child, Padding = padding ?? new Thickness(24), CornerRadius = new CornerRadius(16), BorderThickness = new Thickness(1) };
-        border.Background = Resource("CardBackgroundFillColorDefaultBrush");
-        border.BorderBrush = Resource("CardStrokeColorDefaultBrush");
+        var border = new Border { Child = child, Style = (Style)Application.Current.Resources["CardPanelStyle"] };
+        if (padding.HasValue) border.Padding = padding.Value;
         return border;
     }
     public static Border Poster(DemoMedia media, double height = 238)

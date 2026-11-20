@@ -22,7 +22,7 @@
         <controls:AmbientBackdropView x:Name="Ambience" Grid.RowSpan="2" Visibility="Collapsed" />
         <!-- The viewport fills the window; the title bar floats above scrolling content. -->
         <Grid x:Name="PageHost" Grid.RowSpan="2" />
-        <Border x:Name="HeaderShade" Grid.RowSpan="2" Height="280" VerticalAlignment="Top"
+        <Border x:Name="HeaderShade" Grid.RowSpan="2" Height="112" VerticalAlignment="Top"
                 Background="{ThemeResource OcHeaderScrimBrush}" IsHitTestVisible="False" />
         <Grid x:Name="TitleBar" Background="Transparent" Margin="18,0,148,0" ColumnSpacing="12">
             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
@@ -32,14 +32,24 @@
                                     SelectionFollowsFocus="Enabled" HorizontalAlignment="Left" Background="Transparent"
                                     SelectionChanged="MainNavigation_SelectionChanged" AutomationProperties.Name="主导航">
                         <NavigationView.Resources>
-                            <!-- The default top pane reserves 48 DIP for custom content even when empty. -->
-                            <x:Double x:Key="TopNavigationViewPaneCustomContentMinWidth">0</x:Double>
-                            <Thickness x:Key="TopNavigationViewTopNavGridMargin">0</Thickness>
-                            <Thickness x:Key="NavigationViewBorderThickness">0</Thickness>
-                            <Thickness x:Key="TopNavigationViewContentGridBorderThickness">0</Thickness>
-                            <SolidColorBrush x:Key="NavigationViewItemSeparatorForeground" Color="Transparent" />
-                            <StaticResource x:Key="TopNavigationViewItemForeground" ResourceKey="TextFillColorSecondaryBrush" />
-                            <StaticResource x:Key="TopNavigationViewItemForegroundPointerOver" ResourceKey="TextFillColorSecondaryBrush" />
+                            <ResourceDictionary>
+                                <ResourceDictionary.ThemeDictionaries>
+                                    <ResourceDictionary x:Key="Dark">
+                                        <StaticResource x:Key="TopNavigationViewItemForeground" ResourceKey="TextFillColorSecondaryBrush" />
+                                        <StaticResource x:Key="TopNavigationViewItemForegroundPointerOver" ResourceKey="TextFillColorSecondaryBrush" />
+                                    </ResourceDictionary>
+                                    <ResourceDictionary x:Key="Light">
+                                        <StaticResource x:Key="TopNavigationViewItemForeground" ResourceKey="TextFillColorSecondaryBrush" />
+                                        <StaticResource x:Key="TopNavigationViewItemForegroundPointerOver" ResourceKey="TextFillColorSecondaryBrush" />
+                                    </ResourceDictionary>
+                                </ResourceDictionary.ThemeDictionaries>
+                                <!-- The default top pane reserves 48 DIP for custom content even when empty. -->
+                                <x:Double x:Key="TopNavigationViewPaneCustomContentMinWidth">0</x:Double>
+                                <Thickness x:Key="TopNavigationViewTopNavGridMargin">0</Thickness>
+                                <Thickness x:Key="NavigationViewBorderThickness">0</Thickness>
+                                <Thickness x:Key="TopNavigationViewContentGridBorderThickness">0</Thickness>
+                                <SolidColorBrush x:Key="NavigationViewItemSeparatorForeground" Color="Transparent" />
+                            </ResourceDictionary>
                         </NavigationView.Resources>
                         <NavigationView.MenuItems>
                             <NavigationViewItem x:Name="HomeNavigationItem" Tag="home" Width="40" ToolTipService.ToolTip="首页" AutomationProperties.Name="首页">

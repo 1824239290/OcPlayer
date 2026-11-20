@@ -1,7 +1,7 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package Name="OcPlayer" Manufacturer="OcPlayer" Version="$(Version)"
            UpgradeCode="1EDBADE9-AD55-442B-A1DB-752A2A40B549" Scope="perUser" InstallerVersion="500">
-    <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="已安装更新版本的 OcPlayer。" />
+    <MajorUpgrade AllowDowngrades="yes" />
     <Icon Id="OcPlayerIcon" SourceFile="$(InstallerDirectory)\..\src\OcPlayer.Windows\Assets\Branding\OcPlayer.ico" />
     <Property Id="ARPPRODUCTICON" Value="OcPlayerIcon" />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />

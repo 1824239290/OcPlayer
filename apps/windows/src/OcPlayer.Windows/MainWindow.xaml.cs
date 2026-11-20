@@ -453,7 +453,9 @@ public sealed partial class MainWindow : Window
     private void SetTheme(bool dark)
     {
         Root.RequestedTheme = _model.ThemeMode switch { "dark" => ElementTheme.Dark, "light" => ElementTheme.Light, _ => ElementTheme.Default };
+        WindowRoot.RequestedTheme = Root.RequestedTheme;
         _model.DarkTheme = Root.ActualTheme == ElementTheme.Dark;
+        Controls.DemoUi.IsDark = _model.DarkTheme;
         SetCaptionTheme();
         DispatcherQueue.TryEnqueue(() => Navigate(_model.Route));
     }
@@ -461,6 +463,7 @@ public sealed partial class MainWindow : Window
     {
         if (_closing || AppWindow?.TitleBar is not { } caption) return;
         _model.DarkTheme = Root.ActualTheme == ElementTheme.Dark;
+        Controls.DemoUi.IsDark = _model.DarkTheme;
         Root.Background = new SolidColorBrush(Controls.AmbientBackdropView.PageColor(_model.DarkTheme));
         Ambience.SetStyle(_model.DarkTheme, _model.Route == "detail-info");
         caption.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
@@ -617,7 +620,7 @@ public sealed partial class MainWindow : Window
         var titleBar = AppWindow.TitleBar;
         if (titleBar.Height > 0) TitleBarRow.Height = new GridLength(titleBar.Height / scale);
         _pageLayout.HeaderHeight = TitleBarRow.Height.Value;
-        HeaderShade.Height = Math.Max(280, _pageLayout.HeaderHeight + 232);
+        HeaderShade.Height = _pageLayout.HeaderHeight + 64;
         // Match one native caption button: full title-bar height, no inset or
         // rounded hover surface. RightInset covers the three caption buttons.
         BackButton.Width = titleBar.RightInset > 0 ? titleBar.RightInset / (3 * scale) : 46;

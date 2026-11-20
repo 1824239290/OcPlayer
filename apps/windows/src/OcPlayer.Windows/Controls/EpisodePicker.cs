@@ -52,20 +52,23 @@ internal sealed class EpisodePicker : StackPanel
             label.TextAlignment = TextAlignment.Center;
             label.HorizontalAlignment = HorizontalAlignment.Center;
             label.VerticalAlignment = VerticalAlignment.Center;
-            if (episode.IsPlayed) label.Foreground = Resource("TextFillColorSecondaryBrush");
+            if (episode.IsPlayed)
+            {
+                label.Style = (Style)Application.Current.Resources["MutedTextStyle"];
+                label.FontSize = 13;
+            }
             var numberWidth = Math.Max(32, episode.Number.ToString().Length * 8 + 20);
             var numberContent = new Grid { MinWidth = numberWidth, Height = SelectorHeight };
             numberContent.Children.Add(new Border
             {
                 Child = label, Padding = new Thickness(6, 0, 6, 0), CornerRadius = new CornerRadius(6),
-                Background = Resource("CardBackgroundFillColorDefaultBrush"),
-                BorderBrush = Resource("CardStrokeColorDefaultBrush"), BorderThickness = new Thickness(1)
+                Style = (Style)Application.Current.Resources["EpisodeNumberCardStyle"]
             });
             if (episode.IsPlayed)
             {
                 numberContent.Children.Add(new FontIcon
                 {
-                    Glyph = "\uE73E", FontSize = 8, Foreground = Resource("TextFillColorSecondaryBrush"),
+                    Glyph = "\uE73E", FontSize = 8, Style = (Style)Application.Current.Resources["MutedIconStyle"],
                     HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top,
                     Margin = new Thickness(0, 3, 3, 0), IsHitTestVisible = false
                 });
@@ -93,7 +96,7 @@ internal sealed class EpisodePicker : StackPanel
             number.ContextFlyout = watchedMenu;
             _numbers.Items.Add(number);
 
-            var frame = new Grid { Height = width * 9 / 16, Background = Resource("CardBackgroundFillColorDefaultBrush") };
+            var frame = new Grid { Height = width * 9 / 16, Style = (Style)Application.Current.Resources["EpisodeThumbnailFrameStyle"] };
             if (episode.Artwork.Length > 0)
             {
                 var image = Image(DemoMedia.AssetPath(episode.Artwork));
@@ -104,10 +107,9 @@ internal sealed class EpisodePicker : StackPanel
             {
                 var watched = new Border
                 {
-                    Child = new FontIcon { Glyph = "\uE73E", FontSize = 12, Foreground = Resource("TextFillColorPrimaryBrush") },
-                    Padding = new Thickness(5), CornerRadius = new CornerRadius(5), Margin = new Thickness(6),
-                    HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top,
-                    Background = Resource("SolidBackgroundFillColorBaseBrush")
+                    Child = new FontIcon { Glyph = "\uE73E", FontSize = 12 },
+                    Style = (Style)Application.Current.Resources["EpisodeWatchedBadgeStyle"],
+                    Margin = new Thickness(6), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top
                 };
                 frame.Children.Add(watched);
             }
@@ -117,8 +119,7 @@ internal sealed class EpisodePicker : StackPanel
                 Content = new Border { Child = frame, CornerRadius = new CornerRadius(8) },
                 Tag = episode, Width = width + 8, Padding = new Thickness(4),
                 Margin = new Thickness(0, 0, 6, 0), CornerRadius = new CornerRadius(10),
-                IsEnabled = episode.Available, HorizontalContentAlignment = HorizontalAlignment.Stretch,
-                Foreground = Resource(episode.IsPlayed ? "TextFillColorSecondaryBrush" : "TextFillColorPrimaryBrush")
+                IsEnabled = episode.Available, HorizontalContentAlignment = HorizontalAlignment.Stretch
             };
             AutomationProperties.SetName(card, $"第 {episode.Number} 集，{episode.Title}，{episode.WatchStatus}");
             ToolTipService.SetToolTip(card, $"第 {episode.Number} 集 · {episode.Title} · {episode.WatchStatus}\n{episode.Overview}");
@@ -130,7 +131,11 @@ internal sealed class EpisodePicker : StackPanel
             var caption = Text($"第 {episode.Number} 集 {episode.Title}", 11);
             caption.MaxLines = expanded ? 2 : 1;
             caption.TextTrimming = TextTrimming.CharacterEllipsis;
-            caption.Foreground = card.Foreground;
+            if (episode.IsPlayed)
+            {
+                caption.Style = (Style)Application.Current.Resources["MutedTextStyle"];
+                caption.FontSize = 11;
+            }
             var captionBox = new Border
             {
                 Child = caption, Width = width + 8, Padding = new Thickness(4, 0, 4, 0),

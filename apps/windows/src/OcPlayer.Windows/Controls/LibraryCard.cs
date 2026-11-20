@@ -68,7 +68,7 @@ internal sealed class LibraryCard : Button
             }
         }
         else grid.Children.Add(new FontIcon { Glyph = library.CollectionType.Equals("boxsets", StringComparison.OrdinalIgnoreCase) ? "\uE7FD" : "\uEB9F",
-            FontSize = 32, Foreground = Resource("TextFillColorSecondaryBrush") });
+            FontSize = 32, Style = (Style)Application.Current.Resources["MutedIconStyle"] });
 
         return new Border { Child = grid, CornerRadius = new CornerRadius(10) };
 

@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [ValidateSet('x64', 'ARM64')][string]$Platform = 'x64',
-    [ValidatePattern('^\d+\.\d+\.\d+(\.\d+)?$')][string]$Version = '1.0.0',
+    [ValidatePattern('^\d+\.\d+\.\d+(\.\d+)?$')][string]$Version = '0.3.0',
+    [int]$BuildNumber = 0,
     [string]$CoreRoot = (Join-Path $PSScriptRoot '..\..\..\core'),
     [string]$VcRuntimeDirectory,
     [string]$OutputDirectory,
@@ -114,7 +115,19 @@ if ($CertificateThumbprint) {
     if (!$signTool) { throw 'Windows SDK signtool.exe is required for signing.' }
     Invoke-Checked $signTool @('sign', '/sha1', $CertificateThumbprint, '/fd', 'SHA256', '/tr', $TimestampUrl, '/td', 'SHA256', (Join-Path $publishDirectory 'OcPlayer.Windows.exe'))
 }
-$installer = Join-Path $OutputDirectory "OcPlayer-$Version-$Platform.msi"
+if ($BuildNumber -le 0) {
+    $existing = Get-ChildItem -LiteralPath $OutputDirectory -Filter "OcPlayer-$Version-$Platform*.msi" -File -ErrorAction SilentlyContinue
+    $maxBuild = 0
+    foreach ($file in $existing) {
+        if ($file.Name -match ('^OcPlayer-' + [regex]::Escape($Version) + '-' + [regex]::Escape($Platform) + '(?:\((\d+)\))?\.msi$')) {
+            $num = if ($Matches[1]) { [int]$Matches[1] } else { 1 }
+            if ($num -gt $maxBuild) { $maxBuild = $num }
+        }
+    }
+    $BuildNumber = if ($maxBuild -gt 0) { $maxBuild + 1 } else { 1 }
+}
+$installerName = "OcPlayer-$Version-$Platform($BuildNumber).msi"
+$installer = Join-Path $OutputDirectory $installerName
 Invoke-Checked $wix @('build', "$workspace\installer\OcPlayer.wxs", '-arch', $Platform.ToLowerInvariant(), '-culture', 'zh-CN',
     '-ext', $uiExtension, '-d', "PublishDirectory=$publishDirectory", '-d', "Version=$Version", '-d', "InstallerDirectory=$workspace\installer",
     '-intermediatefolder', (Join-Path $OutputDirectory 'wix-obj'), '-o', $installer)

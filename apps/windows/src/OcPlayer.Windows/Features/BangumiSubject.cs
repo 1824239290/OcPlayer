@@ -78,7 +78,7 @@ internal sealed partial class IntegrationPages
                 expand.Click += async (_, _) =>
                 {
                     var full = Text(summary, 14); full.IsTextSelectionEnabled = true;
-                    var dialog = new ContentDialog { XamlRoot = page.Body.XamlRoot, Title = "剧情简介", Content = new ScrollViewer { Content = full, MaxHeight = 520, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }, CloseButtonText = "关闭" };
+                    var dialog = new ContentDialog { XamlRoot = page.Body.XamlRoot, Title = "剧情简介", RequestedTheme = page.Body.ActualTheme, Content = new ScrollViewer { Content = full, MaxHeight = 520, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }, CloseButtonText = "关闭" };
                     using var registration = page.Token.Register(() => page.Body.DispatcherQueue.TryEnqueue(dialog.Hide)); await dialog.ShowAsync();
                 };
                 content.Children.Add(DashboardHeading("剧情简介", expand)); var preview = DashboardMuted(summary, 12); preview.MaxLines = 4; preview.TextTrimming = TextTrimming.CharacterEllipsis; content.Children.Add(preview); synopsis.Children.Add(DashboardCard(content));

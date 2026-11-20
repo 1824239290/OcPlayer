@@ -93,7 +93,6 @@ internal sealed class HorizontalMediaRail : Grid
             Padding = new Thickness(0),
             CornerRadius = new CornerRadius(8),
             Background = ArrowBackground("SolidBackgroundFillColorBaseBrush"),
-            Foreground = DemoUi.Resource("TextFillColorPrimaryBrush"),
             BorderThickness = new Thickness(0),
             HorizontalAlignment = alignment,
             VerticalAlignment = VerticalAlignment.Center,

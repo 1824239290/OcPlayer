@@ -22,6 +22,9 @@ public sealed partial class MainWindow
     private void InitializeBrowserParity()
     {
         Root.RequestedTheme = _model.ThemeMode switch { "dark" => ElementTheme.Dark, "light" => ElementTheme.Light, _ => ElementTheme.Default };
+        WindowRoot.RequestedTheme = Root.RequestedTheme;
+        _model.DarkTheme = Root.ActualTheme == ElementTheme.Dark;
+        Controls.DemoUi.IsDark = _model.DarkTheme;
         var open = new KeyboardAccelerator { Key = VirtualKey.O, Modifiers = VirtualKeyModifiers.Control };
         open.Invoked += async (_, args) => { args.Handled = true; await OpenLocalFile(); };
         var link = new KeyboardAccelerator { Key = VirtualKey.O, Modifiers = VirtualKeyModifiers.Control | VirtualKeyModifiers.Shift };

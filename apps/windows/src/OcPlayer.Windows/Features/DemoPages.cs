@@ -37,7 +37,7 @@ internal sealed partial class DemoPages(DemoViewModel model, PageLayout pageLayo
         { var placeholders = Row(20); for (var i = 0; i < 4; i++) placeholders.Children.Add(new Border { Width = 200, Height = 130, CornerRadius = new CornerRadius(8), Background = Resource("CardBackgroundFillColorDefaultBrush") }); page.Children.Add(placeholders); }
         if (!model.DemoMode && !model.HomeLoading && App.Core?.Server is { Libraries.Count: 0 })
         { page.Children.Add(Muted("服务器没有可见的媒体内容，请检查媒体库和账号权限。")); page.Children.Add(Button("重试", () => refreshHome?.Invoke())); }
-        return pageLayout.Scroll(page, new Thickness(52, 20, 0, 36));
+        return pageLayout.Scroll(page, new Thickness(52, 56, 0, 36));
     }
     private UIElement Libraries()
     {
