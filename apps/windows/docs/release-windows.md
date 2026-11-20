@@ -5,6 +5,10 @@
 Windows 使用按当前用户安装的 MSI。默认安装到
 `%LOCALAPPDATA%\Programs\OcPlayer`。安装向导提供“目标文件夹”页，可以直接
 输入路径或通过“更改…”浏览当前用户有写入权限的目录，例如 `D:\Apps\OcPlayer`。
+若用户在自定义路径时选择了盘符根目录（例如 `D:\`）或其他目录（例如 `D:\Apps`），
+向导会自动在末尾补齐 `OcPlayer` 子目录（如 `D:\OcPlayer\` 或 `D:\Apps\OcPlayer\`），
+避免应用散落在根目录中；若路径已包含 `OcPlayer` 目录则不会重复追加。
+同时，对于已安装的用户进行更新升级，会默认沿用原有记录的安装目录，不影响已安装用户的升级。
 安装后创建开始菜单快捷方式并注册 `ocplayer://` 的 Bangumi 回调。
 安装、升级和卸载均不要求管理员权限；选择的目标目录也需要当前用户可写。
 MSI 内置 .NET、Windows App SDK 和 Visual C++ release CRT，目标电脑无需

@@ -51,7 +51,17 @@
     <WixVariable Id="WixUILicenseRtf" Value="$(InstallerDirectory)\notice.rtf" />
     <WixVariable Id="WixUIBannerBmp" Value="$(InstallerDirectory)\banner.bmp" />
     <WixVariable Id="WixUIDialogBmp" Value="$(InstallerDirectory)\dialog.bmp" />
-    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <UI>
+      <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+      <Publish Dialog="BrowseDlg" Control="OK" Property="INSTALLFOLDER" Value="[INSTALLFOLDER]OcPlayer\" Order="2"
+               Condition="INSTALLFOLDER AND NOT (INSTALLFOLDER ~&gt;&gt; &quot;\OcPlayer\&quot; OR INSTALLFOLDER ~&gt;&gt; &quot;\OcPlayer&quot; OR INSTALLFOLDER ~= &quot;OcPlayer&quot; OR INSTALLFOLDER ~= &quot;OcPlayer\&quot; OR INSTALLFOLDER ~&gt;&gt; &quot;/OcPlayer/&quot; OR INSTALLFOLDER ~&gt;&gt; &quot;/OcPlayer&quot;) AND NOT (PREVIOUSINSTALLFOLDER AND (INSTALLFOLDER ~= PREVIOUSINSTALLFOLDER OR (INSTALLFOLDER ~&lt;&lt; PREVIOUSINSTALLFOLDER AND (INSTALLFOLDER &gt;&gt; &quot;\&quot; OR INSTALLFOLDER &gt;&gt; &quot;/&quot;)))) AND (INSTALLFOLDER &gt;&gt; &quot;\&quot; OR INSTALLFOLDER &gt;&gt; &quot;/&quot;)" />
+      <Publish Dialog="BrowseDlg" Control="OK" Property="INSTALLFOLDER" Value="[INSTALLFOLDER]\OcPlayer\" Order="2"
+               Condition="INSTALLFOLDER AND NOT (INSTALLFOLDER ~&gt;&gt; &quot;\OcPlayer\&quot; OR INSTALLFOLDER ~&gt;&gt; &quot;\OcPlayer&quot; OR INSTALLFOLDER ~= &quot;OcPlayer&quot; OR INSTALLFOLDER ~= &quot;OcPlayer\&quot; OR INSTALLFOLDER ~&gt;&gt; &quot;/OcPlayer/&quot; OR INSTALLFOLDER ~&gt;&gt; &quot;/OcPlayer&quot;) AND NOT (PREVIOUSINSTALLFOLDER AND (INSTALLFOLDER ~= PREVIOUSINSTALLFOLDER OR (INSTALLFOLDER ~&lt;&lt; PREVIOUSINSTALLFOLDER AND (INSTALLFOLDER &gt;&gt; &quot;\&quot; OR INSTALLFOLDER &gt;&gt; &quot;/&quot;)))) AND NOT (INSTALLFOLDER &gt;&gt; &quot;\&quot; OR INSTALLFOLDER &gt;&gt; &quot;/&quot;)" />
+      <Publish Dialog="InstallDirDlg" Control="Next" Property="INSTALLFOLDER" Value="[INSTALLFOLDER]OcPlayer\" Order="2"
+               Condition="INSTALLFOLDER AND NOT (INSTALLFOLDER ~&gt;&gt; &quot;\OcPlayer\&quot; OR INSTALLFOLDER ~&gt;&gt; &quot;\OcPlayer&quot; OR INSTALLFOLDER ~= &quot;OcPlayer&quot; OR INSTALLFOLDER ~= &quot;OcPlayer\&quot; OR INSTALLFOLDER ~&gt;&gt; &quot;/OcPlayer/&quot; OR INSTALLFOLDER ~&gt;&gt; &quot;/OcPlayer&quot;) AND NOT (PREVIOUSINSTALLFOLDER AND (INSTALLFOLDER ~= PREVIOUSINSTALLFOLDER OR (INSTALLFOLDER ~&lt;&lt; PREVIOUSINSTALLFOLDER AND (INSTALLFOLDER &gt;&gt; &quot;\&quot; OR INSTALLFOLDER &gt;&gt; &quot;/&quot;)))) AND (INSTALLFOLDER &gt;&gt; &quot;\&quot; OR INSTALLFOLDER &gt;&gt; &quot;/&quot;)" />
+      <Publish Dialog="InstallDirDlg" Control="Next" Property="INSTALLFOLDER" Value="[INSTALLFOLDER]\OcPlayer\" Order="2"
+               Condition="INSTALLFOLDER AND NOT (INSTALLFOLDER ~&gt;&gt; &quot;\OcPlayer\&quot; OR INSTALLFOLDER ~&gt;&gt; &quot;\OcPlayer&quot; OR INSTALLFOLDER ~= &quot;OcPlayer&quot; OR INSTALLFOLDER ~= &quot;OcPlayer\&quot; OR INSTALLFOLDER ~&gt;&gt; &quot;/OcPlayer/&quot; OR INSTALLFOLDER ~&gt;&gt; &quot;/OcPlayer&quot;) AND NOT (PREVIOUSINSTALLFOLDER AND (INSTALLFOLDER ~= PREVIOUSINSTALLFOLDER OR (INSTALLFOLDER ~&lt;&lt; PREVIOUSINSTALLFOLDER AND (INSTALLFOLDER &gt;&gt; &quot;\&quot; OR INSTALLFOLDER &gt;&gt; &quot;/&quot;)))) AND NOT (INSTALLFOLDER &gt;&gt; &quot;\&quot; OR INSTALLFOLDER &gt;&gt; &quot;/&quot;)" />
+    </UI>
   </Package>
   <Fragment>
     <ComponentGroup Id="ApplicationFiles" Directory="INSTALLFOLDER">
