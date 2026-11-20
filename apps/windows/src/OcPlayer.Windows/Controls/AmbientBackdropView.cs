@@ -63,7 +63,7 @@ public sealed class AmbientBackdropView : Grid, IDisposable
             _blur = _compositor.CreateEffectFactory(new SaturationEffect
             {
                 Name = "Saturation", Saturation = 1,
-                Source = new GaussianBlurEffect { Name = "Blur", BlurAmount = 14, BorderMode = EffectBorderMode.Hard,
+                Source = new GaussianBlurEffect { Name = "Blur", BlurAmount = 80, BorderMode = EffectBorderMode.Hard,
                     Source = new CompositionEffectSourceParameter("Image") }
             }, ["Blur.BlurAmount", "Saturation.Saturation"]);
         }
@@ -85,7 +85,7 @@ public sealed class AmbientBackdropView : Grid, IDisposable
             scene.Root.Size = _container.Size;
             foreach (var visual in scene.Visuals) visual.Size = _container.Size;
             if (scene.BlurSource is not null)
-                scene.BlurSource.TransformMatrix = Matrix3x2.CreateScale(scene.Detail ? 1.15f : 1.12f, _container.Size / 2);
+                scene.BlurSource.TransformMatrix = Matrix3x2.CreateScale(1.22f, _container.Size / 2);
             if (scene.Mask is not null) UpdateMask(scene, false);
         }
     }
@@ -122,12 +122,12 @@ public sealed class AmbientBackdropView : Grid, IDisposable
     private void StyleScene(Scene scene)
     {
         var tint = _dark ? Microsoft.UI.Colors.Black : Microsoft.UI.Colors.White;
-        scene.Effect?.Properties.InsertScalar("Blur.BlurAmount", scene.Detail ? 30 : _dark ? 14 : 20);
+        scene.Effect?.Properties.InsertScalar("Blur.BlurAmount", 80);
         scene.Effect?.Properties.InsertScalar("Saturation.Saturation", scene.Detail ? 1.02f : 1);
         // Replace only tint brushes; image/mask references stay unchanged on theme changes.
         Replace(scene, scene.Scrim, scene.Detail
             ? Gradient(scene, new Vector2(1, 0), (0, Alpha(tint, _dark ? .58 : .62)), (.36f, Alpha(tint, .30)), (.66f, Alpha(tint, .06)), (1, Alpha(tint, 0)))
-            : Gradient(scene, new Vector2(0, 1), (0, Alpha(tint, _dark ? .10 : .25)), (.12f, Alpha(tint, _dark ? .48 : .66)), (.85f, Alpha(PageColor(_dark), .88)), (1, PageColor(_dark))));
+            : Gradient(scene, new Vector2(0, 1), (0, Alpha(tint, _dark ? .48 : .66)), (.85f, Alpha(PageColor(_dark), .88)), (1, PageColor(_dark))));
         Replace(scene, scene.Bottom, scene.Detail ? Gradient(scene, new Vector2(0, 1), (0, Alpha(tint, 0)), (.70f, Alpha(tint, 0)), (1, Alpha(tint, .42))) : null);
         var expandedTint = _compositor.CreateColorBrush(Alpha(tint, _dark ? .30 : .34));
         scene.Brushes.Add(expandedTint); Replace(scene, scene.Expanded, expandedTint);

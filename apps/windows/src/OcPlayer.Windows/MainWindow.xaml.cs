@@ -617,7 +617,7 @@ public sealed partial class MainWindow : Window
         var titleBar = AppWindow.TitleBar;
         if (titleBar.Height > 0) TitleBarRow.Height = new GridLength(titleBar.Height / scale);
         _pageLayout.HeaderHeight = TitleBarRow.Height.Value;
-        HeaderShade.Height = _pageLayout.HeaderHeight + 64;
+        HeaderShade.Height = Math.Max(280, _pageLayout.HeaderHeight + 232);
         // Match one native caption button: full title-bar height, no inset or
         // rounded hover surface. RightInset covers the three caption buttons.
         BackButton.Width = titleBar.RightInset > 0 ? titleBar.RightInset / (3 * scale) : 46;

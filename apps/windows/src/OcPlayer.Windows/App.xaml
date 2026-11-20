@@ -15,8 +15,11 @@
                     <SolidColorBrush x:Key="BangumiWatchedBorderBrush" Color="#55FFFFFF" />
                     <LinearGradientBrush x:Key="OcHeaderScrimBrush" StartPoint="0,0" EndPoint="0,1">
                         <GradientStop Color="#B8000000" Offset="0" />
-                        <GradientStop Color="#8C000000" Offset="0.4" />
-                        <GradientStop Color="#30000000" Offset="0.75" />
+                        <GradientStop Color="#94000000" Offset="0.17" />
+                        <GradientStop Color="#66000000" Offset="0.35" />
+                        <GradientStop Color="#38000000" Offset="0.55" />
+                        <GradientStop Color="#16000000" Offset="0.75" />
+                        <GradientStop Color="#05000000" Offset="0.9" />
                         <GradientStop Color="#00000000" Offset="1" />
                     </LinearGradientBrush>
                 </ResourceDictionary>
@@ -27,8 +30,11 @@
                     <SolidColorBrush x:Key="BangumiWatchedBorderBrush" Color="#38000000" />
                     <LinearGradientBrush x:Key="OcHeaderScrimBrush" StartPoint="0,0" EndPoint="0,1">
                         <GradientStop Color="#CCFFFFFF" Offset="0" />
-                        <GradientStop Color="#A6FFFFFF" Offset="0.4" />
-                        <GradientStop Color="#40FFFFFF" Offset="0.75" />
+                        <GradientStop Color="#A8FFFFFF" Offset="0.17" />
+                        <GradientStop Color="#70FFFFFF" Offset="0.35" />
+                        <GradientStop Color="#40FFFFFF" Offset="0.55" />
+                        <GradientStop Color="#1AFFFFFF" Offset="0.75" />
+                        <GradientStop Color="#06FFFFFF" Offset="0.9" />
                         <GradientStop Color="#00FFFFFF" Offset="1" />
                     </LinearGradientBrush>
                 </ResourceDictionary>
