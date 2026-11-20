@@ -23,7 +23,7 @@
 
 ```powershell
 ./Scripts/prepare-kernel.ps1
-./Scripts/build-windows.ps1 -KernelRoot './artifacts/liberika-v0.3.7' -LibClangPath 'D:\path\to\llvm\bin'
+./Scripts/build-windows.ps1 -KernelRoot './artifacts/liberika-v0.3.8' -LibClangPath 'D:\path\to\llvm\bin'
 dotnet build OcPlayer.sln -c Debug -p:Platform=x64
 ```
 

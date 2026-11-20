@@ -15,8 +15,8 @@ OcPlayer/core/
 OcPlayer/apps/windows/
 ```
 
-内核版本固定在 `Config/Kernel.version.json`：官方 `AimesSoft/liberika` 的 **v0.3.7**，
-提交 `a4f829999fe8df0c35561fe1bdf0f5ad0df0c3a5`。准备 Windows LGPL 原生依赖：
+内核版本固定在 `Config/Kernel.version.json`：官方 `AimesSoft/liberika` 的 **v0.3.8**，
+提交 `b9881a72dc6cb822865c74858c45ce2d4c8d4960`。准备 Windows LGPL 原生依赖：
 
 ```powershell
 .\Scripts\prepare-kernel.ps1 `
@@ -24,13 +24,13 @@ OcPlayer/apps/windows/
   -NativeArchiveCache 'D:\path\to\native-archive-cache'
 
 .\Scripts\build-windows.ps1 `
-  -KernelRoot '.\artifacts\liberika-v0.3.7' `
+  -KernelRoot '.\artifacts\liberika-v0.3.8' `
   -LibClangPath 'D:\path\to\llvm\bin' -Configuration Release
 ```
 
 准备需要 Visual Studio C++ 工具、Git Bash 或 MSYS2、GNU make、nasm、CMake，以及可运行
 `venv` 的 Python；meson/ninja 可由上游 xtask 自动安装。`-NativeArchiveCache` 可省略。
-准备脚本拉取固定提交并应用本仓库的 `liberika-v0.3.7-windows.patch`，再使用上游 xtask
+准备脚本拉取固定提交并应用本仓库的 `liberika-v0.3.8-windows.patch`，再使用上游 xtask
 构建 FFmpeg 8.1.2（包含 dav1d）、libass 0.17.5 和字体依赖。Windows 构建脚本使用
 `--locked`，生成独立的 `artifacts/core-target`、`artifacts/kernel-target`，将两枚 DLL
 放入 `native/OcPlayerCore/x64`，然后编译前端。`-CoreRoot`、`-Configuration Release`、
@@ -41,7 +41,7 @@ Debug Rust 构建保持未优化，但关闭原生调试符号，避免本机 MS
 C# Debug 符号正常生成。原生依赖本身的编译警告保留在构建日志中。
 
 Windows 构建脚本检查固定提交与版本化补丁，在 receipt 中记录仓库、tag、提交、编译特性、
-补丁和 DLL 的 SHA256。补丁保留 D3D11 的 SDR 截图、暂停时字幕导入/切换和同步删除字幕。
+补丁和 DLL 的 SHA256。D3D11 截图能力已自 v0.3.8 起由上游原生实现，补丁仅保留暂停时外挂字幕导入/切换、暂停态 overlay 刷新、同步删除字幕及 Windows 解压兼容修复。
 旧的网络回退缓冲、HDR/Dolby Vision 接口已由上游实现，不再应用 0.1.7 的旧补丁。
 内置回退字体、ArtCNN R8F64 与 libass 一起编译；WinUI 使用原生 D3D11 渲染。
 许可证页由实际源码版本和当前平台的依赖自动生成。

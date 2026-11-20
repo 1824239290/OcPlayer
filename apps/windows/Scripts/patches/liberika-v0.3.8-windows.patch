@@ -1,0 +1,261 @@
+diff --git a/crates/erika/src/core.rs b/crates/erika/src/core.rs
+index 7b33e4c..79eb3be 100644
+--- a/crates/erika/src/core.rs
++++ b/crates/erika/src/core.rs
+@@ -1358,7 +1358,10 @@ enum PlaybackCommand {
+         config: SubtitleTrackConfig,
+         reply: Sender<std::result::Result<SubtitleTrackConfig, String>>,
+     },
+-    RemoveSubtitleTrack(i64),
++    RemoveSubtitleTrack {
++        track_id: i64,
++        reply: Sender<std::result::Result<(), String>>,
++    },
+     SelectAudioTrack(Option<i64>),
+     SelectSubtitleTrack(Option<i64>),
+     SetFrameOutputQuiesced {
+@@ -1917,7 +1920,16 @@ impl Player {
+ 
+     pub fn remove_subtitle_track(&self, track_id: i64) -> Result<()> {
+         self.ensure_not_closed()?;
+-        self.send_playback_command(PlaybackCommand::RemoveSubtitleTrack(track_id))
++        let (reply, response) = bounded(1);
++        self.send_playback_command(PlaybackCommand::RemoveSubtitleTrack { track_id, reply })?;
++        response
++            .recv()
++            .map_err(|_| {
++                PlayerError::Playback(
++                    "playback worker stopped before removing the subtitle".to_string(),
++                )
++            })?
++            .map_err(PlayerError::Playback)
+     }
+ 
+     pub fn select_audio_track(&self, track_id: Option<i64>) -> Result<()> {
+@@ -3330,7 +3342,7 @@ fn handle_playback_command(
+                 }
+             }
+         }
+-        PlaybackCommand::RemoveSubtitleTrack(track_id) => {
++        PlaybackCommand::RemoveSubtitleTrack { track_id, reply } => {
+             match engine.remove_subtitle_track(track_id) {
+                 Ok(Some(frame)) => {
+                     *playback_generation = playback_generation.saturating_add(1).max(1);
+@@ -3346,12 +3358,19 @@ fn handle_playback_command(
+                         },
+                     );
+                     sync_track_state_from_worker(inner, engine);
++                    let _ = reply.send(Ok(()));
++                }
++                Ok(None) => {
++                    let _ = reply.send(Ok(()));
++                }
++                Err(error) => {
++                    let message = error.to_string();
++                    emit_from_worker(
++                        inner,
++                        PlayerEvent::Error(PlayerError::Playback(message.clone())),
++                    );
++                    let _ = reply.send(Err(message));
+                 }
+-                Ok(None) => {}
+-                Err(error) => emit_from_worker(
+-                    inner,
+-                    PlayerEvent::Error(PlayerError::Playback(error.to_string())),
+-                ),
+             }
+         }
+         PlaybackCommand::SelectAudioTrack(track_id) => match engine.select_audio_track(track_id) {
+diff --git a/crates/erika/src/playback.rs b/crates/erika/src/playback.rs
+index d07b2e4..82b6272 100644
+--- a/crates/erika/src/playback.rs
++++ b/crates/erika/src/playback.rs
+@@ -5223,7 +5223,22 @@ impl VideoPlaybackEngine {
+         }
+         let media_time = self.media_time_at(now());
+         let frame = self.session.select_subtitle_track(track_id, media_time)?;
+-        self.reset_streams_at_with_decoder_flush(media_time, true, false, now)?;
++        if self.state == PlaybackRunState::Paused && self.session.subtitle_decoder.is_none() {
++            // External subtitles have their own demuxer. Disabling them or
++            // selecting one while paused must not seek the video to the next
++            // frame, drain audio, or move the frozen playback position.
++            self.pending_subtitle = None;
++            if let Some(external) = self
++                .session
++                .external_subtitles
++                .iter_mut()
++                .find(|external| Some(external.track().id) == track_id)
++            {
++                external.seek(media_time)?;
++            }
++        } else {
++            self.reset_streams_at_with_decoder_flush(media_time, true, false, now)?;
++        }
+         Ok(frame.map(|frame| TimedSubtitleFrame {
+             frame,
+             pts: Some(media_time),
+@@ -8933,6 +8948,47 @@ mod tests {
+         let _ = fs::remove_file(path);
+     }
+ 
++    #[test]
++    fn paused_external_subtitle_import_and_reselection_keep_video_and_clock_frozen() {
++        let path = std::env::temp_dir().join(format!(
++            "erika-paused-external-subtitle-{}.srt",
++            std::process::id()
++        ));
++        fs::write(&path, "1\n00:00:00,000 --> 00:00:08,000\nPaused subtitle\n").unwrap();
++        let mut engine = playback_fixture_engine();
++        let position = Duration::from_secs(2);
++        engine.clock.reset(position, false, Instant::now());
++        let demux_generation = engine.session.demuxer.generation;
++        let (track, _) = engine
++            .add_external_subtitle(SubtitleTrackConfig::external(
++                1_000_009,
++                path.to_string_lossy(),
++            ))
++            .unwrap();
++        let frame = engine
++            .tick_subtitle()
++            .unwrap()
++            .expect("imported subtitle while paused");
++        assert_eq!(frame.frame.text[0].display_text(), "Paused subtitle");
++        assert_eq!(frame.media_time, position);
++        engine.select_subtitle_track(None).unwrap();
++        assert!(engine.tick_subtitle().unwrap().is_none());
++        engine.select_subtitle_track(Some(track.id)).unwrap();
++        let restored = engine
++            .tick_subtitle()
++            .unwrap()
++            .expect("reselected subtitle while paused");
++        assert_eq!(restored.frame.text[0].display_text(), "Paused subtitle");
++        assert_eq!(restored.media_time, position);
++        assert_eq!(engine.state(), PlaybackRunState::Paused);
++        assert_eq!(engine.media_time(), position);
++        assert_eq!(engine.session.demuxer.generation, demux_generation);
++        assert!(!engine.paused_seek_frame_pending);
++        assert!(engine.tick().unwrap().is_none());
++        drop(engine);
++        let _ = fs::remove_file(path);
++    }
++
+     #[test]
+     fn external_subtitle_inspection_covers_query_uris_and_extensionless_uris() {
+         assert!(external_subtitle_needs_charset_inspection("/tmp/movie.srt"));
+diff --git a/crates/erika/src/presenter.rs b/crates/erika/src/presenter.rs
+index 553ed97..8b7ec1d 100644
+--- a/crates/erika/src/presenter.rs
++++ b/crates/erika/src/presenter.rs
+@@ -1641,6 +1641,10 @@ impl PresenterRuntime {
+             // Nothing is open, so no subtitle is shown: nothing to quiesce.
+             return self.player.select_subtitle_track(None);
+         }
++        let overlay_viewport = self
++            .current_overlay
++            .as_ref()
++            .map(|overlay| overlay.viewport);
+         let quiesced = self.quiesce_frame_output("select_subtitle_track")?;
+         let result = self.player.select_subtitle_track(track_id);
+         let rate_result = self.commit_pending_playback_rate_now();
+@@ -1650,6 +1654,10 @@ impl PresenterRuntime {
+             self.current_media_time,
+             TransitionFramePolicy::PreserveTrackSwitchFrame,
+         );
++        if let Some(viewport) = overlay_viewport {
++            let overlay = self.overlay.render(self.current_media_time, viewport);
++            self.current_overlay = Some(self.retain_overlay(overlay));
++        }
+         let transition =
+             // Selecting a track can emit its current cue while output is
+             // quiesced. Keep that cue; stale audio/subtitle generations are
+@@ -3841,6 +3849,7 @@ impl PresenterRuntime {
+     }
+ 
+     fn pump_subtitles(&mut self) {
++        let mut changed = false;
+         loop {
+             match self.subtitle_frames.try_recv() {
+                 Ok(frame) => {
+@@ -3861,11 +3870,18 @@ impl PresenterRuntime {
+                     }
+                     self.stats.decoded_subtitle_frames += 1;
+                     self.subtitles.push(frame);
++                    changed = true;
+                 }
+                 Err(crossbeam_channel::TryRecvError::Empty) => break,
+                 Err(crossbeam_channel::TryRecvError::Disconnected) => break,
+             }
+         }
++        if changed {
++            // A paused clock does not trigger sync_media_time_from_player's
++            // overlay rebuild, but imported/selected/cleared subtitles still
++            // have to update the retained video on the next render tick.
++            self.refresh_current_overlay();
++        }
+     }
+ 
+     fn pump_audio(&mut self) {
+@@ -5453,6 +5469,44 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+         }
+     }
+ 
++    #[test]
++    #[cfg(any(target_os = "windows", target_os = "macos", feature = "wgpu"))]
++    fn subtitle_pump_refreshes_and_clears_overlay_with_a_frozen_clock() {
++        let mut presenter = PresenterRuntime::new(PresenterConfig::default()).unwrap();
++        let (sender, receiver) = crossbeam_channel::unbounded();
++        presenter.subtitle_frames = receiver;
++        presenter.current_media_time = Duration::from_secs(1);
++        presenter.current_surface_metrics = Some(SurfaceMetrics::new(640, 360, 1.0));
++        presenter.current_overlay = Some(CurrentOverlay::Owned(empty_overlay()));
++        presenter.subtitle_resolution.source = Some(OverlayViewport::new(640, 360));
++        let mut frame = subtitle_frame(Duration::ZERO, Some(Duration::from_secs(5)));
++        frame.generation = presenter.player.playback_generation();
++        sender.send(frame).unwrap();
++        presenter.pump_subtitles();
++        assert_eq!(
++            presenter
++                .current_overlay
++                .as_ref()
++                .unwrap()
++                .subtitle_planes
++                .len(),
++            1
++        );
++        assert_eq!(presenter.current_media_time, Duration::from_secs(1));
++        sender
++            .send(PlayerSubtitleFrame {
++                frame: DecodedSubtitleFrame::new(2, Some(Duration::from_secs(1)), None),
++                pts: Some(Duration::from_secs(1)),
++                media_time: Duration::from_secs(1),
++                late_by: None,
++                generation: presenter.player.playback_generation(),
++            })
++            .unwrap();
++        presenter.pump_subtitles();
++        assert!(presenter.current_overlay.as_ref().unwrap().is_empty());
++        assert_eq!(presenter.current_media_time, Duration::from_secs(1));
++    }
++
+     fn danmaku_item(id: u64, time: f64, text: &str) -> DanmakuItem {
+         DanmakuItem {
+             id,
+diff --git a/xtask/src/main.rs b/xtask/src/main.rs
+index df9e56e..7a56c0b 100644
+--- a/xtask/src/main.rs
++++ b/xtask/src/main.rs
+@@ -2831,7 +2831,13 @@ fn extract_archive(archive_path: &Path, destination: &Path, source_dir_name: &st
+     }
+     fs::create_dir_all(&temporary_dir)
+         .with_context(|| format!("create {}", temporary_dir.display()))?;
+-    let result = run(Command::new("tar")
++    let mut tar = Command::new("tar");
++    if cfg!(windows) {
++        // HarfBuzz ships a documentation symlink that Windows bsdtar cannot
++        // create without symlink privileges. It is not a native build input.
++        tar.arg("--exclude=*/CLAUDE.md");
++    }
++    let result = run(tar
+         .arg("-xf")
+         .arg(archive_path)
+         .arg("-C")

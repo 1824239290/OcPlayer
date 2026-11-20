@@ -20,7 +20,7 @@ Core 功能开关与实际激活不同：`OCP_CORE_ENABLED` / UserDefaults / Inf
 
 ## 外部内核与数据
 
-Apple `apps/apple/Config/Erika.version` 固定 `v0.3.6`，Windows `apps/windows/Config/Kernel.version.json` 固定 `v0.3.7`。各自补丁、工具链、功能与分发合同不变。liberika 不纳入此次历史导入。
+Apple `apps/apple/Config/Erika.version` 与 Windows `apps/windows/Config/Kernel.version.json` 当前均固定 `v0.3.8`。各自补丁、工具链、功能与分发合同保持独立维护。liberika 不纳入仓库历史导入。
 
 应用标识、数据库格式、配置键、用户数据目录与迁移策略保持不变。验证使用独立测试目录和本地 fixtures，不在用户真实账户上执行写入、OAuth 更新或进度上报。
 

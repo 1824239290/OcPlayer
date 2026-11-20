@@ -19,12 +19,12 @@ function Invoke-Checked([string]$Executable, [string[]]$Arguments) {
     if ($LASTEXITCODE -ne 0) { throw "$Executable failed ($LASTEXITCODE)." }
 }
 if (!$SkipNative) {
-    if (!$KernelRoot) { throw 'Pass -KernelRoot for liberika v0.3.7 prepared with Scripts/prepare-kernel.ps1 (see docs/core-integration.md).' }
+    if (!$KernelRoot) { throw 'Pass -KernelRoot for liberika v0.3.8 prepared with Scripts/prepare-kernel.ps1 (see docs/core-integration.md).' }
     $kernelSource = (Resolve-Path -LiteralPath $KernelRoot).Path
     $pin = Get-Content -LiteralPath (Join-Path $workspace 'Config\Kernel.version.json') -Raw | ConvertFrom-Json
     $kernelCommit = (& git -C $kernelSource rev-parse HEAD).Trim()
     if ($kernelCommit -ne $pin.commit) { throw "Expected liberika $($pin.tag) at $($pin.commit). Run Scripts/prepare-kernel.ps1." }
-    $kernelPatch = Join-Path $PSScriptRoot 'patches\liberika-v0.3.7-windows.patch'
+    $kernelPatch = Join-Path $PSScriptRoot 'patches\liberika-v0.3.8-windows.patch'
     $savedErrorActionPreference = $ErrorActionPreference
     try {
         $ErrorActionPreference = 'Continue'
@@ -82,7 +82,7 @@ if (!$SkipNative) {
         coreSha256 = (Get-FileHash -LiteralPath "$nativeOutput\ocp_ffi.dll").Hash
         erikaSha256 = (Get-FileHash -LiteralPath "$nativeOutput\erika_capi.dll").Hash
         kernelPatches = @([ordered]@{
-            path = 'Scripts/patches/liberika-v0.3.7-windows.patch'
+            path = 'Scripts/patches/liberika-v0.3.8-windows.patch'
             sha256 = (Get-FileHash -LiteralPath $kernelPatch).Hash
         })
     } | ConvertTo-Json | Set-Content -LiteralPath "$nativeOutput\build-receipt.json" -Encoding utf8
