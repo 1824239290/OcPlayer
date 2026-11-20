@@ -2,7 +2,7 @@
 param(
     [ValidateSet('x64', 'ARM64')][string]$Platform = 'x64',
     [ValidatePattern('^\d+\.\d+\.\d+(\.\d+)?$')][string]$Version = '1.0.0',
-    [string]$CoreRoot = (Join-Path $PSScriptRoot '..\core'),
+    [string]$CoreRoot,
     [string]$VcRuntimeDirectory,
     [string]$OutputDirectory,
     [string]$CertificateThumbprint,
@@ -11,6 +11,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $windowsRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\apps\windows'))
+if (!$CoreRoot) { $CoreRoot = Join-Path $PSScriptRoot '..\core' }
 $parameters = @{} + $PSBoundParameters
 $parameters.CoreRoot = $CoreRoot
 foreach ($pathName in @('CoreRoot', 'VcRuntimeDirectory', 'OutputDirectory')) {

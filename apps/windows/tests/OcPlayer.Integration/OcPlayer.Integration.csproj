@@ -15,6 +15,7 @@
     <Compile Include="..\..\src\OcPlayer.Windows\Services\MediaServer.cs" Link="MediaServer.cs" />
     <Compile Include="..\..\src\OcPlayer.Windows\Services\PlaybackChapters.cs" Link="PlaybackChapters.cs" />
     <Compile Include="..\..\src\OcPlayer.Windows\Services\PlaybackPreferences.cs" Link="PlaybackPreferences.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\WindowPreferences.cs" Link="WindowPreferences.cs" />
     <Compile Include="..\..\src\OcPlayer.Windows\Services\PlaybackSkipMarks.cs" Link="PlaybackSkipMarks.cs" />
     <Compile Include="..\..\src\OcPlayer.Windows\Services\ServerSubtitleService.cs" Link="ServerSubtitleService.cs" />
     <Compile Include="..\..\src\OcPlayer.Windows\Services\LibrarySort.cs" Link="LibrarySort.cs" />

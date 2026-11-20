@@ -8,7 +8,7 @@ internal static class AppDataMigration
 {
     public const string Argument = "--migrate-data=";
     private static readonly string[] Files = ["browser-preferences.json", "library-sort.json", "playback-preferences.json",
-        "runtime-settings.json", "recent-media.json", "servers.json", "ignored-release.txt", "bangumi-data.json"];
+        "runtime-settings.json", "recent-media.json", "servers.json", "ignored-release.txt", "bangumi-data.json", "window-preferences.json"];
     private static readonly string[] Directories = ["ViewingHistory", "Integrations", "Tmdb", "Danmaku"];
 
     /// Import missing durable data once. Existing destination data always wins;

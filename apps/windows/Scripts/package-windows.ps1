@@ -41,11 +41,13 @@ function Assert-PeArchitecture([string]$File) {
 if (!(Test-Path -LiteralPath $wix)) {
     Invoke-Checked dotnet @('tool', 'install', 'wix', '--version', '6.0.2', '--tool-path', $wixDirectory)
 }
-Push-Location $toolsDirectory
-try {
-    Invoke-Checked $wix @('extension', 'add', 'WixToolset.UI.wixext/6.0.2')
-} finally { Pop-Location }
 $uiExtension = Join-Path $toolsDirectory '.wix\extensions\WixToolset.UI.wixext\6.0.2\wixext6\WixToolset.UI.wixext.dll'
+if (!(Test-Path -LiteralPath $uiExtension)) {
+    Push-Location $toolsDirectory
+    try {
+        Invoke-Checked $wix @('extension', 'add', 'WixToolset.UI.wixext/6.0.2')
+    } finally { Pop-Location }
+}
 if (!$SkipPublish) {
     # Publish into a fresh staging directory; stale DLLs from an older release
     # must never enter the installer. The completed output is replaced last.

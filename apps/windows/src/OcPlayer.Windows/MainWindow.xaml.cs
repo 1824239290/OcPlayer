@@ -46,6 +46,9 @@ public sealed partial class MainWindow : Window
     private ImageSource _avatarColor = new BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", "avatar-nav.png"))) { DecodePixelWidth = 54 };
     private WriteableBitmap? _avatarGray;
     private CancellationTokenSource? _avatarLoad;
+    private SizeInt32? _restoredSize;
+    private PointInt32? _restoredPosition;
+    private readonly DispatcherTimer _windowSaveTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
 
     public MainWindow()
     {
@@ -58,12 +61,12 @@ public sealed partial class MainWindow : Window
             AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
         SetTitleBar(TitleBar);
         if (MicaController.IsSupported()) SystemBackdrop = new MicaBackdrop();
-        if (AppWindow.Presenter is OverlappedPresenter presenter)
+        _windowSaveTimer.Tick += (_, _) =>
         {
-            presenter.PreferredMinimumWidth = 1062;
-            presenter.PreferredMinimumHeight = 778;
-        }
-        AppWindow.ResizeClient(new SizeInt32(1130, 670));
+            _windowSaveTimer.Stop();
+            SaveWindowPlacement();
+        };
+        RestoreWindowPlacement();
         _ambient = new AmbientBackdropController(Ambience, _model);
         _transitions = new PageTransitionController(PageHost);
         Activated += (_, args) => { _active = args.WindowActivationState != WindowActivationState.Deactivated; UpdateAmbientActivity(); };
@@ -82,6 +85,7 @@ public sealed partial class MainWindow : Window
         Closed += (_, _) =>
         {
             _closing = true;
+            _windowSaveTimer.Stop();
             Root.ActualThemeChanged -= Root_ActualThemeChanged;
             _load?.Cancel(); DismissPlayer(false);
             if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041)) _uiSettings.AnimationsEnabledChanged -= AnimationsEnabledChanged;
@@ -93,6 +97,8 @@ public sealed partial class MainWindow : Window
             if (_exitReady) return;
             args.Cancel = true; if (_closing) return;
             _closing = true; _load?.Cancel(); ++_loadGeneration; DismissPlayer(false);
+            _windowSaveTimer.Stop();
+            SaveWindowPlacement();
             if (App.Core is not null) await App.Core.FinishReports();
             _exitReady = true; Close();
         };
@@ -108,6 +114,8 @@ public sealed partial class MainWindow : Window
         {
             if (args.DidSizeChange || args.DidPresenterChange)
                 DispatcherQueue.TryEnqueue(UpdateTitleBarRegions);
+            if (args.DidSizeChange || args.DidPositionChange || args.DidPresenterChange)
+                OnWindowPlacementChanged();
         };
         SetCaptionTheme();
 #if DEBUG
@@ -842,5 +850,85 @@ public sealed partial class MainWindow : Window
             else Play(media);
         }
         catch (Exception ex) { Notify("无法打开媒体：" + ex.Message); }
+    }
+
+    private void RestoreWindowPlacement()
+    {
+        const int minWidth = 1062;
+        const int minHeight = 640;
+
+        if (AppWindow.Presenter is OverlappedPresenter presenter)
+        {
+            presenter.PreferredMinimumWidth = minWidth;
+            presenter.PreferredMinimumHeight = minHeight;
+        }
+
+        if (App.DemoMode)
+        {
+            AppWindow.ResizeClient(new SizeInt32(1130, 700));
+            return;
+        }
+
+        var area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
+        var prefs = WindowPreferences.Load(AppPaths.DataDirectory);
+
+        // Fall back to a spacious default (1280x800) bounded by display work area and minimum dimensions.
+        int targetWidth = prefs.Width ?? Math.Clamp(1280, minWidth, Math.Max(minWidth, (int)(area.Width * 0.85)));
+        int targetHeight = prefs.Height ?? Math.Clamp(800, minHeight, Math.Max(minHeight, (int)(area.Height * 0.85)));
+
+        targetWidth = Math.Clamp(targetWidth, minWidth, Math.Max(minWidth, area.Width));
+        targetHeight = Math.Clamp(targetHeight, minHeight, Math.Max(minHeight, area.Height));
+
+        bool positionRestored = false;
+        if (prefs.X is { } x && prefs.Y is { } y)
+        {
+            var targetRect = new RectInt32(x, y, targetWidth, targetHeight);
+            var display = DisplayArea.GetFromRect(targetRect, DisplayAreaFallback.None);
+            if (display is not null)
+            {
+                var work = display.WorkArea;
+                var clampedX = Math.Clamp(x, work.X, Math.Max(work.X, work.X + work.Width - 120));
+                var clampedY = Math.Clamp(y, work.Y, Math.Max(work.Y, work.Y + work.Height - 80));
+                AppWindow.MoveAndResize(new RectInt32(clampedX, clampedY, targetWidth, targetHeight));
+                _restoredPosition = new PointInt32(clampedX, clampedY);
+                positionRestored = true;
+            }
+        }
+
+        if (!positionRestored)
+        {
+            AppWindow.Resize(new SizeInt32(targetWidth, targetHeight));
+            _restoredPosition = AppWindow.Position;
+        }
+
+        _restoredSize = new SizeInt32(targetWidth, targetHeight);
+
+        if (prefs.IsMaximized && AppWindow.Presenter is OverlappedPresenter overlapped)
+        {
+            overlapped.Maximize();
+        }
+    }
+
+    private void OnWindowPlacementChanged()
+    {
+        if (App.DemoMode || _closing || _player is not null) return;
+        if (AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Restored })
+        {
+            _restoredSize = AppWindow.Size;
+            _restoredPosition = AppWindow.Position;
+        }
+        _windowSaveTimer.Stop();
+        _windowSaveTimer.Start();
+    }
+
+    private void SaveWindowPlacement()
+    {
+        if (App.DemoMode) return;
+        var isMaximized = AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Maximized };
+        var width = _restoredSize?.Width ?? AppWindow.Size.Width;
+        var height = _restoredSize?.Height ?? AppWindow.Size.Height;
+        var x = _restoredPosition?.X ?? AppWindow.Position.X;
+        var y = _restoredPosition?.Y ?? AppWindow.Position.Y;
+        new WindowPreferences(width, height, x, y, isMaximized).Save(AppPaths.DataDirectory);
     }
 }

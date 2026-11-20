@@ -42,6 +42,17 @@ internal static partial class Program
         File.Delete(Path.Combine(destination, "runtime-settings.json"));
         Assert(AppDataMigration.Import(source, destination) == 0 && !File.Exists(Path.Combine(destination, "runtime-settings.json")), "completed migration never resurrects subsequently deleted settings");
 
+        var windowPrefsDir = Path.Combine(data, "window-prefs");
+        var emptyWindowPrefs = WindowPreferences.Load(windowPrefsDir);
+        Assert(emptyWindowPrefs.Width is null && emptyWindowPrefs.Height is null && !emptyWindowPrefs.IsMaximized,
+            "window preferences default to unset when file is absent");
+        var customWindowPrefs = new WindowPreferences(1400, 900, 100, 150, true);
+        customWindowPrefs.Save(windowPrefsDir);
+        var loadedWindowPrefs = WindowPreferences.Load(windowPrefsDir);
+        Assert(loadedWindowPrefs == customWindowPrefs, "window preferences persist and reload dimensions, position and maximized state");
+        File.WriteAllText(Path.Combine(windowPrefsDir, "window-preferences.json"), "{ invalid json");
+        Assert(WindowPreferences.Load(windowPrefsDir) == new WindowPreferences(), "damaged window preferences safely fall back to default");
+
         var quota = Path.Combine(data, "quota"); Directory.CreateDirectory(quota);
         var older = Path.Combine(quota, "old.cache"); var newer = Path.Combine(quota, "new.cache");
         File.WriteAllBytes(older, new byte[12]); File.SetLastWriteTimeUtc(older, DateTime.UtcNow.AddDays(-2)); File.WriteAllBytes(newer, new byte[12]);
