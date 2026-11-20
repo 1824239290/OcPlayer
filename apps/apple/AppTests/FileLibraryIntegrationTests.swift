@@ -357,6 +357,186 @@ final class FileLibraryIntegrationTests: XCTestCase {
         app.dismissPlayer()
     }
 
+    func testUnifiedHomeLibraryDetailAndSourceSwitchingForFileLibrary() async throws {
+        let tmdb = try LibraryTMDBFixture()
+        defer { tmdb.stop() }
+        let (directory, defaults, library, app) = try fixture()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let root = directory.appendingPathComponent("unified")
+        for relative in [
+            "Movies/1917 (2019).mkv",
+            "TV/Show (2024)/Season 01/Show S01E01.mkv",
+            "TV/Show (2024)/Season 01/Show S01E02.mkv",
+        ] {
+            let url = root.appendingPathComponent(relative)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("fixture".utf8).write(to: url)
+        }
+        defaults.set(true, forKey: SettingsKeys.tmdbMirrorEnabled)
+        defaults.set(tmdb.apiBase, forKey: SettingsKeys.tmdbMirrorAPIBaseURL)
+        app.tmdb.setAPIKey("test-valid")
+        let revision = app.fileLibraryCredentialRevision
+        let movieReceipt = try await library.validate(key: "test-valid", apiBase: tmdb.apiBase, draftID: "unified-movies")
+        let movies = try await library.create(
+            draftID: "unified-movies", verificationID: movieReceipt.verificationId, credentialRevision: revision,
+            apiBase: tmdb.apiBase, source: nil, root: root, subdirectory: "Movies",
+            sourceName: "我的本地盘", name: "电影", type: .movies
+        )
+        let source = try XCTUnwrap(library.sources.first)
+        try await waitForScrape(library, sourceID: source.sourceId, libraryID: movies.library.libraryId, status: "completed")
+        let tvReceipt = try await library.validate(key: "test-valid", apiBase: tmdb.apiBase, draftID: "unified-tv")
+        let tv = try await library.create(
+            draftID: "unified-tv", verificationID: tvReceipt.verificationId, credentialRevision: revision,
+            apiBase: tmdb.apiBase, source: source, root: root, subdirectory: "TV",
+            sourceName: "我的本地盘", name: "电视剧", type: .tvshows
+        )
+        try await waitForScrape(library, sourceID: source.sourceId, libraryID: tv.library.libraryId, status: "completed")
+
+        // Record resume on movie and mark E01 played so E02 appears in Next Up.
+        let moviePage = try await library.page(.init(sourceId: source.sourceId, libraryId: movies.library.libraryId))
+        let movieItem = try XCTUnwrap(moviePage.items.first)
+        await library.record(.init(
+            sourceId: source.sourceId, itemId: movieItem.itemId, positionSeconds: 180,
+            durationSeconds: 3600, played: false, completed: false, recordedAt: Date().timeIntervalSince1970
+        )).value
+        let showPage = try await library.page(.init(sourceId: source.sourceId, libraryId: tv.library.libraryId))
+        let showItem = try XCTUnwrap(showPage.items.first)
+        let seasonPage = try await library.page(.init(sourceId: source.sourceId, parentId: showItem.itemId))
+        let s1 = try XCTUnwrap(seasonPage.items.first { $0.seasonNumber == 1 })
+        let eps = try await library.page(.init(sourceId: source.sourceId, parentId: s1.itemId)).items
+        let e1 = try XCTUnwrap(eps.first { $0.episodeNumber == 1 })
+        let e2 = try XCTUnwrap(eps.first { $0.episodeNumber == 2 })
+        _ = try await library.markPlayed(sourceID: source.sourceId, itemID: e1.itemId, played: true)
+
+        // Remove TMDB key: unified home/detail must still show persisted scraped metadata & artwork.
+        app.tmdb.setAPIKey(nil)
+        await app.activateFileSource(source.sourceId)
+        XCTAssertNil(app.server)
+        XCTAssertTrue(app.hasActiveMediaSource)
+        XCTAssertTrue(app.isFileLibraryActive)
+        XCTAssertEqual(app.libraries.count, 2)
+        XCTAssertEqual(app.home.resume.first?.id, movieItem.itemId)
+        XCTAssertEqual(app.home.nextUp.first?.id, e2.itemId)
+        XCTAssertEqual(app.home.latest.count, 2)
+
+        // Image target resolves TMDB poster without server authHeader.
+        let projectedMovie = try XCTUnwrap(app.home.latest.first { $0.id == movieItem.itemId })
+        let posterTarget = projectedMovie.imageTarget(app.server, kind: .primary, width: 400)
+        XCTAssertNotNil(posterTarget.url)
+        XCTAssertNil(posterTarget.authHeader)
+
+        // Library cover 2x2 collage resolves for file libraries.
+        let movieMediaLibrary = try XCTUnwrap(app.libraries.first { $0.id == movies.library.libraryId })
+        await app.resolveLibraryCoverIfNeeded(for: movieMediaLibrary)
+        XCTAssertFalse(app.libraryCoverURLs(for: movieMediaLibrary).isEmpty)
+
+        // DetailViewModel loads series seasons & episodes cleanly without a server.
+        let projectedShow = try XCTUnwrap(app.home.latest.first { $0.id == showItem.itemId })
+        let vm = DetailViewModel(item: projectedShow)
+        vm.attach(app)
+        await vm.load()
+        XCTAssertEqual(vm.detail?.id, showItem.itemId)
+        XCTAssertEqual(vm.seasons.count, 1)
+        XCTAssertEqual(vm.episodes.count, 2)
+        XCTAssertEqual(vm.selectedEpisodeID, e2.itemId)
+
+        // Switching to a Jellyfin server clears file library home state cleanly.
+        let server = StubMediaServer()
+        await app.activate(server: server)
+        app.initialDataTask?.cancel()
+        app.userAvatarTask?.cancel()
+        XCTAssertNil(app.activeFileSourceID)
+        XCTAssertFalse(app.isFileLibraryActive)
+        XCTAssertTrue(app.hasActiveMediaSource)
+    }
+
+    func testMultiFolderSingleCategoryMergeAndCrossDriveAppend() async throws {
+        let tmdb = try LibraryTMDBFixture()
+        defer { tmdb.stop() }
+        let (directory, defaults, library, app) = try fixture()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let diskAMovies = directory.appendingPathComponent("diskA/Movies")
+        let diskBMovies = directory.appendingPathComponent("diskB/4KMovies")
+        let diskCTV = directory.appendingPathComponent("diskC/TV/Show (2024)/Season 1")
+        try FileManager.default.createDirectory(at: diskAMovies, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: diskBMovies, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: diskCTV, withIntermediateDirectories: true)
+        try Data("a".utf8).write(to: diskAMovies.appendingPathComponent("1917 (2019).mkv"))
+        try Data("b".utf8).write(to: diskBMovies.appendingPathComponent("Dune (2021).mkv"))
+        try Data("c".utf8).write(to: diskCTV.appendingPathComponent("Show S01E01.mkv"))
+
+        defaults.set(true, forKey: SettingsKeys.tmdbMirrorEnabled)
+        defaults.set(tmdb.apiBase, forKey: SettingsKeys.tmdbMirrorAPIBaseURL)
+        app.tmdb.setAPIKey("test-valid")
+        let revision = app.fileLibraryCredentialRevision
+        let receipt = try await library.validate(key: "test-valid", apiBase: tmdb.apiBase, draftID: "multi-wizard")
+
+        // 1. Create Movies from diskA/Movies directly (no parent directory required).
+        let movies = try await library.create(
+            draftID: "multi-wizard:0", verificationID: receipt.verificationId, credentialRevision: revision,
+            apiBase: tmdb.apiBase, source: nil, root: diskAMovies, subdirectory: "",
+            sourceName: "多盘媒体库", name: "电影", type: .movies
+        )
+        let source = try XCTUnwrap(library.sources.first { $0.sourceId == movies.library.sourceId })
+        try await waitForScan(library, sourceID: source.sourceId)
+
+        // 2. Append diskB/4KMovies into the SAME Movies category (no TMDB re-validation needed).
+        let added = try await library.addLocalRoot(
+            sourceID: source.sourceId,
+            libraryID: movies.library.libraryId,
+            folder: diskBMovies
+        )
+        XCTAssertEqual(added.library.allRoots.count, 2)
+        try await waitForScan(library, sourceID: source.sourceId)
+
+        // 3. Add a cross-drive TV category (diskC/TV) under the SAME source using the same TMDB receipt!
+        let tv = try await library.create(
+            draftID: "multi-wizard:1", verificationID: receipt.verificationId, credentialRevision: revision,
+            apiBase: tmdb.apiBase, source: source, root: directory.appendingPathComponent("diskC/TV"), subdirectory: "",
+            sourceName: source.displayName, name: "电视剧", type: .tvshows
+        )
+        XCTAssertEqual(tv.library.sourceId, source.sourceId)
+        try await waitForScan(library, sourceID: source.sourceId)
+
+        // 4. Unified Movies page merges both diskA and diskB movies and resolves playback from both disks.
+        let moviePage = try await library.page(.init(sourceId: source.sourceId, libraryId: movies.library.libraryId))
+        XCTAssertEqual(moviePage.totalCount, 2)
+        for item in moviePage.items {
+            let detail = try await library.detail(sourceID: source.sourceId, itemID: item.itemId)
+            let asset = try XCTUnwrap(detail.assets.first)
+            let playback = try await library.preparePlayback(item: item, asset: asset)
+            XCTAssertTrue(playback.uri.hasPrefix("file://"))
+        }
+
+        // 5. Cold reopen restores bookmarks for all 3 independent roots without permission errors.
+        let reopened = FileLibraryCoordinator(directory: directory.appendingPathComponent("catalog"))
+        try await reopened.setup()
+        XCTAssertNil(reopened.permissionErrors[source.sourceId])
+        let reopenedLibs = try await reopened.libraries(sourceID: source.sourceId)
+        XCTAssertEqual(reopenedLibs.count, 2)
+        XCTAssertEqual(reopenedLibs.first { $0.libraryId == movies.library.libraryId }?.allRoots.count, 2)
+
+        // 6. Category management: rename, remove one folder from multi-folder category, delete category.
+        let renamed = try await reopened.renameLibrary(sourceID: source.sourceId, libraryID: movies.library.libraryId, name: "院线电影")
+        XCTAssertEqual(renamed.name, "院线电影")
+        let afterRemoveRoot = try await reopened.removeLibraryRoot(
+            sourceID: source.sourceId,
+            libraryID: movies.library.libraryId,
+            rootID: added.root.rootId
+        )
+        XCTAssertEqual(afterRemoveRoot.allRoots.count, 1)
+        let afterRemovePage = try await reopened.page(.init(sourceId: source.sourceId, libraryId: movies.library.libraryId))
+        XCTAssertEqual(afterRemovePage.totalCount, 1)
+        try await reopened.deleteLibrary(sourceID: source.sourceId, libraryID: movies.library.libraryId)
+        let remainingLibs = try await reopened.libraries(sourceID: source.sourceId)
+        XCTAssertEqual(remainingLibs.count, 1)
+        XCTAssertEqual(remainingLibs.first?.libraryId, tv.library.libraryId)
+        // Single local source stays intact even when categories are deleted.
+        XCTAssertEqual(reopened.localSource?.sourceId, source.sourceId)
+        XCTAssertTrue(reopened.extraLocalSources.isEmpty)
+    }
+
     func testSMBCreationCredentialRecoveryAndErikaRangePlayback() async throws {
         let began = Date()
         func stage(_ label: String) { XCTContext.runActivity(named: "SMB \(label): \(Date().timeIntervalSince(began))s") { _ in } }
@@ -435,7 +615,7 @@ final class FileLibraryIntegrationTests: XCTestCase {
         try await app.playFileLibraryItem(item, asset: asset, fromStart: true)
         stage("requested")
         let request = try XCTUnwrap(app.presentedPlayer)
-        XCTAssertTrue(request.uri.hasPrefix("http://127.0.0.1:"))
+        XCTAssertEqual(request.uri.hasPrefix("http://127.0.0.1:"), true)
         XCTAssertNotNil(request.resourceLifetime)
         XCTAssertNil(request.sessionContext)
         stage("end")
@@ -757,8 +937,8 @@ private final class LibraryTMDBFixture {
                 self.send_response(200 if valid else 401)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
-                movie = {'id': 17, 'title': '1917', 'release_date': '2019-12-01', 'overview': '电影简介', 'poster_path': '/movie.jpg'}
-                show = {'id': 24, 'name': 'Show', 'first_air_date': '2024-01-01', 'overview': '整剧简介', 'poster_path': '/show.jpg'}
+                movie = {'id': 17, 'title': '1917', 'release_date': '2019-12-01', 'overview': '电影简介', 'poster_path': '/movie.jpg', 'backdrop_path': '/movie_bg.jpg'}
+                show = {'id': 24, 'name': 'Show', 'first_air_date': '2024-01-01', 'overview': '整剧简介', 'poster_path': '/show.jpg', 'backdrop_path': '/show_bg.jpg'}
                 if not valid: payload = {'status_code': 7}
                 elif parsed.path.endswith('/search/movie'): payload = {'results': [movie]}
                 elif parsed.path.endswith('/search/tv'): payload = {'results': [show]}
@@ -766,6 +946,7 @@ private final class LibraryTMDBFixture {
                 elif parsed.path.endswith('/movie/18'): payload = {'id': 18, 'title': '人工选择的电影', 'overview': '人工选择简介'}
                 elif parsed.path.endswith('/tv/24'): payload = show
                 elif parsed.path.endswith('/tv/24/season/0'): payload = {'season_number': 0, 'name': '特别篇', 'episodes': [{'id': 241, 'episode_number': 1, 'name': '第一特别篇'}, {'id': 242, 'episode_number': 2, 'name': '未入库特别篇'}]}
+                elif parsed.path.endswith('/tv/24/season/1'): payload = {'season_number': 1, 'name': '第 1 季', 'overview': '第一季简介', 'episodes': [{'id': 251, 'episode_number': 1, 'name': '第一集', 'still_path': '/e1.jpg'}, {'id': 252, 'episode_number': 2, 'name': '第二集', 'still_path': '/e2.jpg'}]}
                 else: payload = {'images': {'secure_base_url': 'https://image.tmdb.org/t/p/', 'poster_sizes': ['w500']}, 'change_keys': ['title']}
                 self.wfile.write(json.dumps(payload).encode())
             def log_message(self, *args): pass

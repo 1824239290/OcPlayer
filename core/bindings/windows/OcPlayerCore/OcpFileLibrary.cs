@@ -9,10 +9,13 @@ namespace OcPlayer.CoreAdapter;
 public sealed record FileLibraryCapabilities(int SchemaVersion, string[] SourceKinds, string[] LibraryTypes,
     bool Aggregation, bool BackgroundScan, bool TmdbAccessValidation, bool TmdbScraping, bool RemoteProviders);
 public sealed record FileLibrarySource(string SourceId, string Kind, string DisplayName, string? AccessRef, string RootPath, double CreatedAt);
-public sealed record FileLibraryDefinition(string LibraryId, string SourceId, string Name, string RootPath, string Type, long Revision, double CreatedAt);
+public sealed record FileLibraryRoot(string RootId, string RootPath, string? AccessRef = null);
+public sealed record FileLibraryDefinition(string LibraryId, string SourceId, string Name, string RootPath, string Type, long Revision, double CreatedAt, FileLibraryRoot[]? Roots = null);
 public sealed record FileLibraryItem(string SourceId, string LibraryId, string ItemId, string Kind, string Title,
     int? Year, string? ParentId, string? SeriesId, int? SeasonNumber, int? EpisodeNumber, double FirstSeenAt,
-    JsonElement? Metadata, string MatchStatus, bool Playable);
+    JsonElement? Metadata, string MatchStatus, bool Playable,
+    string? SeriesTitle = null, string? SeriesBackdropPath = null, string? SeriesPosterPath = null,
+    int? ChildCount = null, FileLibraryProgress? Progress = null);
 public sealed record FileLibraryAsset(string SourceId, string AssetId, string RelativePath, long Size, bool Available);
 public sealed record FileLibraryJob(string JobId, string SourceId, string LibraryId, long Generation, string Status,
     long FilesFound, long DirectoriesDone, long ErrorCount, string? LastError);
@@ -25,12 +28,14 @@ public sealed record FileLibraryProgress(string SourceId, string ItemId, double 
 public sealed record FileLibraryValidation(string Status, string VerificationId, int ExpiresInSeconds);
 public sealed record FileLibraryAccess(string AccessId, string RootPath);
 public sealed record FileLibraryCreation(FileLibraryDefinition Library, FileLibraryJob Job);
+public sealed record FileLibraryRootAddition(FileLibraryDefinition Library, FileLibraryRoot Root, FileLibraryJob Job);
 public sealed record FileLibraryPage(FileLibraryItem[] Items, long TotalCount, long StartIndex);
 public sealed record FileLibraryDetail(FileLibraryItem Item, FileLibraryAsset[] Assets, FileLibraryProgress? Progress);
 public sealed record FileLibraryPlayback(string SourceId, string ItemId, string AssetId, string Uri,
     Dictionary<string, string> Headers, FileLibraryProgress? Progress, string? LeaseId = null);
 public sealed record FileLibraryQuery(string SourceId, string? LibraryId = null, string? Type = null,
-    string? ParentId = null, string Search = "", long StartIndex = 0, int Limit = 50);
+    string? ParentId = null, string Search = "", long StartIndex = 0, int Limit = 50,
+    string? SortBy = null, bool? SortAscending = null, string? WatchState = null);
 public sealed record FileLibraryCreate(string DraftId, string VerificationId, string CredentialRevision, string ApiBase,
     string AccessId, string SourceName, string RootPath, string Name, string Type, string? SourceId = null, string Kind = "localFolder");
 
@@ -76,6 +81,16 @@ public sealed class OcpFileLibrary(OcpCoreClient client)
         => _ = await Invoke<JsonElement>("library.playback.release", new { leaseId }, cancellation).ConfigureAwait(false);
     public Task<FileLibraryCreation> CreateAsync(FileLibraryCreate input, CancellationToken cancellation = default)
         => Invoke<FileLibraryCreation>("library.create", input, cancellation);
+    public Task<FileLibraryRootAddition> AddRootAsync(string sourceId, string libraryId, string accessId, string rootPath, string kind = "localFolder", CancellationToken cancellation = default)
+        => Invoke<FileLibraryRootAddition>("library.root.add", new { sourceId, libraryId, accessId, kind, rootPath }, cancellation);
+    public async Task<FileLibraryDefinition> RenameLibraryAsync(string sourceId, string libraryId, string name, CancellationToken cancellation = default)
+        => (await Invoke<LibraryResult>("library.rename", new { sourceId, libraryId, name }, cancellation).ConfigureAwait(false)).Library;
+    public async Task DeleteLibraryAsync(string sourceId, string libraryId, CancellationToken cancellation = default)
+        => _ = await Invoke<JsonElement>("library.delete", new { sourceId, libraryId }, cancellation).ConfigureAwait(false);
+    public async Task<FileLibraryDefinition> RemoveRootAsync(string sourceId, string libraryId, string rootId, CancellationToken cancellation = default)
+        => (await Invoke<LibraryResult>("library.root.remove", new { sourceId, libraryId, rootId }, cancellation).ConfigureAwait(false)).Library;
+    public async Task DeleteSourceAsync(string sourceId, CancellationToken cancellation = default)
+        => _ = await Invoke<JsonElement>("library.source.delete", new { sourceId }, cancellation).ConfigureAwait(false);
     public async Task<FileLibrarySource[]> SourcesAsync(CancellationToken cancellation = default)
         => (await Invoke<Sources>("library.sources.list", new { }, cancellation).ConfigureAwait(false)).Values;
     public async Task<FileLibraryDefinition[]> LibrariesAsync(string sourceId, CancellationToken cancellation = default)
@@ -86,6 +101,8 @@ public sealed class OcpFileLibrary(OcpCoreClient client)
         => Invoke<FileLibraryDetail>("library.query.detail", new { sourceId, itemId }, cancellation);
     public async Task<FileLibraryItem[]> ResumeAsync(string sourceId, int limit = 20, CancellationToken cancellation = default)
         => (await Invoke<Items>("library.query.resume", new { sourceId, limit }, cancellation).ConfigureAwait(false)).Values;
+    public async Task<FileLibraryItem[]> NextUpAsync(string sourceId, int limit = 20, CancellationToken cancellation = default)
+        => (await Invoke<Items>("library.query.nextUp", new { sourceId, limit }, cancellation).ConfigureAwait(false)).Values;
     public async Task<FileLibraryJob> ScanAsync(string sourceId, string libraryId, CancellationToken cancellation = default)
         => (await Invoke<Job>("library.scan.start", new { sourceId, libraryId }, cancellation).ConfigureAwait(false)).Value;
     public enum ScanAction { Pause, Resume, Cancel }
@@ -110,6 +127,9 @@ public sealed class OcpFileLibrary(OcpCoreClient client)
         => Invoke<FileLibraryPlayback>("library.playback.prepare", new { sourceId, itemId, assetId }, cancellation);
     public async Task<bool> RecordProgressAsync(FileLibraryProgress progress, CancellationToken cancellation = default)
         => (await Invoke<ProgressResult>("library.progress.record", progress, cancellation).ConfigureAwait(false)).Accepted;
+    public async Task<FileLibraryProgress> MarkPlayedAsync(string sourceId, string itemId, bool played, double? recordedAt = null, CancellationToken cancellation = default)
+        => (await Invoke<MarkPlayedResult>(played ? "library.progress.markPlayed" : "library.progress.markUnplayed",
+            new { sourceId, itemId, recordedAt }, cancellation).ConfigureAwait(false)).Progress;
 
     private async Task<T> Invoke<T>(string method, object input, CancellationToken cancellation)
     {
@@ -121,10 +141,12 @@ public sealed class OcpFileLibrary(OcpCoreClient client)
     private sealed record Sources([property: System.Text.Json.Serialization.JsonPropertyName("sources")] FileLibrarySource[] Values);
     private sealed record Items([property: System.Text.Json.Serialization.JsonPropertyName("items")] FileLibraryItem[] Values);
     private sealed record Libraries([property: System.Text.Json.Serialization.JsonPropertyName("libraries")] FileLibraryDefinition[] Values);
+    private sealed record LibraryResult(FileLibraryDefinition Library);
     private sealed record Job([property: System.Text.Json.Serialization.JsonPropertyName("job")] FileLibraryJob Value);
     private sealed record Jobs([property: System.Text.Json.Serialization.JsonPropertyName("jobs")] FileLibraryJob[] Values);
     private sealed record ScrapeRun([property: System.Text.Json.Serialization.JsonPropertyName("run")] FileLibraryScrapeRun Value);
     private sealed record ScrapeRuns([property: System.Text.Json.Serialization.JsonPropertyName("runs")] FileLibraryScrapeRun[] Values);
     private sealed record BindResult(bool Bound, FileLibraryItem Item);
     private sealed record ProgressResult(bool Accepted, FileLibraryProgress? Progress);
+    private sealed record MarkPlayedResult(FileLibraryProgress Progress);
 }

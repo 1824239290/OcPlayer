@@ -8,11 +8,16 @@ import SwiftUI
 /// 分页加载：首屏一页，翻页时新卡片带入场动画淡入。
 struct LibraryView: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.contentLeading) private var contentLeading
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     let library: MediaLibrary
+
+    private var resolvedLibraryName: String {
+        app.libraries.first(where: { $0.id == library.id })?.name ?? library.name
+    }
 
     private static let pageSize = 100
     /// 单库分页缓存上限：到顶后 `hasMore` 置 false（**停止翻页**，不是淘汰旧页——
@@ -41,6 +46,10 @@ struct LibraryView: View {
     /// 时 `onChange(of: searchText)` 根本不触发，光靠它切不回浏览页。所以这里
     /// 显式跟着走：onChange 与 `task(id:)` 各同步一次。
     @State private var currentPageSearchTerm = ""
+    @State private var isRenameAlertPresented = false
+    @State private var renameInput = ""
+    @State private var isDeleteAlertPresented = false
+    @State private var matchingFileItemID: String?
 
     /// 每库独立记忆的排序字段与方向（key 带库 id，各库互不干扰）。
     /// 动态 key 的 @AppStorage 只能在 init 里注入，存 rawValue 字符串。
@@ -161,14 +170,60 @@ struct LibraryView: View {
                 await reloadFromFirstPageCancellable()
             }
         }
-        .navigationTitle(library.name)
+        .navigationTitle(resolvedLibraryName)
         #if os(macOS)
         .navigationSubtitle(subtitleText)
         #endif
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 sortToolbarButton
+                if app.isFileLibraryActive {
+                    fileLibraryActionsMenu
+                }
             }
+        }
+        .alert("重命名分类", isPresented: $isRenameAlertPresented) {
+            TextField("分类名称", text: $renameInput)
+            Button("取消", role: .cancel) {}
+            Button("保存") {
+                let newName = renameInput.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !newName.isEmpty, let sourceID = app.activeFileSourceID else { return }
+                Task {
+                    try? await app.fileLibrary.renameLibrary(sourceID: sourceID, libraryID: library.id, name: newName)
+                }
+            }
+        } message: {
+            Text("为「\(resolvedLibraryName)」设置新的显示名称。")
+        }
+        .alert("删除分类？", isPresented: $isDeleteAlertPresented) {
+            Button("取消", role: .cancel) {}
+            Button("删除分类", role: .destructive) {
+                guard let sourceID = app.activeFileSourceID else { return }
+                Task {
+                    do {
+                        try await app.fileLibrary.deleteLibrary(sourceID: sourceID, libraryID: library.id)
+                        dismiss()
+                    } catch {
+                        loadError = error.localizedDescription
+                    }
+                }
+            }
+        } message: {
+            Text("将从媒体库移除「\(resolvedLibraryName)」及其索引和观看记录，不会删除你的视频文件。")
+        }
+        .sheet(
+            isPresented: Binding(
+                get: { matchingFileItemID != nil },
+                set: { if !$0 { matchingFileItemID = nil } }
+            )
+        ) {
+            if let sourceID = app.activeFileSourceID, let itemID = matchingFileItemID {
+                FileLibraryDetailMatchHost(sourceID: sourceID, itemID: itemID)
+            }
+        }
+        .onChange(of: app.fileLibrary.metadataRevision) { _, _ in
+            guard app.isFileLibraryActive else { return }
+            Task { await load(reset: true) }
         }
         .task(id: library.id) {
             // 视图实例跨库复用，上一库的搜索词不能带进新库（清空会经 onChange
@@ -252,6 +307,18 @@ struct LibraryView: View {
                                 posterOverride: app.collectionPosterURL(for: item, width: 400)
                             ) {
                                 open()
+                            }
+                        }
+                        .contextMenu {
+                            if app.isFileLibraryActive,
+                               (item.kind == .movie || item.kind == .series),
+                               app.tmdb.isConfigured,
+                               app.fileLibrary.capabilities?.tmdbScraping == true {
+                                Button {
+                                    matchingFileItemID = item.id
+                                } label: {
+                                    Label(item.tmdbID == nil ? "手动匹配 TMDB…" : "重新匹配 TMDB…", systemImage: "magnifyingglass")
+                                }
                             }
                         }
                         // 卡片**进入可视区**时解析一次封面（有界、失败不重试）。
@@ -383,6 +450,63 @@ struct LibraryView: View {
         )
     }
 
+    private var fileLibraryActionsMenu: some View {
+        Menu {
+            if let sourceID = app.activeFileSourceID {
+                Button {
+                    Task {
+                        try? await app.fileLibrary.scan(sourceID: sourceID, libraryID: library.id)
+                    }
+                } label: {
+                    Label("扫描本分类", systemImage: "arrow.triangle.2.circlepath")
+                }
+                Button {
+                    guard let key = app.tmdb.rawAPIKey else { return }
+                    Task {
+                        try? await app.fileLibrary.scrape(
+                            sourceID: sourceID,
+                            libraryID: library.id,
+                            key: key,
+                            apiBase: app.fileLibraryAPIBase,
+                            language: app.tmdb.language,
+                            refresh: true
+                        )
+                    }
+                } label: {
+                    Label("刮削 / 刷新元数据", systemImage: "sparkles")
+                }
+                .disabled(!app.tmdb.isConfigured || app.fileLibrary.capabilities?.tmdbScraping != true)
+                Divider()
+                Button {
+                    app.addFileLibraryDraft = FileLibraryDraft(sourceID: sourceID, targetLibraryID: library.id)
+                } label: {
+                    Label("追加文件夹到此分类…", systemImage: "folder.badge.plus")
+                }
+                Button {
+                    renameInput = resolvedLibraryName
+                    isRenameAlertPresented = true
+                } label: {
+                    Label("重命名此分类…", systemImage: "pencil")
+                }
+                Button {
+                    app.openFileLibraryManagement()
+                } label: {
+                    Label("管理文件媒体库…", systemImage: "slider.horizontal.3")
+                }
+                Divider()
+                Button(role: .destructive) {
+                    isDeleteAlertPresented = true
+                } label: {
+                    Label("删除此分类…", systemImage: "trash")
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .help("分类操作")
+        .accessibilityLabel("分类操作")
+    }
+
     /// 换字段：方向重置到该字段的自然默认（避免「评分按低到高」这种反直觉组合）。
     private func changeSort(_ field: MediaItemsSortField) {
         guard field != sortField else { return }
@@ -485,7 +609,7 @@ struct LibraryView: View {
     }
 
     private func load(reset: Bool) async {
-        guard app.server != nil else {
+        guard app.hasActiveMediaSource else {
             isLoading = false
             isLoadingMore = false
             return
@@ -523,6 +647,34 @@ struct LibraryView: View {
         }
 
         do {
+            if let sourceID = app.activeFileSourceID {
+                let page = try await app.loadFileLibraryPage(
+                    sourceID: sourceID,
+                    libraryID: libraryID,
+                    searchTerm: term,
+                    sort: MediaItemsSort(field: sortField, ascending: sortAscending),
+                    watchState: watchState,
+                    startIndex: startIndex,
+                    limit: Self.pageSize
+                )
+                guard !Task.isCancelled, activeLoadID == loadID, app.activeFileSourceID == sourceID else { return }
+                var cached = AppModel.LibraryPage()
+                if reset {
+                    cached.items = page.items
+                } else {
+                    var existing = items
+                    var seen = Set(existing.map(\.id))
+                    existing.append(contentsOf: page.items.filter { seen.insert($0.id).inserted })
+                    cached.items = existing
+                }
+                cached.totalCount = page.totalRecordCount
+                cached.nextStartIndex = startIndex + page.items.count
+                cached.lastPageWasFull = page.items.count >= Self.pageSize
+                app.cacheLibraryPage(cached, for: libraryID, searchTerm: term)
+                loadError = nil
+                return
+            }
+
             let descriptor = MediaPageDescriptor(
                 parentID: libraryID,
                 kinds: kinds,

@@ -180,7 +180,7 @@ impl Runtime {
         match method {
             "library.capabilities" => {
                 return Ok(
-                    json!({"schemaVersion":4,"sourceKinds":["localFolder","webdav","smb"],"libraryTypes":["movies","tvshows"],"aggregation":false,"backgroundScan":true,"tmdbAccessValidation":true,"tmdbScraping":true,"remoteProviders":true}),
+                    json!({"schemaVersion":5,"sourceKinds":["localFolder","webdav","smb"],"libraryTypes":["movies","tvshows"],"aggregation":false,"backgroundScan":true,"tmdbAccessValidation":true,"tmdbScraping":true,"remoteProviders":true}),
                 )
             }
             "tmdb.access.invalidate" => {
@@ -260,6 +260,38 @@ impl Runtime {
                 Ok(json!({"released":true}))
             }
             "library.create" => self.create(args),
+            "library.rename" => {
+                let source = string(&args, "sourceId")?;
+                let library = string(&args, "libraryId")?;
+                let name = string(&args, "name")?;
+                Ok(json!({"library":self.db()?.rename_library(source, library, name)?}))
+            }
+            "library.delete" => {
+                let source = string(&args, "sourceId")?.to_owned();
+                let library = string(&args, "libraryId")?.to_owned();
+                self.stop_library_workers(&source, &library)?;
+                self.db()?.delete_library(&source, &library)?;
+                Ok(json!({"deleted":true}))
+            }
+            "library.root.add" => self.add_root(args),
+            "library.root.remove" => {
+                let source = string(&args, "sourceId")?.to_owned();
+                let library = string(&args, "libraryId")?.to_owned();
+                let root_id = string(&args, "rootId")?.to_owned();
+                self.stop_library_workers(&source, &library)?;
+                let updated = self
+                    .db()?
+                    .remove_library_root(&source, &library, &root_id)?;
+                Ok(json!({"library":updated}))
+            }
+            "library.source.delete" => {
+                let source = string(&args, "sourceId")?.to_owned();
+                self.stop_source_workers(&source)?;
+                self.remote.remove(&source);
+                self.remote_epochs.remove(&source);
+                self.db()?.delete_source(&source)?;
+                Ok(json!({"deleted":true}))
+            }
             "library.sources.list" => Ok(json!({"sources":self.db()?.sources()?})),
             "library.libraries.list" => {
                 Ok(json!({"libraries":self.db()?.libraries(string(&args,"sourceId")?)?}))
@@ -277,6 +309,8 @@ impl Runtime {
                 )
             }
             "library.query.resume" => Ok(json!({"items":self.db()?.resume(
+                string(&args,"sourceId")?, args.get("limit").and_then(Value::as_i64).unwrap_or(20))?})),
+            "library.query.nextUp" => Ok(json!({"items":self.db()?.next_up(
                 string(&args,"sourceId")?, args.get("limit").and_then(Value::as_i64).unwrap_or(20))?})),
             "library.scan.start" | "library.scan.resume" => {
                 let source = string(&args, "sourceId")?;
@@ -449,6 +483,21 @@ impl Runtime {
             "library.progress.get" => Ok(
                 json!({"progress":self.db()?.progress(string(&args,"sourceId")?,string(&args,"itemId")?)?}),
             ),
+            "library.progress.markPlayed" | "library.progress.markUnplayed" => {
+                let source = string(&args, "sourceId")?;
+                let item = string(&args, "itemId")?;
+                let recorded_at = args
+                    .get("recordedAt")
+                    .and_then(Value::as_f64)
+                    .unwrap_or_else(ocp_library::now);
+                let progress = self.db()?.mark_played(
+                    source,
+                    item,
+                    method == "library.progress.markPlayed",
+                    recorded_at,
+                )?;
+                Ok(json!({"progress":progress}))
+            }
             _ => Err(Error::Invalid(format!("unknown library command: {method}"))),
         }
     }
@@ -477,16 +526,16 @@ impl Runtime {
             typ: LibraryType,
         }
         let input: Input = serde_json::from_value(args)?;
-        if self.workers.len() >= 2 && self.db()?.created_draft(&input.draft_id)?.is_none() {
-            return Err(Error::Invalid(
-                "pause another scan before creating another library".into(),
-            ));
-        }
         self.verifications
             .get(&input.verification_id)
             .filter(|v| {
+                let draft_matches = v.draft_id == input.draft_id
+                    || input
+                        .draft_id
+                        .strip_prefix(&v.draft_id)
+                        .is_some_and(|rest| rest.starts_with(':') && rest.len() > 1);
                 v.expires > Instant::now()
-                    && v.draft_id == input.draft_id
+                    && draft_matches
                     && v.credential_revision == input.credential_revision
                     && v.api_base == input.api_base
                     && self.credential_revision.as_deref() == Some(&v.credential_revision)
@@ -593,6 +642,141 @@ impl Runtime {
         Ok(json!({"library":library,"job":job}))
     }
 
+    fn add_root(&mut self, args: Value) -> Result<Value, Error> {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase", deny_unknown_fields)]
+        struct Input {
+            source_id: String,
+            library_id: String,
+            access_id: String,
+            kind: SourceKind,
+            root_path: String,
+        }
+        let input: Input = serde_json::from_value(args)?;
+        let access = self
+            .accesses
+            .get(&input.access_id)
+            .filter(|a| a.expires > Instant::now())
+            .ok_or_else(|| Error::Invalid("directory access lease has expired".into()))?;
+        let provider = access.remote.clone();
+        let (library, added) = if input.kind != SourceKind::LocalFolder {
+            let provider = provider
+                .as_ref()
+                .filter(|p| p.kind() == input.kind.as_str())
+                .ok_or_else(|| {
+                    Error::Invalid("validate access for this source kind first".into())
+                })?;
+            let root = provider.scoped(&input.root_path).map_err(remote_error)?;
+            if !access.verified_directories.contains(root.root()) {
+                return Err(Error::Invalid(
+                    "open the selected remote directory before adding it".into(),
+                ));
+            }
+            if input.kind == SourceKind::Smb {
+                self.db()?.add_smb_root(
+                    &input.source_id,
+                    &input.library_id,
+                    provider.root(),
+                    access.access_ref.as_deref(),
+                    root.root(),
+                )?
+            } else {
+                self.db()?.add_webdav_root(
+                    &input.source_id,
+                    &input.library_id,
+                    provider.root(),
+                    access.access_ref.as_deref(),
+                    root.root(),
+                )?
+            }
+        } else {
+            if provider.is_some() {
+                return Err(Error::Invalid("access belongs to a remote source".into()));
+            }
+            let root = std::fs::canonicalize(&input.root_path)?;
+            if !root.is_dir() || !root.starts_with(&access.root) {
+                return Err(Error::Invalid(
+                    "selected directory is outside the authorized root".into(),
+                ));
+            }
+            self.db()?.add_local_root(
+                &input.source_id,
+                &input.library_id,
+                &access.root,
+                access.access_ref.as_deref(),
+                &root,
+            )?
+        };
+        if let Some(provider) = provider {
+            if !self
+                .remote
+                .get(&library.source_id)
+                .is_some_and(|old| old.same_access(&provider))
+            {
+                let epoch = self
+                    .remote_epochs
+                    .entry(library.source_id.clone())
+                    .or_default();
+                *epoch = epoch.wrapping_add(1);
+                self.remote.insert(library.source_id.clone(), provider);
+            }
+        }
+        let job = self
+            .db()?
+            .start_scan(&library.source_id, &library.library_id)?;
+        if self.workers.len() < 2 {
+            self.spawn(&job)?;
+        }
+        self.queue_scrape(&library.source_id, &library.library_id, false)?;
+        Ok(json!({"library":library,"root":added,"job":job}))
+    }
+
+    fn stop_library_workers(&mut self, source_id: &str, library_id: &str) -> Result<(), Error> {
+        let job_ids: Vec<String> = self
+            .db()?
+            .jobs(source_id)?
+            .into_iter()
+            .filter(|j| j.library_id == library_id)
+            .map(|j| j.job_id)
+            .collect();
+        for id in &job_ids {
+            if let Some(worker) = self.workers.get(id) {
+                worker.control.store(scan::CANCEL, Ordering::Release);
+            }
+        }
+        for id in job_ids {
+            if let Some(worker) = self.workers.remove(&id) {
+                let _ = worker.handle.join();
+            }
+        }
+        let run_ids: Vec<String> = self
+            .db()?
+            .scrape_runs(source_id)?
+            .into_iter()
+            .filter(|r| r.library_id == library_id)
+            .map(|r| r.run_id)
+            .collect();
+        for id in &run_ids {
+            if let Some(worker) = self.scrapers.get(id) {
+                worker.control.store(scan::CANCEL, Ordering::Release);
+            }
+        }
+        for id in run_ids {
+            if let Some(worker) = self.scrapers.remove(&id) {
+                let _ = worker.handle.join();
+            }
+        }
+        Ok(())
+    }
+
+    fn stop_source_workers(&mut self, source_id: &str) -> Result<(), Error> {
+        let libraries = self.db()?.libraries(source_id)?;
+        for lib in libraries {
+            self.stop_library_workers(source_id, &lib.library_id)?;
+        }
+        Ok(())
+    }
+
     fn spawn(&mut self, job: &ocp_library::Job) -> Result<(), Error> {
         if let Some(worker) = self.workers.get(&job.job_id) {
             if worker.control.load(Ordering::Acquire) != scan::RUN {
@@ -612,11 +796,7 @@ impl Runtime {
                     .set_job_status(&job.job_id, "waitingCredentials")?;
                 return Ok(());
             };
-            Some(
-                provider
-                    .scoped(&store.library(&job.source_id, &job.library_id)?.root_path)
-                    .map_err(remote_error)?,
-            )
+            Some(provider.clone())
         } else {
             None
         };
@@ -662,6 +842,19 @@ impl Runtime {
         for id in done {
             if let Some(worker) = self.workers.remove(&id) {
                 let _ = worker.handle.join();
+            }
+        }
+        if self.workers.len() < 2 {
+            if let Ok(queued) = self.db().and_then(|store| store.queued_jobs(8)) {
+                for job in queued {
+                    if self.workers.len() >= 2 {
+                        break;
+                    }
+                    if self.workers.contains_key(&job.job_id) {
+                        continue;
+                    }
+                    let _ = self.spawn(&job);
+                }
             }
         }
         let done: Vec<_> = self
@@ -1077,22 +1270,14 @@ impl Runtime {
                 }
                 let item = string(&args, "itemId")?.to_owned();
                 let asset = string(&args, "assetId")?.to_owned();
-                let detail = self.db()?.item(&source, &item)?;
-                let library = self.db()?.library(&source, &detail.library_id)?;
-                let path = self
-                    .db()?
-                    .assets(&source, &item)?
-                    .into_iter()
-                    .find(|a| a.asset_id == asset && a.available)
-                    .ok_or(Error::NotFound)?
-                    .relative_path;
+                let (root_path, path) = self.db()?.asset_location(&source, &item, &asset)?;
                 let provider = self
                     .remote
                     .get(&source)
                     .ok_or_else(|| {
                         Error::Invalid("restore remote credentials before playback".into())
                     })?
-                    .scoped(&library.root_path)
+                    .scoped(&root_path)
                     .map_err(remote_error)?;
                 let epoch = *self.remote_epochs.get(&source).unwrap_or(&0);
                 Ok(RemoteRequest {

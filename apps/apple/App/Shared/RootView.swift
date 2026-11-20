@@ -47,9 +47,7 @@ struct RootView: View {
             OnboardingView()
                 .transition(.section)
         case .ready:
-            if let sourceID = app.activeFileSourceID {
-                FileLibraryShellView(sourceID: sourceID).transition(.section)
-            } else { AppShellView().transition(.section) }
+            AppShellView().transition(.section)
         }
     }
 
@@ -178,7 +176,7 @@ struct RootView: View {
             // 启动数据就绪 → 启动动画开始交棒（begin 之前就绪则 presenter 内部兜底）。
             // 有会话才等氛围池与首页骨架（onboarding / 本地播放没有这些可等）。
             if phase != .boot {
-                launch.contentBecameReady(expectAmbience: app.server != nil, expectHome: app.server != nil)
+                launch.contentBecameReady(expectAmbience: app.hasActiveMediaSource, expectHome: app.hasActiveMediaSource)
             }
         }
         .onChange(of: app.ambiencePoolReady) { _, ready in
@@ -237,6 +235,7 @@ struct RootView: View {
             switch sheet {
             case .sources: MediaSourcesView()
             case let .add(draft): AddFileLibraryView(draft: draft)
+            case let .manage(sourceID): FileLibraryManagementView(sourceID: sourceID)
             }
         }
         .onChange(of: tmdbMirrorEnabled) { _, _ in app.fileLibrary.credentialsChanged() }

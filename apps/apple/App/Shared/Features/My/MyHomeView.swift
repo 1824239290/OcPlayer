@@ -39,9 +39,14 @@ struct MyHomeView: View {
     }
     private var calendarScope: String? {
         if isPreview { return "preview" }
-        guard let bangumiScope, let historyScope, let overview else { return nil }
+        guard let bangumiScope, let sourceScope = activeCatalogScope, let overview else { return nil }
         let subjects = overview.broadcastWatching.map(\.id).sorted().map(String.init).joined(separator: ",")
-        return "\(bangumiScope):\(historyScope):broadcast:\(subjects)"
+        return "\(bangumiScope):\(sourceScope):broadcast:\(subjects)"
+    }
+    private var activeCatalogScope: String? {
+        if let historyScope { return historyScope }
+        guard let sourceID = app.activeFileSourceID else { return nil }
+        return "file-library:\(sourceID):\(app.sessionGeneration)"
     }
     private var moviepilotScope: String? {
         if isPreview { return "preview" }
@@ -56,7 +61,7 @@ struct MyHomeView: View {
     }
     private var history: ServerViewingHistory? { model.history.snapshot(for: historyScope) }
     private var localHistoryScope: String {
-        "\(historyScope ?? "no-server"):\(app.sessionGeneration):local"
+        "\(activeCatalogScope ?? "no-server"):\(app.sessionGeneration):local"
     }
     private var localHistory: [AppPlaybackRecord] { model.localHistory.snapshot(for: localHistoryScope) ?? [] }
     private var subscriptions: [MPSubscribe]? { model.subscriptions.snapshot(for: moviepilotScope) }
@@ -197,7 +202,7 @@ struct MyHomeView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(isPreview ? ViewingNavigation.pageTitle : (bangumiEnabled ? bangumi.profile?.name : nil) ?? ViewingNavigation.pageTitle)
                     .font(.title2.weight(.semibold))
-                Text(isPreview ? "布局预览 · 示例数据" : app.server == nil ? "片单 · 追更 · 下载" : "\(app.serverLabel) · 片单与追更")
+                Text(isPreview ? "布局预览 · 示例数据" : !app.hasActiveMediaSource ? "片单 · 追更 · 下载" : "\(app.activeSourceLabel) · 片单与追更")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -213,17 +218,17 @@ struct MyHomeView: View {
 
     @ViewBuilder
     private var viewingSection: some View {
-        if historyScope != nil || !localHistory.isEmpty {
+        if historyScope != nil || app.isFileLibraryActive || !localHistory.isEmpty {
             MyViewingSection(
                 history: history, localRecords: localHistory, collectionTiles: collectionTiles,
                 isLoading: model.history.isLoading || model.localHistory.isLoading,
                 error: model.localHistory.error ?? (model.history.scope == historyScope ? model.history.error : nil),
-                sourceName: isPreview ? "Jellyfin · 示例数据" : app.server?.profile.kind.displayName ?? "本机播放",
+                sourceName: isPreview ? "Jellyfin · 示例数据" : app.server?.profile.kind.displayName ?? app.activeFileSource.map { FileLibraryProjection.sourceKindLabel($0.kind) } ?? "本机播放",
                 retry: { Task { await loadHistory() } },
                 showAll: { app.pushPresented { showHistory = true } },
                 openItem: { app.openDetail($0) }
             )
-            .id(historyScope)
+            .id(activeCatalogScope)
         } else {
             MyViewingCollectionTiles(tiles: collectionTiles).frame(maxWidth: 480, alignment: .leading)
             connectionCard("连接 Jellyfin 或 Emby，同步其他播放器产生的已看记录", button: "连接媒体库") {
@@ -284,7 +289,7 @@ struct MyHomeView: View {
     private var calendarEmptyMessage: String {
         if isPreview { return "这一天没有符合条件的更新番剧" }
         if !bangumi.isAuthenticated { return "登录 Bangumi，显示在看且媒体库已有的更新番剧" }
-        if app.server == nil { return "连接媒体库，筛选你已有的更新番剧" }
+        if !app.hasActiveMediaSource { return "连接媒体库，筛选你已有的更新番剧" }
         if model.calendar.isLoading || model.bangumi.isLoading || !bangumi.isDatabaseReady {
             return "正在核对在看番剧和媒体库…"
         }
@@ -469,16 +474,29 @@ struct MyHomeView: View {
     private func loadCalendar() async {
         guard !isPreview else { return }
         let scope = calendarScope
-        guard let server = app.server, let watching = overview?.broadcastWatching else {
+        guard app.hasActiveMediaSource, let watching = overview?.broadcastWatching else {
             model.calendar.reset()
             return
         }
         await model.calendar.load(scope: calendarScope, currentScope: { calendarScope }) {
             guard !watching.isEmpty else { return [] }
             async let days = BangumiCalendarService.getCalendar()
-            async let media = server.items(parentID: nil, kinds: [.series, .season], recursive: true, limit: 200)
             async let timing = try? MyBroadcastDataStore.shared.load()
-            let (calendar, library, records) = try await (days, media, timing)
+            let library: [MediaItem]
+            if let server = app.server {
+                library = try await server.items(parentID: nil, kinds: [.series, .season], recursive: true, limit: 200)
+            } else if let sourceID = app.activeFileSourceID {
+                let page = try await app.fileLibrary.page(.init(
+                    sourceId: sourceID,
+                    type: .tvshows,
+                    parentId: nil,
+                    limit: 200
+                ))
+                library = page.items.map { FileLibraryProjection.mediaItem($0) }
+            } else {
+                library = []
+            }
+            let (calendar, records) = try await (days, timing)
             try Task.checkCancellation()
             guard calendarScope == scope else { throw CancellationError() }
             let links = Dictionary(library.compactMap { item in
@@ -529,6 +547,7 @@ struct MyHomeView: View {
         guard !isPreview else { return }
         let scope = localHistoryScope
         let sourceID = app.server.map { ServerViewingHistory.sourceID(for: $0.profile) }
+            ?? app.activeFileSourceID.map { "file-library:\($0)" }
         await model.localHistory.load(scope: scope, currentScope: { localHistoryScope }) {
             var records = try await AppPlaybackHistoryStore.shared.read(sourceID: AppPlaybackHistoryStore.localSourceID)
             if let sourceID { records += try await AppPlaybackHistoryStore.shared.read(sourceID: sourceID) }

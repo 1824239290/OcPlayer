@@ -140,6 +140,46 @@ extension AppModel {
     /// TMDB」挡住。
     func resolveLibraryCoverIfNeeded(for library: MediaLibrary) async {
         guard library.primaryImageTag == nil else { return }
+        if let sourceID = activeFileSourceID {
+            let generation = sessionGeneration
+            await resolveArtworkOnce(
+                id: library.id,
+                label: "文件媒体库封面解析失败 library=\(library.name)",
+                isResolved: { (self.libraryCoverArt[library.id]?.count ?? 0) >= Self.libraryCoverCount },
+                attempted: \.libraryCoverAttempted,
+                inFlight: \.libraryCoverInFlight,
+                concurrency: Self.libraryCoverConcurrency
+            ) {
+                let page = try await self.fileLibrary.page(.init(
+                    sourceId: sourceID,
+                    libraryId: library.id,
+                    parentId: nil,
+                    search: "",
+                    startIndex: 0,
+                    limit: 80,
+                    sortBy: "dateAdded",
+                    sortAscending: false
+                ))
+                guard self.fileLibrarySessionIsCurrent(generation, sourceID: sourceID) else { return false }
+                var seen: Set<URL> = []
+                let candidates: [URL] = page.items.compactMap { item -> URL? in
+                    let projected = FileLibraryProjection.mediaItem(item)
+                    guard let url = FileLibraryArtwork.imageURL(
+                        forTag: projected.primaryImageTag ?? projected.backdropImageTag,
+                        width: Self.libraryCoverWidth,
+                        preferences: self.preferences
+                    ) else { return nil }
+                    return seen.insert(url).inserted ? url : nil
+                }
+                let picked = Array(candidates.shuffled().prefix(Self.libraryCoverCount))
+                if !picked.isEmpty {
+                    self.libraryCoverArt[library.id] = picked
+                }
+                // 只有凑齐 4 张才记账停止重试；不足 4 张时允许后续刮削产出更多海报后自动补齐。
+                return picked.count >= Self.libraryCoverCount
+            }
+            return
+        }
         guard let server else { return }
         let generation = sessionGeneration
         await resolveArtworkOnce(

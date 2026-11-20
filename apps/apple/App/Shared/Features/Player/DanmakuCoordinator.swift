@@ -147,6 +147,73 @@ struct DanmakuPlaybackContext {
         )
     }
 
+    static func fileLibrary(
+        item: MediaItem,
+        request: PlaybackRequest,
+        sourceID: String
+    ) -> DanmakuPlaybackContext {
+        let localURL = FileManager.default.fileExists(atPath: request.uri)
+            ? URL(fileURLWithPath: request.uri) : nil
+        let remoteURL = localURL == nil ? URL(string: request.uri) : nil
+        let rawFileName = normalizedFileName(
+            localURL?.lastPathComponent,
+            request.title
+        )
+        let seriesName = (item.seriesName ?? item.name).trimmingCharacters(in: .whitespacesAndNewlines)
+        let originalTitle = item.originalTitle.map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.flatMap { $0.isEmpty ? nil : $0 }
+        let seasonNumber = item.seasonNumber
+        let episodeNumber = item.episodeNumber
+        let tmdbID = item.tmdbID.flatMap(Int.init)
+        let special = jellyfinSpecialTarget(
+            seasonNumber: seasonNumber,
+            episodeNumber: episodeNumber,
+            keywordText: [rawFileName, request.title, item.name].joined(separator: " ")
+        )
+        let fileName = DanmakuFilenameParser.canonicalMatchName(
+            seriesTitle: seriesName,
+            season: seasonNumber,
+            episode: matchEpisodeToken(number: episodeNumber, special: special),
+            rawFileName: rawFileName
+        )
+        let assetID = request.fileLibraryIdentity?.assetID ?? "default"
+        let fileSize = localURL.flatMap { localFileMetadata($0).size }
+        let durationSeconds = roundedSeconds(item.runtimeSeconds)
+        let cacheIdentity = [
+            sourceID, item.id, assetID, rawFileName,
+            fileSize.map(String.init) ?? "unknown-size",
+            durationSeconds.map(String.init) ?? "unknown-duration",
+        ].joined(separator: "\n")
+        return DanmakuPlaybackContext(
+            match: DanmakuMatchContext(
+                uuid: request.id,
+                cacheKey: "file-library:\(sha256(cacheIdentity))",
+                allowsCachedMatchReuse: true,
+                fileName: fileName,
+                fileSize: fileSize,
+                durationSeconds: durationSeconds,
+                localFileURL: localURL,
+                remoteURL: remoteURL,
+                remoteHeaders: request.headers,
+                animeTitle: seriesName.isEmpty ? nil : seriesName,
+                originalTitle: originalTitle,
+                seriesID: item.seriesID,
+                episodeNumber: episodeNumber,
+                seasonNumber: seasonNumber,
+                isFinal: false,
+                tmdbID: tmdbID,
+                malID: item.malID.flatMap(Int.init),
+                anilistID: item.anilistID.flatMap(Int.init),
+                isMovie: item.kind == .movie,
+                special: special
+            ),
+            sourceKind: localURL != nil ? .localFile : .remoteURL,
+            suggestedAnime: seriesName,
+            suggestedEpisode: episodeNumber.map(String.init) ?? ""
+        )
+    }
+
     static func standalone(request: PlaybackRequest) -> DanmakuPlaybackContext {
         let localURL = request.securityScopedURL
             ?? (FileManager.default.fileExists(atPath: request.uri)

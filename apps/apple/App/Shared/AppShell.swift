@@ -74,7 +74,7 @@ struct AppShellView: View {
             // 口径跟**内容**层（`contentSizeClass`），不跟标签栏层：iPad 的内容是
             // iPad 版式，留白就该是 52pt；跟着标签栏的紧凑档走会变成 22pt 的错位。
             .environment(\.contentLeading, contentLeading)
-            .environment(\.imageCacheScope, app.server?.profile.imageCacheScope)
+            .environment(\.imageCacheScope, app.activeImageCacheScope)
             // 背景挂在 AppShell 根节点，分区内容重建时不销毁轮播视图。
             // 仅 macOS：iOS 的导航栈宿主自带不透明底，垫在后面的层
             // 到不了屏幕——iOS 的首页轮播挂在首页 Tab 栈内（见 compactLayout）。
@@ -86,6 +86,47 @@ struct AppShellView: View {
             // 冷启动直奔别的 Tab / 进设置子页就没人为它装载，那些页面整个会话都停在
             // 纯色底。触发键变化（换会话 / 换地址 / 首页数据到位可补救）会自动重跑。
             .task(id: app.ambienceTrigger) { await app.runAmbienceCarousel() }
+            // 文件媒体库后台刮削恢复：仅在当前活跃来源是文件库时运行。
+            .task(id: fileLibraryOnlineTaskKey) {
+                guard let sourceID = app.activeFileSourceID else { return }
+                await app.fileLibrary.resumeOnlineWork(
+                    sourceID: sourceID,
+                    key: app.tmdb.rawAPIKey,
+                    apiBase: app.fileLibraryAPIBase,
+                    language: app.tmdb.language
+                )
+            }
+            // 文件媒体库扫描 / 刮削任务观察：有进展时即时刷新首页与库页海报墙。
+            .task(id: fileLibraryPollTaskKey) {
+                guard let sourceID = app.activeFileSourceID else { return }
+                var checkpoint: String?
+                while !Task.isCancelled {
+                    do {
+                        async let jobs = app.fileLibrary.jobs(sourceID: sourceID)
+                        async let scrapes = app.fileLibrary.scrapes(sourceID: sourceID)
+                        let snapshots = try await (jobs, scrapes)
+                        guard !Task.isCancelled, app.activeFileSourceID == sourceID else { return }
+                        let latest = (snapshots.0.map(\.fileLibrarySnapshotKey) + snapshots.1.map(\.fileLibrarySnapshotKey))
+                            .joined(separator: "\0")
+                        if checkpoint != nil, checkpoint != latest {
+                            app.fileLibrary.metadataDidChange()
+                        }
+                        checkpoint = latest
+                        let isBusy = snapshots.0.contains(where: \.fileLibraryIsActive)
+                            || snapshots.1.contains(where: \.fileLibraryIsActive)
+                        try await Task.sleep(for: .seconds(isBusy ? 1 : 5))
+                    } catch is CancellationError {
+                        return
+                    } catch {
+                        app.fileLibrary.taskObservationFailed(error)
+                        return
+                    }
+                }
+            }
+            .onChange(of: app.fileLibrary.metadataRevision) { _, _ in
+                guard let sourceID = app.activeFileSourceID else { return }
+                Task { await app.handleFileLibraryCatalogChanged(sourceID: sourceID) }
+            }
             // 自动化深链（Debug-only）：`OCPLAYER_START_ROUTE` 指定的 push 页 /
             // 设置子页在这里落地——挂 AppShell 而不挂 RootView，是因为目标页依赖
             // 「布局已定型、isCompact 已设定」这个前提（push 按它分派栈）。
@@ -93,6 +134,15 @@ struct AppShellView: View {
             // 两段式换页要读 reduceMotion 决定是否直切，AppModel 无环境，注入副本。
             .onAppear { app.reduceMotion = reduceMotion }
             .onChange(of: reduceMotion) { _, newValue in app.reduceMotion = newValue }
+    }
+
+    private var fileLibraryOnlineTaskKey: String {
+        guard let sourceID = app.activeFileSourceID else { return "" }
+        return "\(sourceID)|\(app.fileLibraryCredentialRevision)|\(app.tmdb.language)|\(app.fileLibrary.configurationRevision)"
+    }
+
+    private var fileLibraryPollTaskKey: String {
+        app.activeFileSourceID ?? ""
     }
 
     /// **标签栏那一层**用的尺寸类（`TabView` 自己读它）。

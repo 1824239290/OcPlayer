@@ -65,6 +65,9 @@ impl Fixture {
                 search: String::new(),
                 start_index: 0,
                 limit: 50,
+                sort_by: None,
+                sort_ascending: None,
+                watch_state: None,
             })
             .unwrap()
             .0
@@ -106,15 +109,18 @@ fn v1_v2_v3_upgrade_preserve_catalog_and_add_durable_online_queue() {
         })
         .unwrap();
     // Construct real older schemas, including source CHECK rebuilding and FK preservation.
-    for version in [1, 2, 3] {
+    for version in [1, 2, 3, 4] {
         let old = f.directory.join(format!("old-{version}.sqlite"));
         let db = rusqlite::Connection::open(&old).unwrap();
         db.execute_batch(include_str!("../schema/v1.sql")).unwrap();
         if version >= 2 {
             db.execute_batch(include_str!("../schema/v2.sql")).unwrap();
         }
-        if version == 3 {
+        if version >= 3 {
             db.execute_batch(include_str!("../schema/v3.sql")).unwrap();
+        }
+        if version >= 4 {
+            db.execute_batch(include_str!("../schema/v4.sql")).unwrap();
         }
         db.pragma_update(None, "user_version", version).unwrap();
         db.execute(
@@ -123,7 +129,11 @@ fn v1_v2_v3_upgrade_preserve_catalog_and_add_durable_online_queue() {
         )
         .unwrap();
         db.execute_batch("INSERT INTO source SELECT * FROM fixture.source; INSERT INTO library SELECT * FROM fixture.library;").unwrap();
-        db.execute_batch(if version==3 {"INSERT INTO entry SELECT * FROM fixture.entry;"} else {"INSERT INTO entry SELECT source_id,asset_id,library_id,relative_path,size,mtime,available,seen_generation FROM fixture.entry;"}).unwrap();
+        db.execute_batch(if version >= 3 {
+            "INSERT INTO entry(source_id,asset_id,library_id,relative_path,size,mtime,available,seen_generation,etag) SELECT source_id,asset_id,library_id,relative_path,size,mtime,available,seen_generation,etag FROM fixture.entry;"
+        } else {
+            "INSERT INTO entry(source_id,asset_id,library_id,relative_path,size,mtime,available,seen_generation) SELECT source_id,asset_id,library_id,relative_path,size,mtime,available,seen_generation FROM fixture.entry;"
+        }).unwrap();
         db.execute_batch("INSERT INTO catalog_item(source_id,library_id,item_id,group_key,kind,title,year,parent_id,series_id,season_number,episode_number,first_seen_at) SELECT source_id,library_id,item_id,group_key,kind,title,year,parent_id,series_id,season_number,episode_number,first_seen_at FROM fixture.catalog_item; INSERT INTO item_asset SELECT * FROM fixture.item_asset; INSERT INTO item_match SELECT * FROM fixture.item_match; INSERT INTO watch_state SELECT * FROM fixture.watch_state;").unwrap();
         drop(db);
         let upgraded = Store::open_path(&old).unwrap();
@@ -243,7 +253,7 @@ fn smb_roots_categories_and_source_identity_stay_scoped() {
     assert_eq!(
         db.pragma_query_value::<i64, _>(None, "user_version", |r| r.get(0))
             .unwrap(),
-        4
+        5
     );
     assert_eq!(
         db.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| r
@@ -487,11 +497,15 @@ fn movie_ids_and_progress_survive_rescan_reopen_and_cache_removal() {
         reopened
             .progress(&library.source_id, &first.item_id)
             .unwrap(),
-        Some(progress)
+        Some(progress.clone())
     );
+    let mut expected = first;
+    expected.progress = Some(progress);
     assert_eq!(
-        reopened.item(&library.source_id, &first.item_id).unwrap(),
-        first
+        reopened
+            .item(&library.source_id, &expected.item_id)
+            .unwrap(),
+        expected
     );
 }
 
@@ -559,7 +573,10 @@ fn scoped_queries_and_playback_reject_foreign_source_and_asset() {
             parent_id: None,
             search: String::new(),
             start_index: 0,
-            limit: 50
+            limit: 50,
+            sort_by: None,
+            sort_ascending: None,
+            watch_state: None,
         })
         .is_err());
 }
@@ -830,4 +847,490 @@ fn old_scan_cannot_publish_or_mark_newer_files_missing() {
     let parsed = ocp_library::parse::parse(Path::new("Movie.mkv"), LibraryType::Movies);
     assert!(f.store.ingest(&old, "Movie.mkv", 2, 0.0, &parsed).is_err());
     assert!(f.query(&library, None).iter().all(|item| item.playable));
+}
+
+#[test]
+fn query_sort_watch_state_next_up_and_mark_played_match_home_and_library_needs() {
+    let f = Fixture::new();
+    f.video("Alpha (2020).mkv");
+    f.video("Beta (2024).mkv");
+    let movies = f.library(LibraryType::Movies);
+    f.scan(&movies);
+    let items = f.query(&movies, None);
+    let alpha = items.iter().find(|i| i.title == "Alpha").unwrap();
+    let beta = items.iter().find(|i| i.title == "Beta").unwrap();
+    f.store
+        .bind_metadata(
+            &movies.source_id,
+            &alpha.item_id,
+            10,
+            "movie",
+            "zh-CN",
+            &serde_json::json!({"id":10,"title":"Alpha","release_date":"2020-01-01","vote_average":9.1}),
+            false,
+        )
+        .unwrap();
+    f.store
+        .bind_metadata(
+            &movies.source_id,
+            &beta.item_id,
+            11,
+            "movie",
+            "zh-CN",
+            &serde_json::json!({"id":11,"title":"Beta","release_date":"2024-05-01","vote_average":7.2}),
+            false,
+        )
+        .unwrap();
+    let by_rating = f
+        .store
+        .query(&Query {
+            source_id: movies.source_id.clone(),
+            library_id: Some(movies.library_id.clone()),
+            library_type: None,
+            parent_id: None,
+            search: String::new(),
+            start_index: 0,
+            limit: 20,
+            sort_by: Some("rating".into()),
+            sort_ascending: Some(false),
+            watch_state: None,
+        })
+        .unwrap()
+        .0;
+    assert_eq!(by_rating[0].item_id, alpha.item_id);
+    let by_year = f
+        .store
+        .query(&Query {
+            source_id: movies.source_id.clone(),
+            library_id: Some(movies.library_id.clone()),
+            library_type: None,
+            parent_id: None,
+            search: String::new(),
+            start_index: 0,
+            limit: 20,
+            sort_by: Some("year".into()),
+            sort_ascending: Some(false),
+            watch_state: None,
+        })
+        .unwrap()
+        .0;
+    assert_eq!(by_year[0].item_id, beta.item_id);
+
+    f.store
+        .record_progress(&Progress {
+            source_id: movies.source_id.clone(),
+            item_id: alpha.item_id.clone(),
+            position_seconds: 120.0,
+            duration_seconds: Some(6000.0),
+            played: false,
+            completed: false,
+            recorded_at: 50.0,
+        })
+        .unwrap();
+    let marked = f
+        .store
+        .mark_played(&movies.source_id, &alpha.item_id, true, 100.0)
+        .unwrap();
+    assert!(marked.played && marked.completed && marked.duration_seconds == Some(6000.0));
+    let played_only = f
+        .store
+        .query(&Query {
+            source_id: movies.source_id.clone(),
+            library_id: Some(movies.library_id.clone()),
+            library_type: None,
+            parent_id: None,
+            search: String::new(),
+            start_index: 0,
+            limit: 20,
+            sort_by: None,
+            sort_ascending: None,
+            watch_state: Some("played".into()),
+        })
+        .unwrap();
+    assert_eq!(played_only.1, 1);
+    assert_eq!(played_only.0[0].item_id, alpha.item_id);
+    let unplayed_only = f
+        .store
+        .query(&Query {
+            source_id: movies.source_id.clone(),
+            library_id: Some(movies.library_id.clone()),
+            library_type: None,
+            parent_id: None,
+            search: String::new(),
+            start_index: 0,
+            limit: 20,
+            sort_by: None,
+            sort_ascending: None,
+            watch_state: Some("unplayed".into()),
+        })
+        .unwrap();
+    assert_eq!(unplayed_only.1, 1);
+    assert_eq!(unplayed_only.0[0].item_id, beta.item_id);
+
+    let tv_fixture = Fixture::new();
+    tv_fixture.video("Show (2024)/Season 00/Show.S00E01.mkv");
+    tv_fixture.video("Show (2024)/Season 01/Show.S01E01.mkv");
+    tv_fixture.video("Show (2024)/Season 01/Show.S01E02.mkv");
+    let tv = tv_fixture.library(LibraryType::Tvshows);
+    tv_fixture.scan(&tv);
+    let show = tv_fixture.query(&tv, None).remove(0);
+    assert_eq!(show.child_count, Some(2));
+    tv_fixture
+        .store
+        .bind_metadata(
+            &tv.source_id,
+            &show.item_id,
+            200,
+            "tv",
+            "zh-CN",
+            &serde_json::json!({"id":200,"name":"剧集名称","backdrop_path":"/bg.jpg","poster_path":"/p.jpg"}),
+            false,
+        )
+        .unwrap();
+    let seasons = tv_fixture.query(&tv, Some(&show.item_id));
+    let s1 = seasons.iter().find(|s| s.season_number == Some(1)).unwrap();
+    let eps = tv_fixture.query(&tv, Some(&s1.item_id));
+    let e1 = eps.iter().find(|e| e.episode_number == Some(1)).unwrap();
+    let e2 = eps.iter().find(|e| e.episode_number == Some(2)).unwrap();
+    assert_eq!(e1.series_title.as_deref(), Some("剧集名称"));
+    assert_eq!(e1.series_backdrop_path.as_deref(), Some("/bg.jpg"));
+    assert_eq!(e1.series_poster_path.as_deref(), Some("/p.jpg"));
+
+    tv_fixture
+        .store
+        .mark_played(&tv.source_id, &e1.item_id, true, 100.0)
+        .unwrap();
+    let next_up = tv_fixture.store.next_up(&tv.source_id, 10).unwrap();
+    assert_eq!(next_up.len(), 1);
+    assert_eq!(next_up[0].item_id, e2.item_id);
+
+    // If e2 is partially watched (in resume), next_up skips the series.
+    tv_fixture
+        .store
+        .record_progress(&Progress {
+            source_id: tv.source_id.clone(),
+            item_id: e2.item_id.clone(),
+            position_seconds: 90.0,
+            duration_seconds: Some(1500.0),
+            played: false,
+            completed: false,
+            recorded_at: 200.0,
+        })
+        .unwrap();
+    assert!(tv_fixture
+        .store
+        .next_up(&tv.source_id, 10)
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
+fn local_source_supports_cross_root_categories_and_multi_root_single_category() {
+    let f = Fixture::new();
+    let disk_a_movies = f.directory.join("diskA/Movies");
+    let disk_b_movies = f.directory.join("diskB/4KMovies");
+    let disk_c_tv = f.directory.join("diskC/TV");
+    std::fs::create_dir_all(&disk_a_movies).unwrap();
+    std::fs::create_dir_all(&disk_b_movies).unwrap();
+    std::fs::create_dir_all(disk_c_tv.join("Frieren/Season 1")).unwrap();
+    std::fs::write(disk_a_movies.join("Arrival (2016).mkv"), b"a").unwrap();
+    std::fs::write(disk_b_movies.join("Dune (2021).mkv"), b"b").unwrap();
+    // Same relative filename in second root of same category must not collide.
+    std::fs::write(disk_b_movies.join("Arrival (2016).mkv"), b"a4k").unwrap();
+    std::fs::write(
+        disk_c_tv.join("Frieren/Season 1/Frieren S01E01.mkv"),
+        b"ep1",
+    )
+    .unwrap();
+
+    let movies = f
+        .store
+        .create_local(
+            "m-1",
+            None,
+            "My Media",
+            &disk_a_movies,
+            Some("ref-a"),
+            "Movies",
+            &disk_a_movies,
+            LibraryType::Movies,
+        )
+        .unwrap();
+    assert_eq!(movies.roots.len(), 1);
+    assert_eq!(movies.roots[0].access_ref.as_deref(), Some("ref-a"));
+
+    // Cross-drive category under the SAME local source succeeds.
+    let tv = f
+        .store
+        .create_local(
+            "t-1",
+            Some(&movies.source_id),
+            "My Media",
+            &disk_c_tv,
+            Some("ref-c"),
+            "TV",
+            &disk_c_tv,
+            LibraryType::Tvshows,
+        )
+        .unwrap();
+    assert_eq!(tv.source_id, movies.source_id);
+
+    // Add a second folder into the EXISTING Movies category.
+    let (updated_movies, added_root) = f
+        .store
+        .add_local_root(
+            &movies.source_id,
+            &movies.library_id,
+            &disk_b_movies,
+            Some("ref-b"),
+            &disk_b_movies,
+        )
+        .unwrap();
+    assert_eq!(updated_movies.roots.len(), 2);
+    assert_eq!(added_root.access_ref.as_deref(), Some("ref-b"));
+
+    // Overlapping root across categories or within the same category is rejected.
+    assert!(f
+        .store
+        .add_local_root(
+            &movies.source_id,
+            &movies.library_id,
+            &disk_c_tv,
+            Some("ref-c2"),
+            &disk_c_tv,
+        )
+        .is_err());
+
+    let m_job = f
+        .store
+        .start_scan(&movies.source_id, &movies.library_id)
+        .unwrap();
+    scan::run(&f.store, &m_job, &AtomicU8::new(scan::RUN)).unwrap();
+    let t_job = f.store.start_scan(&tv.source_id, &tv.library_id).unwrap();
+    scan::run(&f.store, &t_job, &AtomicU8::new(scan::RUN)).unwrap();
+
+    let (movie_items, total) = f
+        .store
+        .query(&Query {
+            source_id: movies.source_id.clone(),
+            library_id: Some(movies.library_id.clone()),
+            library_type: None,
+            parent_id: None,
+            search: String::new(),
+            start_index: 0,
+            limit: 50,
+            sort_by: Some("name".into()),
+            sort_ascending: Some(true),
+            watch_state: None,
+        })
+        .unwrap();
+    assert_eq!(total, 3);
+    // Arrival exists in both roots with the same relative filename; both stay indexed without colliding
+    // and resolve to their respective disk paths.
+    let arrivals: Vec<_> = movie_items
+        .iter()
+        .filter(|i| i.title == "Arrival")
+        .collect();
+    assert_eq!(arrivals.len(), 2);
+    let mut playback_paths: Vec<_> = arrivals
+        .iter()
+        .map(|item| {
+            let assets = f.store.assets(&movies.source_id, &item.item_id).unwrap();
+            assert_eq!(assets.len(), 1);
+            f.store
+                .playback_path(&movies.source_id, &item.item_id, &assets[0].asset_id)
+                .unwrap()
+        })
+        .collect();
+    playback_paths.sort();
+    assert_eq!(
+        playback_paths,
+        vec![
+            std::fs::canonicalize(disk_a_movies.join("Arrival (2016).mkv")).unwrap(),
+            std::fs::canonicalize(disk_b_movies.join("Arrival (2016).mkv")).unwrap(),
+        ]
+    );
+    let dune = movie_items.iter().find(|i| i.title == "Dune").unwrap();
+    let dune_assets = f.store.assets(&movies.source_id, &dune.item_id).unwrap();
+    assert_eq!(dune_assets.len(), 1);
+    assert_eq!(
+        f.store
+            .playback_path(&movies.source_id, &dune.item_id, &dune_assets[0].asset_id)
+            .unwrap(),
+        std::fs::canonicalize(disk_b_movies.join("Dune (2021).mkv")).unwrap()
+    );
+
+    // Rename category, remove one root from a multi-root category, reject removing the last root, then delete category and source.
+    let renamed = f
+        .store
+        .rename_library(&movies.source_id, &movies.library_id, "4K 电影")
+        .unwrap();
+    assert_eq!(renamed.name, "4K 电影");
+    let after_root_remove = f
+        .store
+        .remove_library_root(&movies.source_id, &movies.library_id, &added_root.root_id)
+        .unwrap();
+    assert_eq!(after_root_remove.roots.len(), 1);
+    let (_, remaining_movies) = f
+        .store
+        .query(&Query {
+            source_id: movies.source_id.clone(),
+            library_id: Some(movies.library_id.clone()),
+            library_type: None,
+            parent_id: None,
+            search: String::new(),
+            start_index: 0,
+            limit: 50,
+            sort_by: None,
+            sort_ascending: None,
+            watch_state: None,
+        })
+        .unwrap();
+    assert_eq!(remaining_movies, 1);
+    // Cannot remove the only remaining folder of a category.
+    assert!(f
+        .store
+        .remove_library_root(
+            &movies.source_id,
+            &movies.library_id,
+            &after_root_remove.roots[0].root_id
+        )
+        .is_err());
+    // Delete Movies category -> TV category stays intact under the same source.
+    f.store
+        .delete_library(&movies.source_id, &movies.library_id)
+        .unwrap();
+    let remaining_libs = f.store.libraries(&movies.source_id).unwrap();
+    assert_eq!(remaining_libs.len(), 1);
+    assert_eq!(remaining_libs[0].library_id, tv.library_id);
+    // Delete source -> everything cleanly removed with zero FK violations.
+    f.store.delete_source(&movies.source_id).unwrap();
+    assert!(f.store.sources().unwrap().is_empty());
+    let db = rusqlite::Connection::open(f.store.path()).unwrap();
+    assert_eq!(
+        db.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |r| r
+            .get::<_, i64>(
+            0
+        ))
+        .unwrap(),
+        0
+    );
+}
+
+#[test]
+fn matching_same_tmdb_id_merges_series_seasons_episodes_and_movies_reversibly() {
+    let f = Fixture::new();
+    f.video("GroupA/Anime/Season 01/Anime.S01E01.1080p.mkv");
+    f.video("GroupB/Anime/Season 01/Anime.S01E01.2160p.mkv");
+    f.video("GroupB/Anime/Season 02/Anime.S02E01.mkv");
+    let tv = f.library(LibraryType::Tvshows);
+    f.scan(&tv);
+
+    // Before TMDB matching, distinct folder trees remain separate.
+    let before = f.query(&tv, None);
+    assert_eq!(before.len(), 2);
+
+    // Bind both series folders to the SAME TMDB TV ID.
+    let tv_meta = serde_json::json!({
+        "id": 777,
+        "name": "恶女不才，请多关照",
+        "first_air_date": "2026-04-01",
+        "poster_path": "/p777.jpg"
+    });
+    for show in &before {
+        f.store
+            .bind_metadata(
+                &tv.source_id,
+                &show.item_id,
+                777,
+                "tv",
+                "zh-CN",
+                &tv_meta,
+                true,
+            )
+            .unwrap();
+    }
+
+    // Top-level query merges both into ONE series with 2 seasons!
+    let (after, total) = f
+        .store
+        .query(&Query {
+            source_id: tv.source_id.clone(),
+            library_id: Some(tv.library_id.clone()),
+            library_type: None,
+            parent_id: None,
+            search: String::new(),
+            start_index: 0,
+            limit: 50,
+            sort_by: None,
+            sort_ascending: None,
+            watch_state: None,
+        })
+        .unwrap();
+    assert_eq!(total, 1);
+    assert_eq!(after.len(), 1);
+    assert_eq!(after[0].child_count, Some(2));
+
+    // Seasons merge across both folders (Season 1 + Season 2).
+    let seasons = f.query(&tv, Some(&after[0].item_id));
+    assert_eq!(seasons.len(), 2);
+    assert_eq!(seasons[0].season_number, Some(1));
+    assert_eq!(seasons[1].season_number, Some(2));
+
+    // Season 1 Episode 1 merges into 1 episode with 2 playable versions (1080p + 2160p)!
+    let s1_eps = f.query(&tv, Some(&seasons[0].item_id));
+    assert_eq!(s1_eps.len(), 1);
+    let e1_assets = f.store.assets(&tv.source_id, &s1_eps[0].item_id).unwrap();
+    assert_eq!(e1_assets.len(), 2);
+    for asset in &e1_assets {
+        assert!(f
+            .store
+            .playback_path(&tv.source_id, &s1_eps[0].item_id, &asset.asset_id)
+            .is_ok());
+    }
+
+    // Marking S01E01 played advances Next Up across folders to S02E01!
+    f.store
+        .mark_played(&tv.source_id, &s1_eps[0].item_id, true, 100.0)
+        .unwrap();
+    let next_up = f.store.next_up(&tv.source_id, 10).unwrap();
+    assert_eq!(next_up.len(), 1);
+    assert_eq!(next_up[0].season_number, Some(2));
+    assert_eq!(next_up[0].episode_number, Some(1));
+
+    // Unbinding splits them cleanly back to 2 unmatched entries without losing files.
+    f.store
+        .unbind_match(&tv.source_id, &after[0].item_id)
+        .unwrap();
+    assert_eq!(f.query(&tv, None).len(), 2);
+
+    // Same for movies: 1080p + 4K matched to same TMDB ID merge into 1 movie with 2 versions.
+    let mf = Fixture::new();
+    mf.video("Dune.2021.1080p.mkv");
+    mf.video("Dune.2021.2160p.mkv");
+    let movies = mf.library(LibraryType::Movies);
+    mf.scan(&movies);
+    let raw_movies = mf.query(&movies, None);
+    assert_eq!(raw_movies.len(), 2);
+    let movie_meta = serde_json::json!({"id": 888, "title": "沙丘", "release_date": "2021-09-15"});
+    for m in &raw_movies {
+        mf.store
+            .bind_metadata(
+                &movies.source_id,
+                &m.item_id,
+                888,
+                "movie",
+                "zh-CN",
+                &movie_meta,
+                true,
+            )
+            .unwrap();
+    }
+    let merged_movies = mf.query(&movies, None);
+    assert_eq!(merged_movies.len(), 1);
+    let movie_assets = mf
+        .store
+        .assets(&movies.source_id, &merged_movies[0].item_id)
+        .unwrap();
+    assert_eq!(movie_assets.len(), 2);
 }

@@ -391,19 +391,31 @@ impl Store {
         if !matches!(item.kind, ItemKind::Movie | ItemKind::Series) {
             return Err(Error::Invalid("unbind the movie or whole series".into()));
         }
+        let targets = self.equivalent_item_ids(source, item_id)?;
         let tx = rusqlite::Transaction::new_unchecked(
             &self.db,
             rusqlite::TransactionBehavior::Immediate,
         )?;
-        tx.execute(
-            "DELETE FROM item_match WHERE source_id=?1 AND item_id=?2",
-            params![source, item_id],
-        )?;
-        tx.execute("UPDATE catalog_item SET match_revision=match_revision+1 WHERE source_id=?1 AND item_id=?2",params![source,item_id])?;
-        tx.execute("DELETE FROM item_metadata WHERE source_id=?1 AND item_id IN (SELECT item_id FROM catalog_item WHERE source_id=?1 AND series_id=?2)",params![source,item_id])?;
-        // Retire in-flight work for an explicit unbind. A separate new scan or
-        // scrape can identify it again; an old result cannot immediately rebind.
-        tx.execute("UPDATE scrape_target SET status='cancelled',error_kind=NULL,last_error=NULL,next_retry_at=NULL WHERE run_id IN (SELECT run_id FROM scrape_run WHERE source_id=?1) AND item_id IN (SELECT item_id FROM catalog_item WHERE source_id=?1 AND (item_id=?2 OR series_id=?2))",params![source,item_id])?;
+        for target_id in &targets {
+            tx.execute(
+                "DELETE FROM item_match WHERE source_id=?1 AND item_id=?2",
+                params![source, target_id],
+            )?;
+            tx.execute(
+                "UPDATE catalog_item SET match_revision=match_revision+1 WHERE source_id=?1 AND item_id=?2",
+                params![source, target_id],
+            )?;
+            tx.execute(
+                "DELETE FROM item_metadata WHERE source_id=?1 AND item_id IN (SELECT item_id FROM catalog_item WHERE source_id=?1 AND series_id=?2)",
+                params![source, target_id],
+            )?;
+            // Retire in-flight work for an explicit unbind. A separate new scan or
+            // scrape can identify it again; an old result cannot immediately rebind.
+            tx.execute(
+                "UPDATE scrape_target SET status='cancelled',error_kind=NULL,last_error=NULL,next_retry_at=NULL WHERE run_id IN (SELECT run_id FROM scrape_run WHERE source_id=?1) AND item_id IN (SELECT item_id FROM catalog_item WHERE source_id=?1 AND (item_id=?2 OR series_id=?2))",
+                params![source, target_id],
+            )?;
+        }
         tx.commit()?;
         Ok(())
     }

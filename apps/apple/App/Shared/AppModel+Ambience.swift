@@ -104,7 +104,7 @@ extension AppModel {
         let source: String
         var fetched = (try? await server?.randomBackdropItems(limit: AmbiencePool.queryLimit)) ?? []
         if fetched.isEmpty {
-            // 服务器不支持随机查询 / 拉取失败：回退到首页已经拿到的条目。
+            // 服务器不支持随机查询 / 拉取失败 / 文件媒体库：回退到首页已经拿到的条目。
             source = "home"
             fetched = home.latest + home.resume + home.nextUp
         } else {
@@ -126,7 +126,7 @@ extension AppModel {
         if let first = picked.first {
             let target = first.imageTarget(server, kind: .backdrop, width: AmbiencePool.imageWidth)
             if let url = target.url {
-                await AmbienceImageWarmup.warm(url, target.authHeader, server?.profile.imageCacheScope, 512)
+                await AmbienceImageWarmup.warm(url, target.authHeader, activeImageCacheScope, 512)
             }
         }
         if Task.isCancelled { return }
@@ -144,12 +144,12 @@ extension AppModel {
     /// 剩余图片预热进 ImagePipeline（之后每次切换都命中内存缓存），再进入换片循环。
     /// `reduceMotion` 下只保留静态首图，不做轮换。
     func warmUpAndRotateAmbience() async {
-        guard server != nil, !ambiencePool.isEmpty else { return }
+        guard hasActiveMediaSource, !ambiencePool.isEmpty else { return }
         for item in ambiencePool.dropFirst() {
             if Task.isCancelled { return }
             let target = item.imageTarget(server, kind: .backdrop, width: AmbiencePool.imageWidth)
             guard let url = target.url else { continue }
-            await AmbienceImageWarmup.warm(url, target.authHeader, server?.profile.imageCacheScope, 512)
+            await AmbienceImageWarmup.warm(url, target.authHeader, activeImageCacheScope, 512)
         }
         guard ambiencePool.count > 1, !reduceMotion else { return }
         // ## 为什么**不**按清单原建议「只在首页栈根可见时推进」

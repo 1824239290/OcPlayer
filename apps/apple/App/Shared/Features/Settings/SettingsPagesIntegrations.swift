@@ -24,15 +24,39 @@ struct JellyfinSettingsView: View {
         // 2026-10-22（B 方案）：设置页整体脱离 `Form`，改成 `ScrollView` + 玻璃卡片流
         // ——与 MoviePilot 下载页同一套承载；一段 = 一张 `SettingsGlassSection`。
         SettingsGlassPage {
-            SettingsGlassSection("当前服务器") {
-                KeyValueRow(label: "名称", value: app.server?.profile.serverName ?? "—")
-                SettingsGlassDivider()
-                KeyValueRow(
-                    label: "地址",
-                    value: (app.serverEndpointURL ?? app.server?.profile.baseURL)?.absoluteString ?? "—"
-                )
-                if let profile = app.server?.profile, !profile.addresses.isEmpty {
-                    serverAddressNote(profile)
+            if let source = app.activeFileSource {
+                SettingsGlassSection("当前文件媒体库") {
+                    KeyValueRow(label: "名称", value: source.displayName)
+                    SettingsGlassDivider()
+                    KeyValueRow(label: "类型", value: FileLibraryProjection.sourceKindLabel(source.kind))
+                    SettingsGlassDivider()
+                    KeyValueRow(label: "路径", value: source.rootPath)
+                    SettingsGlassDivider()
+                    SettingsActionRow("管理分类、扫描与刮削…", systemImage: "slider.horizontal.3") {
+                        app.openFileLibraryManagement()
+                    }
+                    SettingsGlassDivider()
+                    SettingsActionRow("添加分类目录…", systemImage: "folder.badge.plus") {
+                        app.addFileLibraryDraft = FileLibraryDraft(sourceID: source.sourceId)
+                    }
+                }
+            } else {
+                SettingsGlassSection("当前服务器") {
+                    KeyValueRow(label: "名称", value: app.server?.profile.serverName ?? "—")
+                    SettingsGlassDivider()
+                    KeyValueRow(
+                        label: "地址",
+                        value: (app.serverEndpointURL ?? app.server?.profile.baseURL)?.absoluteString ?? "—"
+                    )
+                    if let profile = app.server?.profile, !profile.addresses.isEmpty {
+                        serverAddressNote(profile)
+                    }
+                }
+            }
+
+            SettingsGlassSection("媒体来源") {
+                SettingsActionRow("切换媒体来源或添加文件媒体库…", systemImage: "externaldrive") {
+                    app.isMediaSourcesPresented = true
                 }
             }
 
@@ -62,13 +86,15 @@ struct JellyfinSettingsView: View {
                 ) {
                     app.reconnectFlow()
                 }
-                SettingsGlassDivider()
-                SettingsActionRow(
-                    "退出 Jellyfin",
-                    systemImage: "rectangle.portrait.and.arrow.right",
-                    role: .destructive
-                ) {
-                    confirmSignOut = true
+                if app.server != nil {
+                    SettingsGlassDivider()
+                    SettingsActionRow(
+                        "退出 Jellyfin",
+                        systemImage: "rectangle.portrait.and.arrow.right",
+                        role: .destructive
+                    ) {
+                        confirmSignOut = true
+                    }
                 }
             }
         }

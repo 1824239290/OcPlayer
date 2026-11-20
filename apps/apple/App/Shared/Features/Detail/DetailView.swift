@@ -296,6 +296,11 @@ struct DetailView: View {
             model.reloadAfterPlaybackTask?.cancel()
             model.reloadAfterPlaybackTask = Task { await model.reloadAfterPlayback() }
         }
+        .onChange(of: app.fileLibrary.metadataRevision) { _, _ in
+            guard app.isFileLibraryActive else { return }
+            model.reloadAfterPlaybackTask?.cancel()
+            model.reloadAfterPlaybackTask = Task { await model.reloadForMetadataChange() }
+        }
         .onDisappear {
             model.backdropArtwork.cancel()
             model.reloadAfterPlaybackTask?.cancel()
@@ -1348,6 +1353,18 @@ struct DetailView: View {
         playedActionError = nil
         defer { isUpdatingPlayed = false }
         do {
+            if let sourceID = app.activeFileSourceID {
+                let progress = try await app.fileLibrary.markPlayed(
+                    sourceID: sourceID,
+                    itemID: target.id,
+                    played: markAsPlayed
+                )
+                guard session == app.sessionGeneration else { return }
+                let state = FileLibraryProjection.playState(from: progress)
+                await model.applyPlayState(state, toItemID: target.id, persistToRepository: false)
+                Task { await app.loadHome() }
+                return
+            }
             // 已看标记的唯一写入口是仓储：网络成功后同一拍更新所有内存投影与 SQLite。
             let state = markAsPlayed
                 ? try await app.metadata.markPlayed(itemID: target.id)

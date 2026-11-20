@@ -25,6 +25,12 @@ public final class OcpFileLibrary: @unchecked Sendable {
         public let createdAt: Double
         public var id: String { sourceId }
     }
+    public struct LibraryRoot: Decodable, Sendable, Identifiable, Equatable {
+        public let rootId: String
+        public let rootPath: String
+        public let accessRef: String?
+        public var id: String { rootId }
+    }
     public struct Library: Decodable, Sendable, Identifiable {
         public let libraryId: String
         public let sourceId: String
@@ -33,7 +39,12 @@ public final class OcpFileLibrary: @unchecked Sendable {
         public let type: LibraryType
         public let revision: Int64
         public let createdAt: Double
+        public let roots: [LibraryRoot]?
         public var id: String { libraryId }
+        public var allRoots: [LibraryRoot] {
+            if let roots, !roots.isEmpty { return roots }
+            return [LibraryRoot(rootId: libraryId, rootPath: rootPath, accessRef: nil)]
+        }
     }
     public struct Item: Decodable, Sendable, Identifiable {
         public let sourceId: String
@@ -50,6 +61,11 @@ public final class OcpFileLibrary: @unchecked Sendable {
         public let metadata: JSONValue?
         public let matchStatus: String
         public let playable: Bool
+        public let seriesTitle: String?
+        public let seriesBackdropPath: String?
+        public let seriesPosterPath: String?
+        public let childCount: Int?
+        public let progress: Progress?
         public var id: String { "\(sourceId):\(itemId)" }
     }
     public struct Asset: Decodable, Sendable, Identifiable {
@@ -123,6 +139,7 @@ public final class OcpFileLibrary: @unchecked Sendable {
         public let rootPath: String
     }
     public struct Creation: Decodable, Sendable { public let library: Library; public let job: Job }
+    public struct RootAddition: Decodable, Sendable { public let library: Library; public let root: LibraryRoot; public let job: Job }
     public struct Page: Decodable, Sendable { public let items: [Item]; public let totalCount: Int64; public let startIndex: Int64 }
     public struct Detail: Decodable, Sendable { public let item: Item; public let assets: [Asset]; public let progress: Progress? }
     public struct Playback: Decodable, Sendable {
@@ -137,9 +154,13 @@ public final class OcpFileLibrary: @unchecked Sendable {
         public var search: String
         public var startIndex: Int64
         public var limit: Int
-        public init(sourceId: String, libraryId: String? = nil, type: LibraryType? = nil, parentId: String? = nil, search: String = "", startIndex: Int64 = 0, limit: Int = 50) {
+        public var sortBy: String?
+        public var sortAscending: Bool?
+        public var watchState: String?
+        public init(sourceId: String, libraryId: String? = nil, type: LibraryType? = nil, parentId: String? = nil, search: String = "", startIndex: Int64 = 0, limit: Int = 50, sortBy: String? = nil, sortAscending: Bool? = nil, watchState: String? = nil) {
             self.sourceId = sourceId; self.libraryId = libraryId; self.type = type; self.parentId = parentId
             self.search = search; self.startIndex = startIndex; self.limit = limit
+            self.sortBy = sortBy; self.sortAscending = sortAscending; self.watchState = watchState
         }
     }
     public struct Create: Encodable, Sendable {
@@ -244,6 +265,34 @@ public final class OcpFileLibrary: @unchecked Sendable {
         let _: Result = try await invoke("library.smb.credentials.restore", Input(sourceId: sourceId, rootUrl: rootURL, credential: credential))
     }
     public func create(_ input: Create) async throws -> Creation { try await invoke("library.create", input) }
+    public func addRoot(sourceId: String, libraryId: String, accessId: String, kind: String = "localFolder", rootPath: String) async throws -> RootAddition {
+        struct Input: Encodable {
+            let sourceId: String
+            let libraryId: String
+            let accessId: String
+            let kind: String
+            let rootPath: String
+        }
+        return try await invoke("library.root.add", Input(sourceId: sourceId, libraryId: libraryId, accessId: accessId, kind: kind, rootPath: rootPath))
+    }
+    public func renameLibrary(sourceId: String, libraryId: String, name: String) async throws -> Library {
+        struct Result: Decodable { let library: Library }
+        let result: Result = try await invoke("library.rename", ["sourceId": sourceId, "libraryId": libraryId, "name": name])
+        return result.library
+    }
+    public func deleteLibrary(sourceId: String, libraryId: String) async throws {
+        struct Result: Decodable { let deleted: Bool }
+        let _: Result = try await invoke("library.delete", ["sourceId": sourceId, "libraryId": libraryId])
+    }
+    public func removeRoot(sourceId: String, libraryId: String, rootId: String) async throws -> Library {
+        struct Result: Decodable { let library: Library }
+        let result: Result = try await invoke("library.root.remove", ["sourceId": sourceId, "libraryId": libraryId, "rootId": rootId])
+        return result.library
+    }
+    public func deleteSource(sourceId: String) async throws {
+        struct Result: Decodable { let deleted: Bool }
+        let _: Result = try await invoke("library.source.delete", ["sourceId": sourceId])
+    }
     public func sources() async throws -> [Source] {
         struct Result: Decodable { let sources: [Source] }
         let result: Result = try await invoke("library.sources.list", [:] as [String: String]); return result.sources
@@ -260,6 +309,12 @@ public final class OcpFileLibrary: @unchecked Sendable {
         struct Input: Encodable { let sourceId: String; let limit: Int }
         struct Result: Decodable { let items: [Item] }
         let result: Result = try await invoke("library.query.resume", Input(sourceId: sourceId, limit: limit))
+        return result.items
+    }
+    public func nextUp(sourceId: String, limit: Int = 20) async throws -> [Item] {
+        struct Input: Encodable { let sourceId: String; let limit: Int }
+        struct Result: Decodable { let items: [Item] }
+        let result: Result = try await invoke("library.query.nextUp", Input(sourceId: sourceId, limit: limit))
         return result.items
     }
     public func scan(sourceId: String, libraryId: String) async throws -> Job {
@@ -309,6 +364,13 @@ public final class OcpFileLibrary: @unchecked Sendable {
     public func recordProgress(_ progress: Progress) async throws -> Bool {
         struct Result: Decodable { let accepted: Bool; let progress: Progress? }
         let result: Result = try await invoke("library.progress.record", progress); return result.accepted
+    }
+    public func markPlayed(sourceId: String, itemId: String, played: Bool, recordedAt: Double = Date().timeIntervalSince1970) async throws -> Progress {
+        struct Input: Encodable { let sourceId: String; let itemId: String; let recordedAt: Double }
+        struct Result: Decodable { let progress: Progress }
+        let method = played ? "library.progress.markPlayed" : "library.progress.markUnplayed"
+        let result: Result = try await invoke(method, Input(sourceId: sourceId, itemId: itemId, recordedAt: recordedAt))
+        return result.progress
     }
 
     private func invoke<T: Decodable, Input: Encodable>(_ method: String, _ input: Input) async throws -> T {

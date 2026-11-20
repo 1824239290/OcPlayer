@@ -11,7 +11,7 @@ final class OcpFileLibraryTests: XCTestCase {
         XCTAssertEqual(capabilities.libraryTypes, [.movies, .tvshows])
         XCTAssertFalse(capabilities.aggregation)
         XCTAssertTrue(capabilities.tmdbScraping)
-        XCTAssertEqual(capabilities.schemaVersion, 4)
+        XCTAssertEqual(capabilities.schemaVersion, 5)
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }

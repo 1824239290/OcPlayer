@@ -96,11 +96,11 @@ struct UnifiedSearchContent: View {
         Group {
             switch source {
             case .library:
-                if app.server != nil {
+                if app.hasActiveMediaSource {
                     HomeSearchContent(query: $query)
                 } else {
                     PageFillingState {
-                        EmptyState(empty: "先连接服务器再搜索媒体库", systemImage: "wifi.exclamationmark")
+                        EmptyState(empty: "先选择媒体来源再搜索媒体库", systemImage: "wifi.exclamationmark")
                     }
                 }
             case .bangumi:

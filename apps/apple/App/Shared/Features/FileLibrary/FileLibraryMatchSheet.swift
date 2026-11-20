@@ -26,6 +26,10 @@ struct FileLibraryMatchSheet: View {
                     TextField("搜索片名", text: $query).onSubmit { Task { await search() } }
                     Button("搜索 TMDB") { Task { await search() } }
                         .disabled(searching || binding || query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !app.tmdb.isConfigured)
+                    if item.matchStatus == "matched" {
+                        Button("解除当前 TMDB 匹配", role: .destructive) { Task { await unbind() } }
+                            .disabled(searching || binding)
+                    }
                     Text("选择后保存为手动匹配，目录重扫不会覆盖。季和集沿用整剧的匹配。")
                         .font(.caption).foregroundStyle(.secondary)
                 }
@@ -56,6 +60,12 @@ struct FileLibraryMatchSheet: View {
             }
             .navigationTitle("手动匹配 TMDB")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() }.disabled(binding) } }
+            .task {
+                if results == nil, app.tmdb.isConfigured,
+                   !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    await search()
+                }
+            }
         }
         .interactiveDismissDisabled(binding)
         #if os(macOS)
@@ -64,7 +74,7 @@ struct FileLibraryMatchSheet: View {
     }
 
     private func search() async {
-        guard !binding, let key = app.tmdb.rawAPIKey, app.activeFileSourceID == item.sourceId else { return }
+        guard !binding, let key = app.tmdb.rawAPIKey else { return }
         generation &+= 1
         let requestGeneration = generation
         let term = query
@@ -72,18 +82,28 @@ struct FileLibraryMatchSheet: View {
         defer { if generation == requestGeneration { searching = false } }
         do {
             let result = try await app.fileLibrary.candidates(item: item, query: term, key: key, apiBase: app.fileLibraryAPIBase, language: app.tmdb.language)
-            guard !Task.isCancelled, generation == requestGeneration, app.activeFileSourceID == item.sourceId else { return }
+            guard !Task.isCancelled, generation == requestGeneration else { return }
             results = result
         } catch { if !Task.isCancelled, generation == requestGeneration { self.error = error.localizedDescription } }
     }
 
     private func bind(_ candidate: OcpFileLibrary.MatchCandidate, version: String) async {
-        guard !binding, app.activeFileSourceID == item.sourceId else { return }
+        guard !binding else { return }
         binding = true; error = nil
         defer { binding = false }
         do {
             try await app.fileLibrary.bind(item: item, inputVersion: version, tmdbID: candidate.id)
             dismiss()
         } catch { self.error = error.localizedDescription; results = nil }
+    }
+
+    private func unbind() async {
+        guard !binding else { return }
+        binding = true; error = nil
+        defer { binding = false }
+        do {
+            try await app.fileLibrary.unbind(item: item)
+            dismiss()
+        } catch { self.error = error.localizedDescription }
     }
 }

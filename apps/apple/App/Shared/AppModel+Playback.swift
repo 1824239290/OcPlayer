@@ -27,10 +27,10 @@ extension AppModel {
 
     // MARK: - 播放串联（UI 只调这里，不自己拼 URL）
 
-    func play(_ item: MediaItem, resumeSeconds: Double?) {
+    func play(_ item: MediaItem, resumeSeconds: Double?, assetID: String? = nil) {
         // 同一剧目重复点击：复用在飞的解析任务，不要 cancel 重来——
         // 否则每次点击都打断 PlaybackInfo 请求，越点越慢、永远跑不完。
-        if case .loading = playbackPreparation, retryPlaybackItem?.id == item.id {
+        if case .loading = playbackPreparation, retryPlaybackItem?.id == item.id, assetID == nil {
             return
         }
         cancelPlaybackOpen()
@@ -50,7 +50,11 @@ extension AppModel {
                     self.playbackOpenTask = nil
                 }
             }
-            await self.openPlayback(item: item, resumeSeconds: resumeSeconds)
+            if self.activeFileSourceID != nil {
+                await self.openFileLibraryPlayback(item: item, resumeSeconds: resumeSeconds, assetID: assetID)
+            } else {
+                await self.openPlayback(item: item, resumeSeconds: resumeSeconds)
+            }
             AppDiagnostics.logInfo("play() 加载态结束", fields: ["preparation": .string(String(describing: self.playbackPreparation))])
         }
     }
@@ -588,6 +592,12 @@ extension AppModel {
                 request: request,
                 serverProfileID: server.profile.id
             )
+        } else if let item, let sourceID = activeFileSourceID {
+            context = .fileLibrary(
+                item: item,
+                request: request,
+                sourceID: sourceID
+            )
         } else {
             context = .standalone(request: request)
         }
@@ -605,6 +615,10 @@ extension AppModel {
 
     /// 剧集级 TMDB ID（TheIntroDB 跳过片头源用）。
     func seriesTmdbID(for seriesID: String) async -> Int? {
+        if let sourceID = activeFileSourceID {
+            guard let detail = try? await fileLibrary.detail(sourceID: sourceID, itemID: seriesID) else { return nil }
+            return FileLibraryProjection.mediaItem(detail.item).tmdbID.flatMap(Int.init)
+        }
         // 仓储的条目投影里就有 tmdbID（进过详情的剧集直接命中），
         // 不必为弹幕链路重拉一次含 People/Genres 的完整详情。
         if let cached = await metadata.cachedItem(itemID: seriesID),
@@ -939,7 +953,7 @@ extension AppModel {
     /// Bangumi 章节 sort，找不到精确匹配就不动。失败静默，错误进诊断日志。
     /// ⚠️ 每个提前返回都要留日志：这条链路全是静默 return，出问题时没有
     /// 任何线索（此前整份日志里成功/失败记录都是 0 条）。
-    private func markWatchedOnBangumi(for item: MediaItem) {
+    func markWatchedOnBangumi(for item: MediaItem) {
         // 集成停用（设置页「启用 Bangumi」关闭）时连日志都不发网络：第一个闸。
         // 用带默认值的读取：这个开关的默认值是 true 但从不落盘（Toggle 只写拨过的
         // 值），`bool(forKey:)` 对从未拨过的人返回 false，会把「默认开」误判成停用

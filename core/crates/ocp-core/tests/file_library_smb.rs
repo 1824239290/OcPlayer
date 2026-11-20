@@ -159,7 +159,7 @@ fn smb_categories_scrape_large_range_and_reopen_without_tmdb() {
     };
     assert_eq!(
         app.ok("library.capabilities", json!({}))["schemaVersion"],
-        4
+        5
     );
     let access = app.ok("library.smb.access.prepare", app.connection());
     assert_eq!(

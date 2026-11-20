@@ -45,6 +45,16 @@ final class AppModel {
     let store: ServerStore
     let fileLibrary: FileLibraryCoordinator
     var activeFileSourceID: String?
+    var activeFileSource: OcpFileLibrary.Source? {
+        guard let id = activeFileSourceID else { return nil }
+        return fileLibrary.sources.first { $0.sourceId == id }
+    }
+    var isFileLibraryActive: Bool { activeFileSourceID != nil }
+    var hasActiveMediaSource: Bool { server != nil || activeFileSourceID != nil }
+    var activeImageCacheScope: String? {
+        if let server { return server.profile.imageCacheScope }
+        return activeFileSourceID.map { "file-library:\($0)" }
+    }
     var mediaLibrarySheet: MediaLibrarySheet?
     var isMediaSourcesPresented: Bool {
         get { if case .sources = mediaLibrarySheet { true } else { false } }
@@ -53,6 +63,10 @@ final class AppModel {
     var addFileLibraryDraft: FileLibraryDraft? {
         get { if case let .add(draft) = mediaLibrarySheet { draft } else { nil } }
         set { mediaLibrarySheet = newValue.map(MediaLibrarySheet.add) }
+    }
+    func openFileLibraryManagement() {
+        guard let sourceID = activeFileSourceID else { return }
+        mediaLibrarySheet = .manage(sourceID: sourceID)
     }
     var fileLibraryProgressTask: Task<Void, Never>?
     var fileLibraryPlaybackIdentity: FileLibraryPlaybackIdentity?
@@ -1007,5 +1021,14 @@ final class AppModel {
         guard let profile = server?.profile else { return "" }
         let version = profile.serverVersion.map { " \($0)" } ?? ""
         return "\(profile.serverName) · \(profile.kind.displayName)\(version)"
+    }
+
+    var activeSourceLabel: String {
+        if server != nil { return serverLabel }
+        if let source = activeFileSource {
+            if source.kind == "localFolder" { return "本地媒体库" }
+            return "\(source.displayName) · \(FileLibraryProjection.sourceKindLabel(source.kind))"
+        }
+        return activeFileSourceID != nil ? "本地媒体库" : ""
     }
 }

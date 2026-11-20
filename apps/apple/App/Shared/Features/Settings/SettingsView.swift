@@ -89,7 +89,7 @@ struct SettingsView: View {
     // MARK: - 值预览
 
     private var jellyfinValue: String {
-        app.server?.profile.serverName ?? "未连接"
+        app.activeFileSource?.displayName ?? app.server?.profile.serverName ?? "未连接"
     }
 
     /// 以 `isAuthenticated` 为准（登录的唯一门控信号），与子页口径一致：

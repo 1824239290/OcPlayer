@@ -28,6 +28,10 @@ struct HomeView: View {
     /// 底部的放大镜 Tab（见 `HomeSearchView`），这里恒为空、分支不生效。
     @State private var searchText = ""
     @State private var searchSource = UnifiedSearchSource.defaultSource
+    @State private var renamingLibrary: MediaLibrary?
+    @State private var renameLibraryInput = ""
+    @State private var deletingLibrary: MediaLibrary?
+    @State private var matchingFileItemID: String?
 
     private var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -37,7 +41,7 @@ struct HomeView: View {
         Group {
             if isSearching {
                 UnifiedSearchContent(query: $searchText, source: searchSource)
-            } else if app.server == nil {
+            } else if !app.hasActiveMediaSource {
                 noServerState
             } else if homeSections.isEmpty {
                 // 栏目全关：不铺骨架、也不说「服务器没有内容」——那两样都会把
@@ -60,8 +64,58 @@ struct HomeView: View {
         }
         .motion(Motion.slide, value: isSearching)
         .navigationTitle("首页")
+        .alert(
+            "重命名分类",
+            isPresented: Binding(
+                get: { renamingLibrary != nil },
+                set: { if !$0 { renamingLibrary = nil } }
+            ),
+            presenting: renamingLibrary
+        ) { target in
+            TextField("分类名称", text: $renameLibraryInput)
+            Button("取消", role: .cancel) { renamingLibrary = nil }
+            Button("保存") {
+                let newName = renameLibraryInput.trimmingCharacters(in: .whitespacesAndNewlines)
+                renamingLibrary = nil
+                guard !newName.isEmpty, let sourceID = app.activeFileSourceID else { return }
+                Task {
+                    try? await app.fileLibrary.renameLibrary(sourceID: sourceID, libraryID: target.id, name: newName)
+                }
+            }
+        } message: { target in
+            Text("为「\(target.name)」设置新的显示名称。")
+        }
+        .alert(
+            "删除分类？",
+            isPresented: Binding(
+                get: { deletingLibrary != nil },
+                set: { if !$0 { deletingLibrary = nil } }
+            ),
+            presenting: deletingLibrary
+        ) { target in
+            Button("取消", role: .cancel) { deletingLibrary = nil }
+            Button("删除分类", role: .destructive) {
+                deletingLibrary = nil
+                guard let sourceID = app.activeFileSourceID else { return }
+                Task {
+                    try? await app.fileLibrary.deleteLibrary(sourceID: sourceID, libraryID: target.id)
+                }
+            }
+        } message: { target in
+            Text("将从媒体库移除「\(target.name)」及其索引和观看记录，不会删除你的视频文件。")
+        }
+        .sheet(
+            isPresented: Binding(
+                get: { matchingFileItemID != nil },
+                set: { if !$0 { matchingFileItemID = nil } }
+            )
+        ) {
+            if let sourceID = app.activeFileSourceID, let itemID = matchingFileItemID {
+                FileLibraryDetailMatchHost(sourceID: sourceID, itemID: itemID)
+            }
+        }
         #if os(macOS)
-        .navigationSubtitle(app.server == nil ? "未连接" : app.serverLabel)
+        .navigationSubtitle(app.hasActiveMediaSource ? app.activeSourceLabel : "未连接")
         // 常规布局的搜索入口：窗口工具栏搜索框。iOS 走底部放大镜 Tab。
         .unifiedSearchField(query: $searchText, source: $searchSource)
         #else
@@ -86,6 +140,24 @@ struct HomeView: View {
     /// RootView，macOS 文件菜单 Cmd+O / Cmd+Shift+O 走同一对标志。
     private var openMediaMenu: some View {
         Menu {
+            Button {
+                app.isMediaSourcesPresented = true
+            } label: {
+                Label("切换媒体来源…", systemImage: "externaldrive")
+            }
+            if let sourceID = app.activeFileSourceID {
+                Button {
+                    app.openFileLibraryManagement()
+                } label: {
+                    Label("管理文件媒体库…", systemImage: "slider.horizontal.3")
+                }
+                Button {
+                    app.addFileLibraryDraft = FileLibraryDraft(sourceID: sourceID)
+                } label: {
+                    Label("添加分类目录…", systemImage: "folder.badge.plus")
+                }
+            }
+            Divider()
             Button {
                 app.isLocalFileImporterPresented = true
             } label: {
@@ -117,7 +189,7 @@ struct HomeView: View {
         }
         .help("刷新首页")
         .accessibilityLabel("刷新首页")
-        .disabled(app.server == nil)
+        .disabled(!app.hasActiveMediaSource)
     }
 
     private var noServerState: some View {
@@ -161,19 +233,40 @@ struct HomeView: View {
                         .padding(.horizontal, contentLeading)
                         .padding(.top, 12)
                 }
+                if let sourceID = app.activeFileSourceID {
+                    FileLibraryStatusBanner(sourceID: sourceID)
+                        .padding(.horizontal, contentLeading)
+                        .padding(.top, 12)
+                }
                 ForEach(homeSections) { section in
                     sectionRail(section)
                 }
 
                 if allConfiguredSectionsEmpty {
-                    EmptyState(
-                        empty: "媒体库暂无可展示内容",
-                        systemImage: "sparkles",
-                        message: "服务器上还没有可展示的内容，媒体库可能正在建立索引。"
-                    )
-                    .frame(maxWidth: .infinity, minHeight: 280)
-                    .padding(.top, 40)
-                    .transition(.section)
+                    if let sourceID = app.activeFileSourceID, app.libraries.isEmpty {
+                        EmptyState(
+                            empty: "还没有分类目录",
+                            systemImage: "folder.badge.plus",
+                            message: "添加电影或电视剧目录后，扫描与刮削的结果会自动呈现在首页。",
+                            actionTitle: "添加分类目录"
+                        ) {
+                            app.addFileLibraryDraft = FileLibraryDraft(sourceID: sourceID)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 280)
+                        .padding(.top, 40)
+                        .transition(.section)
+                    } else {
+                        EmptyState(
+                            empty: "媒体库暂无可展示内容",
+                            systemImage: "sparkles",
+                            message: app.isFileLibraryActive
+                                ? "目录可能仍在扫描中，或在右上角菜单中检查扫描与刮削任务。"
+                                : "服务器上还没有可展示的内容，媒体库可能正在建立索引。"
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 280)
+                        .padding(.top, 40)
+                        .transition(.section)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -246,6 +339,18 @@ struct HomeView: View {
                             open()
                         }
                     }
+                    .contextMenu {
+                        if app.isFileLibraryActive,
+                           (item.kind == .movie || item.kind == .series),
+                           app.tmdb.isConfigured,
+                           app.fileLibrary.capabilities?.tmdbScraping == true {
+                            Button {
+                                matchingFileItemID = item.id
+                            } label: {
+                                Label(item.tmdbID == nil ? "手动匹配 TMDB…" : "重新匹配 TMDB…", systemImage: "magnifyingglass")
+                            }
+                        }
+                    }
                 }
                 .transition(.section)
             }
@@ -261,9 +366,40 @@ struct HomeView: View {
                     ) {
                         app.openLibrary(library)
                     }
-                    // 卡片进入可视区时解析一次封面（有界、失败不重试）。
-                    .onAppear {
-                        Task { await app.resolveLibraryCoverIfNeeded(for: library) }
+                    .contextMenu {
+                        if let sourceID = app.activeFileSourceID {
+                            Button {
+                                renameLibraryInput = library.name
+                                renamingLibrary = library
+                            } label: {
+                                Label("重命名分类…", systemImage: "pencil")
+                            }
+                            Button {
+                                app.addFileLibraryDraft = FileLibraryDraft(sourceID: sourceID, targetLibraryID: library.id)
+                            } label: {
+                                Label("追加文件夹到此分类…", systemImage: "folder.badge.plus")
+                            }
+                            Button {
+                                Task { try? await app.fileLibrary.scan(sourceID: sourceID, libraryID: library.id) }
+                            } label: {
+                                Label("扫描此分类", systemImage: "arrow.triangle.2.circlepath")
+                            }
+                            Divider()
+                            Button {
+                                app.openFileLibraryManagement()
+                            } label: {
+                                Label("管理分类与文件夹…", systemImage: "slider.horizontal.3")
+                            }
+                            Button(role: .destructive) {
+                                deletingLibrary = library
+                            } label: {
+                                Label("删除分类…", systemImage: "trash")
+                            }
+                        }
+                    }
+                    // 卡片进入可视区或文件库元数据更新时解析随机海报封面（有界、凑齐 4 张后稳定不闪）。
+                    .task(id: "\(library.id)-\(app.fileLibrary.metadataRevision)-\(app.libraryCoverURLs(for: library).count)") {
+                        await app.resolveLibraryCoverIfNeeded(for: library)
                     }
                 }
                 .transition(.section)
@@ -551,10 +687,10 @@ struct HomeSearchContent: View {
 
     /// 全库搜索一页（电影 + 剧集，与首页卡片粒度一致）。
     private func runSearch(reset: Bool) async {
-        guard let server = app.server else { return }
+        guard app.hasActiveMediaSource else { return }
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else { return }
-        // 会话代次：搜索在途时切了服务器，旧服务器的结果不能落进新会话。
+        // 会话代次：搜索在途时切了来源，旧来源的结果不能落进新会话。
         let generation = app.sessionGeneration
 
         let loadID = UUID()
@@ -573,6 +709,36 @@ struct HomeSearchContent: View {
         }
 
         do {
+            if let sourceID = app.activeFileSourceID {
+                let startIndex = reset ? 0 : searchNextStartIndex
+                let page = try await app.loadFileLibraryPage(
+                    sourceID: sourceID,
+                    libraryID: nil,
+                    searchTerm: term,
+                    sort: nil,
+                    watchState: nil,
+                    startIndex: startIndex,
+                    limit: Self.searchPageSize
+                )
+                guard !Task.isCancelled, activeSearchID == loadID else { return }
+                guard app.fileLibrarySessionIsCurrent(generation, sourceID: sourceID) else {
+                    query = ""
+                    return
+                }
+                if reset {
+                    searchResults = page.items
+                } else {
+                    var seen = Set(searchResults.map(\.id))
+                    searchResults.append(contentsOf: page.items.filter { seen.insert($0.id).inserted })
+                }
+                searchTotalCount = page.totalRecordCount
+                searchNextStartIndex = startIndex + page.items.count
+                searchLastPageWasFull = page.items.count >= Self.searchPageSize
+                searchLanded = true
+                return
+            }
+
+            guard let server = app.server else { return }
             let descriptor = MediaPageDescriptor(
                 parentID: nil, kinds: [.movie, .series], recursive: true,
                 sort: nil, watchState: nil, searchTerm: term)

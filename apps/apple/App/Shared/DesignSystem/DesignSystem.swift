@@ -88,7 +88,6 @@ extension MediaItem {
     /// 一次就 404 一次（同一会话里反复出现，见 `图片请求返回非 200` 日志）。
     func imageTarget(_ server: (any MediaServer)?, kind: CardImage, width: Int)
         -> (url: URL?, authHeader: String?) {
-        guard let server else { return (nil, nil) }
         let tag: String?
         let type: ItemImageType
         let targetItemID: String
@@ -102,6 +101,10 @@ extension MediaItem {
         case .logo:
             (tag, type, targetItemID) = (logoImageTag, .logo, logoItemID)
         }
+        if let url = FileLibraryArtwork.imageURL(forTag: tag, width: width) {
+            return (url, nil)
+        }
+        guard let server else { return (nil, nil) }
         guard tag != nil else { return (nil, server.authorizationHeader) }
         let url = try? server.imageURL(itemID: targetItemID, type: type, maxWidth: width, tag: tag)
         return (url, server.authorizationHeader)
@@ -129,8 +132,14 @@ extension MediaItem {
     /// 详情页分集列表仍走 `episodeThumbTarget` —— 那里展示父级图会像串了集。
     func homeStillImageTarget(_ server: (any MediaServer)?, width: Int)
         -> (url: URL?, authHeader: String?) {
-        guard let server, let choice = homeStillImageChoice else {
+        guard let choice = homeStillImageChoice else {
             return (nil, server?.authorizationHeader)
+        }
+        if let url = FileLibraryArtwork.imageURL(forTag: choice.tag, width: width) {
+            return (url, nil)
+        }
+        guard let server else {
+            return (nil, nil)
         }
         let type: ItemImageType
         switch choice.kind {
@@ -304,7 +313,12 @@ struct PosterCard: View {
     var onTap: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.imageCacheScope) private var environmentCacheScope
     @State private var hovering = false
+
+    private var effectiveCacheScope: String? {
+        server?.profile.imageCacheScope ?? environmentCacheScope
+    }
 
     /// 跟随列宽＝紧凑海报墙版式（两行居中标题区），见类型注释。
     private var fillsColumn: Bool { width == nil }
@@ -316,19 +330,23 @@ struct PosterCard: View {
                 // 覆盖图优先，但它**免鉴权**（TMDB CDN 不校验）：带上服务端凭证
                 // 既无意义、也把凭证多送一处。
                 let url = posterOverride ?? serverTarget.url
+                let isFileLibraryCard = posterOverride == nil && (server == nil || FileLibraryArtwork.isFileLibraryTag(item.primaryImageTag))
                 MediaArtwork(
                     url: url,
                     authHeader: posterOverride == nil ? serverTarget.authHeader : nil,
-                    cacheScope: posterOverride == nil ? server?.profile.imageCacheScope : nil,
+                    cacheScope: posterOverride == nil ? effectiveCacheScope : nil,
                     shape: .poster,
                     width: width,
                     // 解码预算不写死：按卡片实际显示尺寸 × 屏幕缩放算（见 MediaArtwork）。
                     // 合集在服务端不带图是常态（新建的合集默认没有封面），
                     // 给它一个「一叠海报」的图标，别显示成一张破图。
                     emptyIcon: item.kind == .boxSet ? "rectangle.stack.fill" : "photo",
-                    // 边框跟着**这张图自己的比例**走（服务端 `PrimaryImageAspectRatio`）：
-                    // 不同剧集的海报 0.667 / 0.70 / 0.75 都有，写死 2:3 就会裁或留边。
-                    aspectRatio: item.primaryImageAspectRatio.map { CGFloat($0) }
+                    // 本地文件媒体库的海报来自 TMDB，番剧（~0.707）与电影（0.667）比例略有差异；
+                    // 统一锁定与骨架一致的 `Metrics.posterFallbackRatio`（0.70）并采用 `.fill` 轻微放大铺满裁切，
+                    // 既保证满屏海报无灰边、不留缝，也让所有已匹配/未匹配卡片高度完全对齐。
+                    // Jellyfin / Emby 维持服务端 `PrimaryImageAspectRatio` 的原样逻辑。
+                    aspectRatio: isFileLibraryCard ? Metrics.posterFallbackRatio : item.primaryImageAspectRatio.map { CGFloat($0) },
+                    scaling: isFileLibraryCard ? .fill : nil
                 )
                 if fillsColumn {
                     columnMeta
@@ -402,7 +420,12 @@ struct LatestCard: View {
     var onTap: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.imageCacheScope) private var environmentCacheScope
     @State private var hovering = false
+
+    private var effectiveCacheScope: String? {
+        server?.profile.imageCacheScope ?? environmentCacheScope
+    }
 
     /// 「年份 · 首类型」。Jellyfin 的 `Genres` 是数组，首项就是主类型。
     private var metaLine: String? {
@@ -423,7 +446,7 @@ struct LatestCard: View {
                 MediaArtwork(
                     url: target.url,
                     authHeader: target.authHeader,
-                    cacheScope: server?.profile.imageCacheScope,
+                    cacheScope: effectiveCacheScope,
                     shape: .still,
                     width: width
                 )
@@ -484,7 +507,12 @@ struct LibraryCard: View {
     var onTap: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.imageCacheScope) private var environmentCacheScope
     @State private var hovering = false
+
+    private var effectiveCacheScope: String? {
+        server?.profile.imageCacheScope ?? environmentCacheScope
+    }
 
     private var coverTarget: (url: URL?, authHeader: String?) {
         guard let server, library.primaryImageTag != nil else { return (nil, nil) }
@@ -497,16 +525,18 @@ struct LibraryCard: View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 0) {
                 let target = coverTarget
-                if target.url == nil, !collageURLs.isEmpty {
+                if target.url == nil, (!collageURLs.isEmpty || server == nil) {
                     LibraryCoverCollage(
                         urls: Array(collageURLs.prefix(4)),
+                        title: library.name,
                         authHeader: server?.authorizationHeader,
+                        cacheScope: effectiveCacheScope,
                         width: width)
                 } else {
                     MediaArtwork(
                         url: target.url,
                         authHeader: target.authHeader,
-                        cacheScope: server?.profile.imageCacheScope,
+                        cacheScope: effectiveCacheScope,
                         shape: .still,
                         width: width,
                         // 合集库（UserView 的 CollectionType = boxsets）在服务端没有封面图
@@ -543,60 +573,91 @@ struct LibraryCard: View {
 /// 每格都 `scaledToFill` + 裁切，所以任何张数都恰好填满、不留缝也不变形。
 private struct LibraryCoverCollage: View {
     let urls: [URL]
+    let title: String
     let authHeader: String?
+    var cacheScope: String? = nil
     let width: CGFloat
 
     private var height: CGFloat { width * 9.0 / 16.0 }
 
     var body: some View {
-        Group {
-            switch urls.count {
-            case 0:
-                Rectangle().fill(Metrics.placeholderFill)
-            case 1:
-                cell(urls[0]).frame(width: width, height: height)
-            case 2:
-                HStack(spacing: 0) {
-                    cell(urls[0])
-                    cell(urls[1])
-                }
-                .frame(width: width, height: height)
-            case 3:
-                VStack(spacing: 0) {
+        ZStack {
+            Group {
+                switch urls.count {
+                case 0:
+                    LinearGradient(
+                        colors: [Color(white: 0.24), Color(white: 0.14)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                case 1:
+                    cell(urls[0], cellWidth: width, cellHeight: height)
+                case 2:
                     HStack(spacing: 0) {
-                        cell(urls[0])
-                        cell(urls[1])
+                        cell(urls[0], cellWidth: width / 2, cellHeight: height)
+                        cell(urls[1], cellWidth: width / 2, cellHeight: height)
                     }
-                    cell(urls[2]).frame(height: height / 2)
+                case 3:
+                    VStack(spacing: 0) {
+                        HStack(spacing: 0) {
+                            cell(urls[0], cellWidth: width / 2, cellHeight: height / 2)
+                            cell(urls[1], cellWidth: width / 2, cellHeight: height / 2)
+                        }
+                        cell(urls[2], cellWidth: width, cellHeight: height / 2)
+                    }
+                default:
+                    VStack(spacing: 0) {
+                        HStack(spacing: 0) {
+                            cell(urls[0], cellWidth: width / 2, cellHeight: height / 2)
+                            cell(urls[1], cellWidth: width / 2, cellHeight: height / 2)
+                        }
+                        HStack(spacing: 0) {
+                            cell(urls[2], cellWidth: width / 2, cellHeight: height / 2)
+                            cell(urls[3], cellWidth: width / 2, cellHeight: height / 2)
+                        }
+                    }
                 }
-                .frame(width: width, height: height)
-            default:
-                VStack(spacing: 0) {
-                    HStack(spacing: 0) {
-                        cell(urls[0])
-                        cell(urls[1])
-                    }
-                    HStack(spacing: 0) {
-                        cell(urls[2])
-                        cell(urls[3])
-                    }
-                }
-                .frame(width: width, height: height)
             }
+            .frame(width: width, height: height)
+
+            // 暗色遮罩：压低海报拼图亮度并增强层次感，让居中的媒体库自定义名称清晰易读。
+            LinearGradient(
+                colors: [
+                    Color.black.opacity(0.30),
+                    Color.black.opacity(0.48),
+                    Color.black.opacity(0.36)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            Text(title)
+                .font(.system(size: max(22, min(32, width * 0.115)), weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.72)
+                .shadow(color: .black.opacity(0.65), radius: 8, y: 2)
+                .padding(.horizontal, 18)
         }
+        .frame(width: width, height: height)
         .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius))
+        .overlay {
+            RoundedRectangle(cornerRadius: Metrics.cardRadius)
+                .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+        }
     }
 
-    /// 一格。宽高都由外层 HStack / VStack 定，图**铺满裁切**（`.fill`——拼图必须
-    /// 不留缝，这里刻意不用卡片默认的 `.fit`）。解码预算按格子实际尺寸算：格宽固定，
-    /// 但长边是「撑满后的宽」，按 `width` 的两倍给足以覆盖 2×2 的每一格。
-    private func cell(_ url: URL) -> some View {
+    /// 一格。显式锁定格宽格高并 `.fill` 铺满裁切，防止 2×2 拼图内各张不同比例的番剧海报互相挤压或留缝。
+    private func cell(_ url: URL, cellWidth: CGFloat, cellHeight: CGFloat) -> some View {
         RemoteImage(
             url: url,
             authHeader: authHeader,
+            cacheScope: cacheScope,
             maxPixelSize: Int(width * 2),
             scaling: .fill
         )
+        .frame(width: cellWidth, height: cellHeight)
         .clipped()
     }
 }
@@ -611,7 +672,12 @@ struct StillCard: View {
     var onTap: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.imageCacheScope) private var environmentCacheScope
     @State private var hovering = false
+
+    private var effectiveCacheScope: String? {
+        server?.profile.imageCacheScope ?? environmentCacheScope
+    }
 
     init(
         item: MediaItem,
@@ -665,7 +731,7 @@ struct StillCard: View {
                 MediaArtwork(
                     url: target.url,
                     authHeader: target.authHeader,
-                    cacheScope: server?.profile.imageCacheScope,
+                    cacheScope: effectiveCacheScope,
                     shape: .still,
                     width: width
                 ) {

@@ -49,7 +49,7 @@ struct AmbienceTarget: Equatable {
     static func sessionPool(_ app: AppModel) -> AmbienceTarget? {
         let target = app.currentAmbienceTarget
         guard target.url != nil else { return nil }
-        return AmbienceTarget(url: target.url, authHeader: target.authHeader, cacheScope: app.server?.profile.imageCacheScope, scrim: .home)
+        return AmbienceTarget(url: target.url, authHeader: target.authHeader, cacheScope: app.activeImageCacheScope, scrim: .home)
     }
 
     /// 空 URL 的声明视同"没有氛围"：页面回退 `Color.pageBackground` 纯色底，

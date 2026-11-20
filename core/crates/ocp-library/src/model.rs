@@ -70,6 +70,15 @@ pub struct Source {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct LibraryRoot {
+    pub root_id: String,
+    pub root_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub access_ref: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct Library {
     pub library_id: String,
     pub source_id: String,
@@ -79,6 +88,8 @@ pub struct Library {
     pub library_type: LibraryType,
     pub revision: i64,
     pub created_at: f64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub roots: Vec<LibraryRoot>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -98,6 +109,16 @@ pub struct Item {
     pub metadata: Option<serde_json::Value>,
     pub match_status: String,
     pub playable: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub series_title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub series_backdrop_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub series_poster_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub child_count: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress: Option<Progress>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -150,6 +171,12 @@ pub struct Query {
     pub start_index: i64,
     #[serde(default = "default_limit")]
     pub limit: i64,
+    #[serde(default)]
+    pub sort_by: Option<String>,
+    #[serde(default)]
+    pub sort_ascending: Option<bool>,
+    #[serde(default)]
+    pub watch_state: Option<String>,
 }
 
 fn default_limit() -> i64 {

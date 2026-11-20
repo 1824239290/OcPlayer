@@ -2,6 +2,7 @@ import AppDesignKit
 import CoreModel
 import JellyfinKit
 import MetadataKit
+import OcPlayerCore
 import SwiftUI
 
 /// 详情页的数据面视图模型：详情/季/集/类似的加载、缓存与选中态。
@@ -119,6 +120,10 @@ final class DetailViewModel {
             lockBackdropTargetsIfNeeded()
         }
     }
+
+    /// 文件媒体库原始条目与季记录（供永久 TMDB overlay 与手动匹配使用）。
+    private(set) var fileLibraryItem: OcpFileLibrary.Item?
+    @ObservationIgnored private var fileLibrarySeasonItems: [String: OcpFileLibrary.Item] = [:]
 
     /// 首帧背景图用的 overlay 是否已经读过（真/假决定 `backdropTarget` 能不能锁定）。
     ///
@@ -349,7 +354,7 @@ final class DetailViewModel {
             // 只锁非空：算不出图时留给下一个时点（详情落地 / TMDB 补齐）。
             guard resolved.url != nil else { continue }
             lockedBackdropTargets[width] = BackdropSourceLatch.Target(
-                url: resolved.url, authHeader: resolved.authHeader, cacheScope: app?.server?.profile.imageCacheScope
+                url: resolved.url, authHeader: resolved.authHeader, cacheScope: app?.activeImageCacheScope
             )
         }
     }
@@ -397,7 +402,7 @@ final class DetailViewModel {
         self.app = app
         attachedSessionGeneration = app.sessionGeneration
         let target = app.currentAmbienceTarget
-        backdropArtwork.captureEntry(target: .init(url: target.url, authHeader: target.authHeader, cacheScope: app.server?.profile.imageCacheScope))
+        backdropArtwork.captureEntry(target: .init(url: target.url, authHeader: target.authHeader, cacheScope: app.activeImageCacheScope))
     }
 
     // MARK: - 选中
@@ -432,7 +437,11 @@ final class DetailViewModel {
     // MARK: - 加载
 
     func load() async {
-        guard let app, app.server != nil else { return }
+        guard let app, app.hasActiveMediaSource else { return }
+        if let sourceID = app.activeFileSourceID {
+            await loadFileLibrary(app: app, sourceID: sourceID)
+            return
+        }
         // 来源解析必须早于详情内容落地；后续数据变化仅补齐尚未锁定的来源。
         await resolveBackdropSource()
         // 来源解析完成后准备实际像素，内存命中时可直接提交。
@@ -660,8 +669,85 @@ final class DetailViewModel {
     private func prepareBackdrop() {
         let target = backdropTarget(width: DetailAmbienceImage.artURLWidth)
         let snapshot = lockedBackdropTargets[DetailAmbienceImage.artURLWidth]
-            ?? .init(url: target.url, authHeader: target.authHeader, cacheScope: app?.server?.profile.imageCacheScope)
+            ?? .init(url: target.url, authHeader: target.authHeader, cacheScope: app?.activeImageCacheScope)
         backdropArtwork.prepare(target: snapshot)
+    }
+
+    /// 文件媒体库详情加载：全部从 `Library.sqlite` 永久索引与元数据快照投影，不进入 `Media.sqlite`。
+    private func loadFileLibrary(app: AppModel, sourceID: String) async {
+        episodeReloadAttemptCount = 0
+        bangumiCandidates = []
+        isLoading = detail == nil
+        loadError = nil
+        episodeLoadError = nil
+        staleNotice = nil
+
+        let generation = app.sessionGeneration
+        do {
+            let fetched = try await app.fileLibrary.detail(sourceID: sourceID, itemID: item.id)
+            guard !Task.isCancelled, app.fileLibrarySessionIsCurrent(generation, sourceID: sourceID) else { return }
+            fileLibraryItem = fetched.item
+            let projected = FileLibraryProjection.mediaItem(fetched.item, progressOverride: fetched.progress)
+            tmdbOverlay = FileLibraryProjection.tmdbOverlay(for: fetched.item)
+            backdropLatch.markResolved()
+            lockBackdropTargetsIfNeeded()
+            prepareBackdrop()
+
+            var projectedSeasons: [MediaItem] = []
+            var initialSeasonID: String?
+            var initialEpisodes: [MediaItem] = []
+            fileLibrarySeasonItems = [:]
+            if projected.kind == .series {
+                let seasonsPage = try await app.fileLibrary.page(.init(
+                    sourceId: sourceID,
+                    parentId: projected.id,
+                    limit: 200
+                ))
+                guard !Task.isCancelled, app.fileLibrarySessionIsCurrent(generation, sourceID: sourceID) else { return }
+                let orderedSeasons = seasonsPage.items.sorted { lhs, rhs in
+                    let ln = lhs.seasonNumber ?? Int.max
+                    let rn = rhs.seasonNumber ?? Int.max
+                    if ln != rn { return ln < rn }
+                    return lhs.itemId < rhs.itemId
+                }
+                for rawSeason in orderedSeasons {
+                    fileLibrarySeasonItems[rawSeason.itemId] = rawSeason
+                }
+                projectedSeasons = orderedSeasons.map { FileLibraryProjection.mediaItem($0) }
+                initialSeasonID = app.preferredSeasonID(in: projectedSeasons, seriesID: projected.id)
+                    ?? projectedSeasons.first?.id
+                if let seasonID = initialSeasonID {
+                    let episodesPage = try await app.fileLibrary.page(.init(
+                        sourceId: sourceID,
+                        parentId: seasonID,
+                        limit: 500
+                    ))
+                    guard !Task.isCancelled, app.fileLibrarySessionIsCurrent(generation, sourceID: sourceID) else { return }
+                    initialEpisodes = episodesPage.items.map { FileLibraryProjection.mediaItem($0) }
+                }
+            }
+
+            let content = MediaDetailContent(
+                item: projected,
+                seasons: projectedSeasons,
+                episodesSeasonID: initialSeasonID,
+                episodes: initialEpisodes,
+                collectionMembers: [],
+                collectionMembersTotalCount: nil
+            )
+            applyDetailContent(content)
+            prepareBackdrop()
+            similar = []
+            await loadSeasonOverlay()
+        } catch is CancellationError {
+            isLoading = false
+            return
+        } catch {
+            if !Task.isCancelled, app.fileLibrarySessionIsCurrent(generation, sourceID: sourceID) {
+                loadError = error.localizedDescription
+            }
+        }
+        isLoading = false
     }
 
     /// 读当前选中季的 TMDB 数据（先读缓存立即渲染，再后台补）。
@@ -671,8 +757,23 @@ final class DetailViewModel {
     ///
     /// 失败/未配置一律静默：TMDB 是可选增强，任何问题都不该影响剧集页。
     func loadSeasonOverlay() async {
-        guard let app, shown.kind == .series,
-              let number = selectedSeason?.seasonNumber,
+        guard let app, shown.kind == .series else {
+            tmdbSeasonOverlay = nil
+            return
+        }
+        if app.activeFileSourceID != nil {
+            guard let seasonID = selectedSeasonID,
+                  let rawSeason = fileLibrarySeasonItems[seasonID] else {
+                tmdbSeasonOverlay = nil
+                return
+            }
+            tmdbSeasonOverlay = FileLibraryProjection.tmdbOverlay(
+                for: rawSeason,
+                seriesTMDbID: shown.tmdbID.flatMap(Int.init)
+            )
+            return
+        }
+        guard let number = selectedSeason?.seasonNumber,
               let seriesLink = await app.tmdbSeriesLink(for: shown)
         else {
             tmdbSeasonOverlay = nil
@@ -705,6 +806,38 @@ final class DetailViewModel {
             isLoadingEpisodes = false
             episodeLoadError = nil
             episodeReloadAttemptCount = 0
+            return
+        }
+        if let sourceID = app.activeFileSourceID {
+            isLoadingEpisodes = true
+            episodeLoadError = nil
+            defer {
+                if selectedSeasonID == seasonID {
+                    isLoadingEpisodes = false
+                }
+            }
+            do {
+                let page = try await app.fileLibrary.page(.init(
+                    sourceId: sourceID,
+                    parentId: seasonID,
+                    limit: 500
+                ))
+                guard !Task.isCancelled, selectedSeasonID == seasonID,
+                      app.activeFileSourceID == sourceID else { return }
+                let loaded = page.items.map { FileLibraryProjection.mediaItem($0) }
+                episodesBySeason[seasonID] = loaded
+                episodes = loaded
+                let preferred = app.preferredEpisodeID(in: loaded, seriesID: shown.id)
+                selectedEpisodeID = preferred
+                episodeScrollFocusID = preferred
+                episodeLoadError = nil
+                episodeReloadAttemptCount = 0
+            } catch is CancellationError {
+                return
+            } catch {
+                guard selectedSeasonID == seasonID else { return }
+                episodeLoadError = error.localizedDescription
+            }
             return
         }
         // 磁盘 / 内存投影先上屏；磁盘来源继续走网络确认。
@@ -807,9 +940,38 @@ final class DetailViewModel {
         episodeChunks = EpisodeChunker.chunk(slots)
     }
 
+    /// 文件媒体库手动匹配 / 解除匹配或刮削完成后的刷新：允许新背景图生效。
+    func reloadForMetadataChange() async {
+        guard let app, app.activeFileSourceID != nil else { return }
+        lockedBackdropTargets = [:]
+        episodesBySeason = [:]
+        await load()
+    }
+
     /// 播放退出/结束回传落库后静默刷新详情与选集（不重置骨架屏、不打断页面浏览）。
     func reloadAfterPlayback() async {
         guard let app else { return }
+        if let sourceID = app.activeFileSourceID {
+            if let fetched = try? await app.fileLibrary.detail(sourceID: sourceID, itemID: item.id) {
+                fileLibraryItem = fetched.item
+                detail = FileLibraryProjection.mediaItem(fetched.item, progressOverride: fetched.progress)
+                tmdbOverlay = FileLibraryProjection.tmdbOverlay(for: fetched.item)
+            }
+            if shown.kind == .series, let seasonID = selectedSeasonID,
+               let page = try? await app.fileLibrary.page(.init(sourceId: sourceID, parentId: seasonID, limit: 500)) {
+                let loaded = page.items.map { FileLibraryProjection.mediaItem($0) }
+                episodesBySeason[seasonID] = loaded
+                episodes = loaded
+                if let currentID = selectedEpisodeID,
+                   loaded.contains(where: { $0.id == currentID }) {
+                } else {
+                    let preferred = app.preferredEpisodeID(in: loaded, seriesID: shown.id)
+                    selectedEpisodeID = preferred
+                    episodeScrollFocusID = preferred
+                }
+            }
+            return
+        }
         if let loaded = try? await app.metadata.refreshItem(itemID: item.id) {
             detail = loaded
         }

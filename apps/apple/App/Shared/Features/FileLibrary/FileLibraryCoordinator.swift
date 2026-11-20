@@ -12,14 +12,28 @@ import PlaybackKit
 @Observable
 final class FileLibraryCoordinator {
     private(set) var sources: [OcpFileLibrary.Source] = []
+    /// 固定的唯一本地媒体库来源（若历史上残留多余的本地来源，由 `extraLocalSources` 暴露以便清理）。
+    var localSource: OcpFileLibrary.Source? {
+        sources.first { $0.kind == "localFolder" }
+    }
+    var extraLocalSources: [OcpFileLibrary.Source] {
+        Array(sources.filter { $0.kind == "localFolder" }.dropFirst())
+    }
+    var remoteSources: [OcpFileLibrary.Source] {
+        sources.filter { $0.kind != "localFolder" }
+    }
     private(set) var capabilities: OcpFileLibrary.Capabilities?
     private(set) var availabilityError: String?
     private(set) var permissionErrors: [String: String] = [:]
+    private(set) var permissionErrorRoots: [String: [OcpFileLibrary.LibraryRoot]] = [:]
     private(set) var catalogRevision = 0
     private(set) var metadataRevision = 0
     private(set) var configurationRevision = 0
     private(set) var progressError: String?
     private(set) var scrapingError: String?
+    private(set) var jobsBySource: [String: [OcpFileLibrary.Job]] = [:]
+    private(set) var scrapesBySource: [String: [OcpFileLibrary.ScrapeRun]] = [:]
+    private(set) var unmatchedCountBySource: [String: Int] = [:]
 
     @ObservationIgnored private let directory: URL
     @ObservationIgnored private var runtime: FileLibraryRuntime?
@@ -48,7 +62,7 @@ final class FileLibraryCoordinator {
                 }
                 capabilities = caps
                 try await refreshSources()
-                for source in sources { restoreAccess(for: source) }
+                for source in sources { await restoreAccess(for: source) }
                 availabilityError = nil
             } catch {
                 if let coreError = error as? OcpCoreError,
@@ -82,11 +96,23 @@ final class FileLibraryCoordinator {
     func resume(sourceID: String) async throws -> [OcpFileLibrary.Item] {
         try await withSDK { try await $0.resume(sourceId: sourceID) }
     }
+    func nextUp(sourceID: String, limit: Int = 20) async throws -> [OcpFileLibrary.Item] {
+        try await withSDK { try await $0.nextUp(sourceId: sourceID, limit: limit) }
+    }
+    func markPlayed(sourceID: String, itemID: String, played: Bool) async throws -> OcpFileLibrary.Progress {
+        let progress = try await withSDK {
+            try await $0.markPlayed(sourceId: sourceID, itemId: itemID, played: played)
+        }
+        catalogRevision &+= 1
+        return progress
+    }
     func detail(sourceID: String, itemID: String) async throws -> OcpFileLibrary.Detail {
         try await withSDK { try await $0.detail(sourceId: sourceID, itemId: itemID) }
     }
     func jobs(sourceID: String) async throws -> [OcpFileLibrary.Job] {
-        try await withSDK { try await $0.jobs(sourceId: sourceID) }
+        let result = try await withSDK { try await $0.jobs(sourceId: sourceID) }
+        jobsBySource[sourceID] = result
+        return result
     }
 
     static func credentialRevision(key: String, apiBase: String) -> String {
@@ -113,7 +139,19 @@ final class FileLibraryCoordinator {
 
     func scrapes(sourceID: String) async throws -> [OcpFileLibrary.ScrapeRun] {
         guard capabilities?.tmdbScraping == true else { return [] }
-        return try await withSDK { try await $0.scrapes(sourceId: sourceID) }
+        let result = try await withSDK { try await $0.scrapes(sourceId: sourceID) }
+        scrapesBySource[sourceID] = result
+        return result
+    }
+
+    func setUnmatchedCount(_ count: Int, for sourceID: String) {
+        unmatchedCountBySource[sourceID] = count
+    }
+
+    func refreshUnmatchedCount(sourceID: String) async {
+        guard let page = try? await page(.init(sourceId: sourceID, limit: 500)) else { return }
+        let count = page.items.filter { ($0.kind == .movie || $0.kind == .series) && $0.matchStatus != "matched" }.count
+        unmatchedCountBySource[sourceID] = count
     }
 
     /// Opening the existing catalog is independent of this online step. User
@@ -188,8 +226,11 @@ final class FileLibraryCoordinator {
         }
         guard let runtime else { throw OcpCoreError(message: "文件媒体库未就绪") }
         defer { withExtendedLifetime(runtime) {} }
-        let accessRef = source?.accessRef ?? UUID().uuidString
-        let authorized = try runtime.authorize(root, ref: accessRef, expectedRoot: source?.rootPath)
+        let trimmedSub = subdirectory.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isReusingSourceRoot = source != nil && !trimmedSub.isEmpty
+        let accessRef = isReusingSourceRoot ? (source?.accessRef ?? UUID().uuidString) : UUID().uuidString
+        let expectedRoot = isReusingSourceRoot ? source?.rootPath : nil
+        let authorized = try runtime.authorize(root, ref: accessRef, expectedRoot: expectedRoot)
         let components = subdirectory.split(separator: "/", omittingEmptySubsequences: true)
         guard !subdirectory.hasPrefix("/"), !components.contains(".."), !components.contains(".") else {
             throw OcpCoreError(message: "分类目录应填写根目录下的相对路径，例如 Movies 或 TV")
@@ -201,26 +242,202 @@ final class FileLibraryCoordinator {
             apiBase: apiBase, accessId: access.accessId, sourceId: source?.sourceId,
             sourceName: sourceName, rootPath: category.path, name: name, type: type))
         try await refreshSources()
-        permissionErrors[result.library.sourceId] = nil
+        if (permissionErrorRoots[result.library.sourceId] ?? []).isEmpty {
+            permissionErrors[result.library.sourceId] = nil
+        }
         catalogRevision &+= 1
         return result
     }
 
+    func addLocalRoot(sourceID: String, libraryID: String, folder: URL) async throws -> OcpFileLibrary.RootAddition {
+        try await setup()
+        guard let runtime else { throw OcpCoreError(message: "文件媒体库未就绪") }
+        defer { withExtendedLifetime(runtime) {} }
+        let accessRef = UUID().uuidString
+        let authorized = try runtime.authorize(folder, ref: accessRef, expectedRoot: nil)
+        let access = try await runtime.sdk.prepareAccess(root: authorized, accessRef: accessRef)
+        let result = try await runtime.sdk.addRoot(
+            sourceId: sourceID,
+            libraryId: libraryID,
+            accessId: access.accessId,
+            kind: "localFolder",
+            rootPath: authorized.path
+        )
+        try await refreshSources()
+        catalogRevision &+= 1
+        return result
+    }
+
+    func addRemoteRoot(
+        source: OcpFileLibrary.Source,
+        libraryID: String,
+        access: OcpFileLibrary.Access,
+        category: OcpFileLibrary.RemoteDirectory,
+        webDAVCredential: OcpFileLibrary.WebDAVCredential? = nil,
+        smbCredential: OcpFileLibrary.SMBCredential? = nil
+    ) async throws -> OcpFileLibrary.RootAddition {
+        let ref = source.accessRef ?? source.sourceId
+        if let webDAVCredential {
+            try saveRemoteCredential(JSONEncoder().encode(webDAVCredential), ref: ref)
+        } else if let smbCredential {
+            try saveRemoteCredential(JSONEncoder().encode(smbCredential), ref: ref)
+        }
+        let result = try await withSDK {
+            try await $0.addRoot(
+                sourceId: source.sourceId,
+                libraryId: libraryID,
+                accessId: access.accessId,
+                kind: source.kind,
+                rootPath: category.rootPath
+            )
+        }
+        restoredRemoteSources.insert(source.sourceId)
+        permissionErrors[source.sourceId] = nil
+        catalogRevision &+= 1
+        return result
+    }
+
+    func renameLibrary(sourceID: String, libraryID: String, name: String) async throws -> OcpFileLibrary.Library {
+        let updated = try await withSDK {
+            try await $0.renameLibrary(sourceId: sourceID, libraryId: libraryID, name: name)
+        }
+        catalogRevision &+= 1
+        metadataRevision &+= 1
+        return updated
+    }
+
+    func deleteLibrary(sourceID: String, libraryID: String) async throws {
+        try await withSDK {
+            try await $0.deleteLibrary(sourceId: sourceID, libraryId: libraryID)
+        }
+        if let source = sources.first(where: { $0.sourceId == sourceID }) {
+            await restoreAccess(for: source)
+        }
+        jobsBySource[sourceID] = try? await withSDK { try await $0.jobs(sourceId: sourceID) }
+        scrapesBySource[sourceID] = try? await withSDK { try await $0.scrapes(sourceId: sourceID) }
+        catalogRevision &+= 1
+        metadataRevision &+= 1
+    }
+
+    func removeLibraryRoot(sourceID: String, libraryID: String, rootID: String) async throws -> OcpFileLibrary.Library {
+        let updated = try await withSDK {
+            try await $0.removeRoot(sourceId: sourceID, libraryId: libraryID, rootId: rootID)
+        }
+        if let source = sources.first(where: { $0.sourceId == sourceID }) {
+            await restoreAccess(for: source)
+        }
+        catalogRevision &+= 1
+        metadataRevision &+= 1
+        return updated
+    }
+
+    func deleteSource(sourceID: String) async throws {
+        try await withSDK {
+            try await $0.deleteSource(sourceId: sourceID)
+        }
+        restoredRemoteSources.remove(sourceID)
+        jobsBySource[sourceID] = nil
+        scrapesBySource[sourceID] = nil
+        permissionErrors[sourceID] = nil
+        permissionErrorRoots[sourceID] = nil
+        try await refreshSources()
+        catalogRevision &+= 1
+        metadataRevision &+= 1
+    }
+
     func authorize(source: OcpFileLibrary.Source, root: URL) throws {
         guard let runtime else { throw OcpCoreError(message: "文件媒体库未就绪") }
+        let missing = permissionErrorRoots[source.sourceId] ?? []
+        if !missing.isEmpty {
+            let scoped = root.startAccessingSecurityScopedResource()
+            let canonicalPath = try? runtime.canonicalPath(of: root)
+            if scoped { root.stopAccessingSecurityScopedResource() }
+            if let canonicalPath,
+               let matched = missing.first(where: {
+                   $0.rootPath == canonicalPath || $0.rootPath.hasPrefix(canonicalPath + "/")
+               }) {
+                let ref = matched.accessRef ?? source.accessRef ?? source.sourceId
+                _ = try runtime.authorize(root, ref: ref, expectedRoot: nil)
+                let remaining = missing.filter {
+                    !($0.rootPath == canonicalPath || $0.rootPath.hasPrefix(canonicalPath + "/"))
+                }
+                permissionErrorRoots[source.sourceId] = remaining.isEmpty ? nil : remaining
+                if remaining.isEmpty {
+                    permissionErrors[source.sourceId] = nil
+                } else {
+                    permissionErrors[source.sourceId] = "还有 \(remaining.count) 个目录需要重新授权：\(remaining[0].rootPath)"
+                }
+                return
+            }
+        }
         _ = try runtime.authorize(root, ref: source.accessRef ?? source.sourceId, expectedRoot: source.rootPath)
+        permissionErrorRoots[source.sourceId] = nil
         permissionErrors[source.sourceId] = nil
     }
 
-    private func restoreAccess(for source: OcpFileLibrary.Source) {
+    func authorizeRoot(source: OcpFileLibrary.Source, libraryRoot: OcpFileLibrary.LibraryRoot, url: URL) throws {
+        guard let runtime else { throw OcpCoreError(message: "文件媒体库未就绪") }
+        let ref = libraryRoot.accessRef ?? source.accessRef ?? source.sourceId
+        let expected = libraryRoot.accessRef == nil ? source.rootPath : libraryRoot.rootPath
+        _ = try runtime.authorize(url, ref: ref, expectedRoot: expected)
+        let remaining = (permissionErrorRoots[source.sourceId] ?? []).filter { $0.rootId != libraryRoot.rootId }
+        permissionErrorRoots[source.sourceId] = remaining.isEmpty ? nil : remaining
+        if remaining.isEmpty {
+            permissionErrors[source.sourceId] = nil
+        } else {
+            permissionErrors[source.sourceId] = "还有 \(remaining.count) 个目录需要重新授权：\(remaining[0].rootPath)"
+        }
+    }
+
+    private func restoreAccess(for source: OcpFileLibrary.Source) async {
         if source.kind != "localFolder" { return }
-        do {
-            guard let runtime else { return }
-            let restored = try runtime.restore(ref: source.accessRef ?? source.sourceId)
-            guard restored.path == source.rootPath else {
-                throw OcpCoreError(message: "目录位置已变更，请重新选择原目录")
+        guard let runtime else { return }
+        let libs = (try? await libraries(sourceID: source.sourceId)) ?? []
+        let allRoots = libs.flatMap(\.allRoots)
+        if allRoots.isEmpty {
+            do {
+                let restored = try runtime.restore(ref: source.accessRef ?? source.sourceId)
+                guard restored.path == source.rootPath else {
+                    throw OcpCoreError(message: "目录位置已变更，请重新选择原目录")
+                }
+                permissionErrors[source.sourceId] = nil
+                permissionErrorRoots[source.sourceId] = nil
+            } catch {
+                permissionErrors[source.sourceId] = "需要重新授权目录：\(error.localizedDescription)"
             }
-        } catch { permissionErrors[source.sourceId] = "需要重新授权目录：\(error.localizedDescription)" }
+            return
+        }
+        var failedRoots: [OcpFileLibrary.LibraryRoot] = []
+        var firstMessage: String?
+        var checkedRefs: [String: Result<URL, Error>] = [:]
+        for root in allRoots {
+            let ref = root.accessRef ?? source.accessRef ?? source.sourceId
+            let result: Result<URL, Error>
+            if let cached = checkedRefs[ref] {
+                result = cached
+            } else {
+                let r = Result { try runtime.restore(ref: ref) }
+                checkedRefs[ref] = r
+                result = r
+            }
+            switch result {
+            case let .success(restored):
+                let matches = restored.path == root.rootPath || root.rootPath.hasPrefix(restored.path + "/")
+                if !matches {
+                    failedRoots.append(root)
+                    if firstMessage == nil {
+                        firstMessage = "目录位置已变更，请重新选择：\(root.rootPath)"
+                    }
+                }
+            case let .failure(error):
+                failedRoots.append(root)
+                if firstMessage == nil {
+                    firstMessage = "需要重新授权目录（\(root.rootPath)）：\(error.localizedDescription)"
+                }
+            }
+        }
+        permissionErrorRoots[source.sourceId] = failedRoots.isEmpty ? nil : failedRoots
+        permissionErrors[source.sourceId] = firstMessage
     }
 
     private func requireAccess(_ sourceID: String) throws {
@@ -460,6 +677,10 @@ private final class FileLibraryRuntime: @unchecked Sendable {
             if scoped { url.stopAccessingSecurityScopedResource() }
             throw error
         }
+    }
+
+    func canonicalPath(of url: URL) throws -> String {
+        try canonicalRoot(url).path
     }
 
     /// Match Rust std::fs::canonicalize, including Apple's /var → /private/var

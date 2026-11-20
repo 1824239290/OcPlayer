@@ -2,6 +2,7 @@ import AppDesignKit
 import BangumiKit
 import CoreModel
 import MetadataKit
+import OcPlayerCore
 import SwiftUI
 
 /// 详情页头部的一条外部站点链接。
@@ -148,7 +149,11 @@ struct DetailExternalLinksView: View {
 
     /// 手动匹配入口：已配置 key 且该条目**有 movie/tv 端点**（季/集靠父剧推导）。
     private var showsMatchButton: Bool {
-        app.tmdb.isReady && (item.kind == .movie || item.kind == .series)
+        guard item.kind == .movie || item.kind == .series else { return false }
+        if app.isFileLibraryActive {
+            return app.tmdb.isConfigured && app.fileLibrary.capabilities?.tmdbScraping == true
+        }
+        return app.tmdb.isReady
     }
 
     /// 重解触发键：条目 / 季 / 登录态任一变化都要重来一次。
@@ -208,27 +213,50 @@ struct DetailExternalLinksView: View {
             resolve()
         }
         .sheet(isPresented: $showingMatchSheet) {
-            TMDbMatchSheet(item: item)
-                // 面板里绑定完，图标要立刻从「无」变成「有」。
-                .onDisappear { Task { await resolveTMDbLink() } }
+            if let sourceID = app.activeFileSourceID {
+                FileLibraryDetailMatchHost(sourceID: sourceID, itemID: item.id)
+            } else {
+                TMDbMatchSheet(item: item)
+                    // 面板里绑定完，图标要立刻从「无」变成「有」。
+                    .onDisappear { Task { await resolveTMDbLink() } }
+            }
         }
     }
 
-    /// 手动匹配入口。用系统符号而不是品牌图：它不是一个外部站点链接，
-    /// 混在品牌图标里会让人以为点下去是「打开 TMDB 网站」。
+    /// 手动匹配入口。文件媒体库下未匹配条目展示清晰胶囊按钮，避免小图标不易发现。
+    @ViewBuilder
     private var matchButton: some View {
-        Button {
-            showingMatchSheet = true
-        } label: {
-            Image(systemName: "arrow.triangle.2.circlepath")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
-                .padding(4)
-                .contentShape(Rectangle())
+        if app.isFileLibraryActive {
+            let unmatched = item.tmdbID == nil
+            Button {
+                showingMatchSheet = true
+            } label: {
+                Label(unmatched ? "手动匹配 TMDB" : "重新匹配", systemImage: unmatched ? "magnifyingglass" : "arrow.triangle.2.circlepath")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(unmatched ? .primary : .secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(
+                        Capsule().fill(Color.primary.opacity(unmatched ? 0.14 : 0.08))
+                    )
+            }
+            .buttonStyle(.plain)
+            .help("手动匹配 TMDB 条目")
+            .accessibilityLabel("手动匹配 TMDB 条目")
+        } else {
+            Button {
+                showingMatchSheet = true
+            } label: {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .padding(4)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("手动匹配 TMDB 条目")
+            .accessibilityLabel("手动匹配 TMDB 条目")
         }
-        .buttonStyle(.plain)
-        .help("手动匹配 TMDB 条目")
-        .accessibilityLabel("手动匹配 TMDB 条目")
     }
 
     /// 解析 Bangumi 关联。
@@ -253,10 +281,46 @@ struct DetailExternalLinksView: View {
     /// 与 Bangumi 那边不同，这里**不受 Bangumi 开关影响**：TMDB 图标与手动匹配入口
     /// 是独立功能，停用 Bangumi 不该把它们一起藏掉。
     private func resolveTMDbLink() async {
-        guard app.tmdb.isReady else {
+        guard app.tmdb.isReady, !app.isFileLibraryActive else {
             tmdbLink = nil
             return
         }
         tmdbLink = await app.tmdbLink(for: item)
+    }
+}
+
+struct FileLibraryDetailMatchHost: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.dismiss) private var dismiss
+    let sourceID: String
+    let itemID: String
+    @State private var item: OcpFileLibrary.Item?
+    @State private var error: String?
+
+    var body: some View {
+        Group {
+            if let item {
+                FileLibraryMatchSheet(item: item)
+            } else if let error {
+                NavigationStack {
+                    ContentUnavailableView("无法加载匹配条目", systemImage: "exclamationmark.triangle", description: Text(error))
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("关闭") { dismiss() }
+                            }
+                        }
+                }
+            } else {
+                ProgressView("正在读取条目信息…")
+                    .frame(minWidth: 360, minHeight: 220)
+            }
+        }
+        .task {
+            do {
+                item = try await app.fileLibrary.detail(sourceID: sourceID, itemID: itemID).item
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
     }
 }

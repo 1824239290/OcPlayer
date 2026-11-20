@@ -1,6 +1,7 @@
 import AppDesignKit
 import CoreModel
 import JellyfinKit
+import OcPlayerCore
 import SwiftUI
 
 /// 详情页内嵌的「媒体信息」区块：展示**当前条目 / 当前选中集**的文件级媒体信息。
@@ -23,6 +24,8 @@ struct DetailMediaInfoSection: View {
 
     /// 本次停留期间的条目 → 媒体信息缓存：来回点选集不重拉、不闪 loading。
     @State private var cache: [MediaItem.ID: MediaFileInfo] = [:]
+    /// 文件媒体库的物理文件资产缓存（用于展示文件路径、大小、可用状态及多版本起播）。
+    @State private var fileAssetsCache: [MediaItem.ID: [OcpFileLibrary.Asset]] = [:]
     /// 拉过但确认没有媒体源的条目（目录 / 老服务端），同样不重拉。
     @State private var emptyIDs: Set<MediaItem.ID> = []
     /// 正在拉的条目。用 id 而不是 Bool：切集时旧任务被取消，它的收尾不能把
@@ -49,10 +52,11 @@ struct DetailMediaInfoSection: View {
     // MARK: - 区块头
 
     private var header: some View {
-        HStack(spacing: 10) {
+        let count = app.isFileLibraryActive ? (fileAssets?.count ?? 0) : (info?.sourceCount ?? 0)
+        return HStack(spacing: 10) {
             Text("媒体信息")
                 .font(.title3.weight(.bold))
-            if let count = info?.sourceCount, count > 1 {
+            if count > 1 {
                 Text("共 \(count) 个版本")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -71,7 +75,10 @@ struct DetailMediaInfoSection: View {
 
     @ViewBuilder
     private func sectionBody(for item: MediaItem) -> some View {
-        if let info {
+        if let assets = fileAssets, !assets.isEmpty {
+            fileAssetsContent(assets, item: item)
+                .transition(.section)
+        } else if let info {
             content(info)
                 .transition(.section)
         } else if isLoading {
@@ -96,6 +103,48 @@ struct DetailMediaInfoSection: View {
     private var info: MediaFileInfo? {
         guard let item else { return nil }
         return cache[item.id]
+    }
+
+    private var fileAssets: [OcpFileLibrary.Asset]? {
+        guard let item else { return nil }
+        return fileAssetsCache[item.id]
+    }
+
+    private func fileAssetsContent(_ assets: [OcpFileLibrary.Asset], item: MediaItem) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ForEach(Array(assets.enumerated()), id: \.element.id) { index, asset in
+                if index > 0 { Divider() }
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Text(assets.count > 1 ? "版本 \(index + 1)" : "文件")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        if !asset.available {
+                            Text("文件不可用")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                        Spacer(minLength: 0)
+                        if assets.count > 1, asset.available {
+                            Button("播放此版本") {
+                                app.play(item, resumeSeconds: item.playState?.positionSeconds, assetID: asset.assetId)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        }
+                    }
+                    EqualRowHeightGrid(minColumnWidth: 280, horizontalSpacing: 8, verticalSpacing: 8) {
+                        infoRow("路径", asset.relativePath)
+                        if let size = Int(exactly: asset.size).flatMap(MediaInfoLabel.size) {
+                            infoRow("大小", size)
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .liquidGlassCard()
     }
 
     private func content(_ info: MediaFileInfo) -> some View {
@@ -257,6 +306,30 @@ struct DetailMediaInfoSection: View {
     /// 所以每个写回点都比一次「当前正在拉的是不是我」——快速连点选集时，
     /// 旧请求回来不能把新选中集的 loading 清掉、也不能写入错误。
     private func load(_ target: MediaItem, force: Bool = false) async {
+        if let sourceID = app.activeFileSourceID {
+            if !force, fileAssetsCache[target.id] != nil || emptyIDs.contains(target.id) { return }
+            loadingID = target.id
+            failedID = nil
+            errorMessage = nil
+            defer {
+                if loadingID == target.id { loadingID = nil }
+            }
+            do {
+                let detail = try await app.fileLibrary.detail(sourceID: sourceID, itemID: target.id)
+                guard !Task.isCancelled, loadingID == target.id, app.activeFileSourceID == sourceID else { return }
+                if detail.assets.isEmpty {
+                    emptyIDs.insert(target.id)
+                } else {
+                    fileAssetsCache[target.id] = detail.assets
+                }
+            } catch is CancellationError {
+            } catch {
+                guard !Task.isCancelled, loadingID == target.id else { return }
+                failedID = target.id
+                errorMessage = error.localizedDescription
+            }
+            return
+        }
         guard let server = app.server else { return }
         if !force, cache[target.id] != nil || emptyIDs.contains(target.id) { return }
 

@@ -115,8 +115,11 @@ extension AppModel {
 
     /// 重载首页和侧栏依赖的媒体库。一次仓储刷新同时返回两部分，不再各发一轮。
     func reloadBrowserData() async {
-        guard let server else { return }
-        await reloadBrowserData(server: server, generation: sessionGeneration)
+        if let server {
+            await reloadBrowserData(server: server, generation: sessionGeneration)
+        } else if let sourceID = activeFileSourceID {
+            await loadFileLibraryHome(sourceID: sourceID, generation: sessionGeneration)
+        }
     }
 
     func reloadBrowserData(server: any MediaServer, generation: Int) async {
@@ -154,8 +157,11 @@ extension AppModel {
     }
 
     func loadHome() async {
-        guard let server else { return }
-        await loadHome(server: server, generation: sessionGeneration)
+        if let server {
+            await loadHome(server: server, generation: sessionGeneration)
+        } else if let sourceID = activeFileSourceID {
+            await loadFileLibraryHome(sourceID: sourceID, generation: sessionGeneration)
+        }
     }
 
     func loadHome(server: any MediaServer, generation: Int) async {
