@@ -60,7 +60,7 @@ internal static partial class Program
         CacheFiles.Prune(quota, 12, x => x.Extension == ".cache");
         Assert(!File.Exists(older) && File.Exists(newer) && File.Exists(Path.Combine(quota, "mapping.json")), "disk eviction removes oldest disposable files while retaining durable mappings");
         var partial = Path.Combine(quota, "old.tmp"); File.WriteAllText(partial, "partial"); File.SetLastWriteTimeUtc(partial, DateTime.UtcNow.AddDays(-2));
-        CacheFiles.Prune(quota, 12, x => x.Extension == ".cache"); Assert(!File.Exists(partial), "maintenance removes abandoned partial downloads");
+        CacheFiles.Prune(quota, 12, x => x.Extension == ".cache", force: true); Assert(!File.Exists(partial), "maintenance removes abandoned partial downloads");
 
         var a = new BrowserCache(new ServerProfile("storage-a", "jellyfin", "http://localhost", "user-1"));
         var a2 = new BrowserCache(new ServerProfile("storage-a", "jellyfin", "http://localhost", "user-2"));
