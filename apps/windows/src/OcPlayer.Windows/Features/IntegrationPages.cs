@@ -124,7 +124,7 @@ internal sealed partial class IntegrationPages(PageLayout layout, Action<string>
     {
         var images = Json.Get(item, "images");
         var source = Json.First(item, "poster_path", "poster", "poster_url");
-        if (source.Length == 0 && images.ValueKind == JsonValueKind.Object) source = Json.First(images, "large", "common", "medium", "small");
+        if (source.Length == 0 && images.ValueKind == JsonValueKind.Object) source = Json.First(images, "common", "large", "medium", "small");
         if (source.StartsWith('/')) source = "https://image.tmdb.org/t/p/w500" + source;
         if (!Uri.TryCreate(source, UriKind.Absolute, out var uri) || uri.Scheme is not ("https" or "http")) return "";
         return Service.RewriteBangumiUrl(source);

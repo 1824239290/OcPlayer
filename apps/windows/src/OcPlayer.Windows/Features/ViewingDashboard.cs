@@ -33,8 +33,8 @@ internal sealed partial class IntegrationPages
         var server = core.Server; var source = ViewingHistory.Source(server);
         var hasBangumi = Service.Bangumi is { Enabled: true, AccessToken.Length: > 0 };
         var hasMoviePilot = Service.MoviePilot is { Enabled: true, AccessToken.Length: > 0 };
-        var selection = new DashboardSelection();
-        JsonElement[]? wishes = null, watching = null; int? watchedCount = null, subscriptionCount = null;
+        var selection = new DashboardSelection(); var lastRefresh = DateTimeOffset.MinValue;
+        JsonElement[]? wishes = null, watching = null; double? wishesCount = null; int? watchedCount = null, subscriptionCount = null;
 
         var identity = Row(12);
         var avatar = DashboardArtwork("", 38, 38, 19, "\uE77B"); identity.Children.Add(avatar);
@@ -73,7 +73,7 @@ internal sealed partial class IntegrationPages
         void RenderHistory()
         {
             var records = core.ViewingHistory.Entries(source); var archive = core.ViewingHistory.Read(source);
-            statistics.Children.Clear(); BuildDashboardStatistics(statistics, records, archive, hasBangumi, wishes, watching, selection);
+            statistics.Children.Clear(); BuildDashboardStatistics(statistics, records, archive, hasBangumi, wishes, wishesCount, watching, selection);
             recent.Children.Clear();
             var list = Stack(2); list.Children.Add(DashboardHeading("最近观看", DashboardLink($"全部 {records.Length} 条", () => navigate("viewing:history"))));
             foreach (var record in records.Take(3)) list.Children.Add(DashboardHistoryRow(page, record));
@@ -118,26 +118,31 @@ internal sealed partial class IntegrationPages
             var list = Stack(2); foreach (var media in items) list.Children.Add(DashboardMediaRow(page, media));
             if (items.Length == 0) list.Children.Add(DashboardEmpty("暂无续播内容")); content.Children.Add(DashboardCard(list, 8));
         });
-        async Task Bangumi()
+        async Task Bangumi(Task<JsonElement[]> watchingTask)
         {
             try
             {
-                var wishTask = Service.Collections(1, page.Token); var watchingTask = Service.Watching(page.Token); var watchedTask = Service.Collections(2, page.Token);
+                // 待看只取首屏一页用于封面，计数用 total；看过只需总数，不再拉全部分页。
+                var wishTask = Service.CollectionPage(1, 2, 0, page.Token, 30);
+                var watchedTask = Service.CollectionTotal(2, 2, page.Token);
                 await Task.WhenAll(wishTask, watchingTask, watchedTask); page.Token.ThrowIfCancellationRequested();
-                wishes = wishTask.Result; watching = watchingTask.Result; watchedCount = watchedTask.Result.Length; RenderHistory(); RenderCounters();
+                var wishPage = await wishTask; wishes = Json.Items(wishPage); wishesCount = Json.Number(wishPage, "total", wishes.Length);
+                watching = await watchingTask; watchedCount = (int)Math.Round(await watchedTask);
+                RenderHistory(); RenderCounters();
             }
             catch (OperationCanceledException) { }
             catch (Exception ex) { if (!page.Token.IsCancellationRequested) statistics.Children.Add(DashboardMuted("片单加载失败：" + ex.Message, 11)); }
         }
-        Task CalendarLoad() => Module(calendar, async content =>
+        Task CalendarLoad(Task<JsonElement[]> watchingTask, bool force) => Module(calendar, async content =>
         {
             BroadcastEntry[] entries = [];
             if (server is not null)
             {
-                var watchingTask = Service.Watching(page.Token); var calendarTask = Service.Bgm("calendar", null, page.Token);
+                // 复用观影页已经发起的 Watching 请求，避免同一页拉两次。
+                var calendarTask = Service.Calendar(page.Token, force ? TimeSpan.Zero : null);
                 var libraryTask = BroadcastTimeline.Library(server, page.Token); var scheduleTask = BroadcastTimeline.Schedule(core.DataDirectory, page.Token);
                 await Task.WhenAll(watchingTask, calendarTask, libraryTask, scheduleTask); page.Token.ThrowIfCancellationRequested();
-                entries = BroadcastTimeline.Match(watchingTask.Result, Json.Items(calendarTask.Result), libraryTask.Result, scheduleTask.Result, Service.Links(), source);
+                entries = BroadcastTimeline.Match(await watchingTask, Json.Items(await calendarTask), await libraryTask, await scheduleTask, Service.Links(), source);
             }
             content.Children.Add(DashboardMuted("在看 · 媒体库已有 · 按更新时间排序", 11));
             var week = new Grid { ColumnSpacing = 8 }; var posters = Stack(8); var buttons = new List<Button>();
@@ -178,19 +183,22 @@ internal sealed partial class IntegrationPages
             foreach (var item in items.Take(3)) list.Children.Add(DashboardDownload(item));
             if (items.Length == 0) list.Children.Add(DashboardEmpty("当前没有下载任务")); content.Children.Add(DashboardCard(list, 14));
         });
-        async Task Refresh()
+        async Task Refresh(bool force = false)
         {
+            var watch = System.Diagnostics.Stopwatch.StartNew(); lastRefresh = DateTimeOffset.UtcNow;
             if (server is not null) { try { await server.RefreshAvatar(page.Token); Avatar(); } catch (Exception ex) when (ex is not OperationCanceledException) { } }
             var tasks = new List<Task> { History(), Resume() };
-            if (hasBangumi) { tasks.Add(Bangumi()); tasks.Add(CalendarLoad()); }
+            var watchingTask = hasBangumi ? Service.Watching(page.Token, force ? TimeSpan.Zero : null) : null;
+            if (hasBangumi && watchingTask is not null) { tasks.Add(Bangumi(watchingTask)); tasks.Add(CalendarLoad(watchingTask, force)); }
             if (hasMoviePilot) { tasks.Add(Subscriptions()); tasks.Add(DownloadsLoad()); }
             await Task.WhenAll(tasks);
+            AppDiagnostics.Write("debug", $"观影页刷新完成：{watch.ElapsedMilliseconds} ms（Bangumi={hasBangumi}，媒体库={server is not null}）");
         }
         RenderHistory(); RenderCounters();
-        Func<Task> refresh = () => page.Run(Refresh); _dashboardRefresh = refresh;
+        Func<Task> refresh = () => page.Run(() => Refresh(true)); _dashboardRefresh = refresh;
         page.Body.Unloaded += (_, _) => { if (_dashboardRefresh == refresh) _dashboardRefresh = null; };
         page.Poll(TimeSpan.FromSeconds(15), async () => { if (hasMoviePilot) await DownloadsLoad(); });
-        page.Poll(TimeSpan.FromSeconds(60), History);
+        page.Poll(TimeSpan.FromMinutes(15), History);
         var historyQueued = false;
         void Changed()
         {
@@ -199,9 +207,9 @@ internal sealed partial class IntegrationPages
         }
         core.ViewingHistory.Changed += Changed; page.Body.Unloaded += (_, _) => core.ViewingHistory.Changed -= Changed;
         var active = IsForeground(); var activation = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        activation.Tick += async (_, _) => { var current = IsForeground() && IsVisible(page.Body); if (current && !active) await page.Run(Refresh); active = current; };
+        activation.Tick += async (_, _) => { var current = IsForeground() && IsVisible(page.Body); if (current && !active && DateTimeOffset.UtcNow - lastRefresh >= TimeSpan.FromMinutes(10)) await page.Run(() => Refresh(false)); active = current; };
         page.Body.Loaded += (_, _) => activation.Start(); page.Body.Unloaded += (_, _) => activation.Stop();
-        return Show(page, Refresh);
+        return Show(page, () => Refresh(false));
     }
     private sealed class DashboardSelection
     {

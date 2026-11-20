@@ -111,7 +111,8 @@ pub(crate) struct NetworkService {
 impl NetworkService {
     pub(crate) fn new() -> Result<Self, String> {
         let client = reqwest::Client::builder()
-            .pool_max_idle_per_host(2)
+            // 并发分页与多接口同时请求时保留足够空闲连接，避免反复 TCP/TLS 握手。
+            .pool_max_idle_per_host(8)
             .connect_timeout(Duration::from_secs(10))
             .timeout(Duration::from_secs(30))
             .build()

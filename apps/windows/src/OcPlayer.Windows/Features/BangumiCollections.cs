@@ -52,7 +52,7 @@ internal sealed partial class IntegrationPages
                 if (error is not null) host.Children.Add(DashboardMuted("章节刷新失败：" + error, 11));
             }
             Render();
-            if (!fetch) return;
+            if (!fetch || Service.SnapshotWithin("episodes:" + id, ViewingIntegrations.EpisodeFreshness) is not null) return;
             try { episodes = await LoadEpisodes(id, page.Token); page.Token.ThrowIfCancellationRequested(); Render(); }
             catch (OperationCanceledException) { }
             catch (Exception ex) { if (!page.Token.IsCancellationRequested) Render(ex.Message); }
@@ -78,15 +78,24 @@ internal sealed partial class IntegrationPages
                 if (items.Length == 0 || offsets[response.Kind] >= Json.Number(response.Response, "total", double.MaxValue) || items.Length < 30) done.Add(response.Kind);
             }
             var batch = fetched.ToArray(); rows.AddRange(batch); exhausted = done.Count == 2;
-            foreach (var kind in new[] { 2, 6 }) Service.SaveSnapshot($"collections:{kind}:3", JsonSerializer.SerializeToElement(rows.Where(x => Json.Number(Json.Subject(x), "type", 2) == kind)));
-            foreach (var raw in batch) { Service.SaveSnapshot("subject:" + SubjectId(raw), Json.Subject(raw)); Service.SaveSnapshot("collection:" + SubjectId(raw), raw); }
-            RenderList(); using var concurrency = new SemaphoreSlim(4);
+            foreach (var kind in new[] { 2, 6 }) if (done.Contains(kind)) Service.SaveSnapshot(ViewingIntegrations.CollectionsKey(kind, 3), JsonSerializer.SerializeToElement(rows.Where(x => Json.Number(Json.Subject(x), "type", 2) == kind)));
+            var saves = batch.SelectMany(raw => new[] { ("subject:" + SubjectId(raw), Json.Subject(raw)), ("collection:" + SubjectId(raw), raw) }).ToArray();
+            await Task.Run(() => Service.SaveSnapshots(saves));
+            RenderList(); using var concurrency = new SemaphoreSlim(6);
             await Task.WhenAll(batch.Select(async raw => { await concurrency.WaitAsync(page.Token); try { if (cards.TryGetValue(SubjectId(raw), out var host)) await UpdateCard(raw, host, true); } finally { concurrency.Release(); } }));
         }
-        async Task Load()
+        async Task Load(bool force = false)
         {
             rows.Clear(); offsets[2] = offsets[6] = 0; done.Clear(); exhausted = false;
-            foreach (var kind in new[] { 2, 6 }) if (Service.Snapshot($"collections:{kind}:3") is { } cached) rows.AddRange(Json.Items(cached));
+            if (!force &&
+                Service.SnapshotWithin(ViewingIntegrations.CollectionsKey(2, 3), ViewingIntegrations.CollectionFreshness) is { } cached2 &&
+                Service.SnapshotWithin(ViewingIntegrations.CollectionsKey(6, 3), ViewingIntegrations.CollectionFreshness) is { } cached6)
+            {
+                // 两类在看都在 TTL 内：直接渲染缓存，跳过网络。
+                rows.AddRange(Json.Items(cached2)); rows.AddRange(Json.Items(cached6));
+                done.Add(2); done.Add(6); exhausted = true; RenderList(); return;
+            }
+            foreach (var kind in new[] { 2, 6 }) if (Service.Snapshot(ViewingIntegrations.CollectionsKey(kind, 3)) is { } cached) rows.AddRange(Json.Items(cached));
             if (rows.Count > 0) { RenderList(); rows.Clear(); }
             await Next();
         }
@@ -100,11 +109,11 @@ internal sealed partial class IntegrationPages
         }
         var sync = new MenuFlyoutItem { Text = "同步全部收藏和章节" }; sync.Click += async (_, _) => await page.Run(async () => { await Service.SynchronizeCollections(count => page.Status.Text = $"已同步 {count} 条", page.Token); await Load(); }); sort.Items.Add(new MenuFlyoutSeparator()); sort.Items.Add(sync);
         toolbar.Children.Add(BgmMenu("\uE8CB", "Bangumi 排序与同步", sort));
-        toolbar.Children.Add(BgmIcon(page, "\uE77B", "Bangumi 个人主页", () => { navigate("viewing:profile"); return Task.CompletedTask; })); toolbar.Children.Add(BgmIcon(page, "\uE72C", "刷新 Bangumi 在看", Load));
+        toolbar.Children.Add(BgmIcon(page, "\uE77B", "Bangumi 个人主页", () => { navigate("viewing:profile"); return Task.CompletedTask; })); toolbar.Children.Add(BgmIcon(page, "\uE72C", "刷新 Bangumi 在看", () => Load(true)));
         var search = new AutoSuggestBox { Width = 280, Height = 32, PlaceholderText = "搜索 Bangumi 条目", QueryIcon = new SymbolIcon(Symbol.Find) }; HeaderTrailing = search; BgmName(search, "搜索 Bangumi 条目");
         search.QuerySubmitted += (_, args) => { if (!string.IsNullOrWhiteSpace(args.QueryText)) navigate("viewing:bangumi:q=" + Uri.EscapeDataString(args.QueryText.Trim())); };
         more.Click += async (_, _) => await page.Run(Next);
-        var scroll = (ScrollViewer)Show(page, Load); var loadingMore = false;
+        var scroll = (ScrollViewer)Show(page, () => Load(false)); var loadingMore = false;
         scroll.ViewChanged += async (_, _) => { if (loadingMore || exhausted || rows.Count == 0 || scroll.ScrollableHeight <= 0 || scroll.VerticalOffset < scroll.ScrollableHeight - 150) return; loadingMore = true; try { await page.Run(Next); } finally { loadingMore = false; } };
         return scroll;
     }
@@ -139,25 +148,41 @@ internal sealed partial class IntegrationPages
             var response = requestedSearch ? await Service.Bgm("search", new { keyword = query, subjectType = searchKind, limit = 20, offset }, page.Token) : await Service.CollectionPage(requestedStatus, requestedKind, offset, page.Token, 20);
             var batch = Json.Items(response); page.Token.ThrowIfCancellationRequested(); if (expected != generation) return; rows.AddRange(batch); offset += batch.Length;
             exhausted = batch.Length == 0 || offset >= Json.Number(response, "total", double.MaxValue) || batch.Length < 20;
-            if (!requestedSearch) { totals[requestedStatus - 1] = Json.Number(response, "total", rows.Count); Service.SaveSnapshot($"collections:{requestedKind}:{requestedStatus}", JsonSerializer.SerializeToElement(rows)); }
+            if (!requestedSearch) { totals[requestedStatus - 1] = Json.Number(response, "total", rows.Count); if (exhausted) Service.SaveSnapshot(ViewingIntegrations.CollectionsKey(requestedKind, requestedStatus), JsonSerializer.SerializeToElement(rows)); }
             foreach (var raw in batch) { Service.SaveSnapshot("subject:" + SubjectId(raw), Json.Subject(raw)); if (!requestedSearch) Service.SaveSnapshot("collection:" + SubjectId(raw), raw); }
             Render();
         }
-        async Task Load(int expected)
+        async Task Load(int expected, bool force = false)
         {
             if (expected != generation) return;
             rows.Clear(); offset = 0; exhausted = false;
-            if (!searching && Service.Snapshot($"collections:{kind}:{status}") is { } cached) { rows.AddRange(Json.Items(cached)); Render(); rows.Clear(); }
-            await Next(expected); if (expected != generation) return;
-            if (!searching) { var requestedKind = kind; var counts = await Task.WhenAll(Enumerable.Range(1, 5).Select(async state => Json.Number(await Service.CollectionPage(state, requestedKind, 0, page.Token, 1), "total"))); page.Token.ThrowIfCancellationRequested(); if (expected != generation) return; for (var i = 0; i < 5; i++) totals[i] = counts[i]; Labels(); }
+            if (!searching && !force && Service.SnapshotWithin(ViewingIntegrations.CollectionsKey(kind, status), ViewingIntegrations.CollectionFreshness) is { } fresh)
+            {
+                // 快照只在整份列表加载完成后写入，因此 TTL 内可直接当作完整列表渲染。
+                rows.AddRange(Json.Items(fresh)); offset = rows.Count; exhausted = true; Render();
+            }
+            else
+            {
+                if (!searching && !force && Service.Snapshot(ViewingIntegrations.CollectionsKey(kind, status)) is { } cached) { rows.AddRange(Json.Items(cached)); Render(); rows.Clear(); }
+                await Next(expected); if (expected != generation) return;
+            }
+            if (!searching)
+            {
+                var requestedKind = kind;
+                var counts = await Task.WhenAll(Enumerable.Range(1, 5).Select(async state =>
+                    Service.SnapshotWithin(ViewingIntegrations.CollectionsKey(requestedKind, state), ViewingIntegrations.CollectionFreshness) is { } cached
+                        ? (double)Json.Items(cached).Length
+                        : await Service.CollectionTotal(state, requestedKind, page.Token)));
+                page.Token.ThrowIfCancellationRequested(); if (expected != generation) return; for (var i = 0; i < 5; i++) totals[i] = counts[i]; Labels();
+            }
         }
-        Task Reload() => Load(++generation);
+        Task Reload(bool force = false) => Load(++generation, force);
         for (var i = 0; i < 5; i++)
         {
             var state = i + 1; var tab = new ToggleButton { Style = DashboardStyle("BangumiSegmentButtonStyle"), HorizontalAlignment = HorizontalAlignment.Stretch };
             tab.Click += async (_, _) => { status = state; searching = false; var expected = ++generation; Labels(); await page.Run(() => Load(expected)); }; Grid.SetColumn(tab, i); segmented.Children.Add(tab); tabs.Add(tab); BgmName(tab, "Bangumi 片单筛选 " + state);
         }
-        Labels(); var toolbar = Row(6); HeaderLeading = toolbar; toolbar.Children.Add(BgmIcon(page, "\uE72C", "刷新 Bangumi 片单", Reload));
+        Labels(); var toolbar = Row(6); HeaderLeading = toolbar; toolbar.Children.Add(BgmIcon(page, "\uE72C", "刷新 Bangumi 片单", () => Reload(true)));
         var types = new MenuFlyout();
         foreach (var type in SubjectTypes)
         {
@@ -172,7 +197,7 @@ internal sealed partial class IntegrationPages
             search.QuerySubmitted += async (_, args) => { query = args.QueryText.Trim(); if (query.Length == 0) return; searching = true; var expected = ++generation; await page.Run(() => Load(expected)); };
         }
         more.Click += async (_, _) => { var expected = generation; await page.Run(() => Next(expected)); };
-        var scroll = (ScrollViewer)Show(page, Reload); var loadingMore = false;
+        var scroll = (ScrollViewer)Show(page, () => Reload(false)); var loadingMore = false;
         scroll.ViewChanged += async (_, _) => { if (loadingMore || exhausted || rows.Count == 0 || scroll.ScrollableHeight <= 0 || scroll.VerticalOffset < scroll.ScrollableHeight - 150) return; loadingMore = true; var expected = generation; try { await page.Run(() => Next(expected)); } finally { loadingMore = false; } }; return scroll;
     }
 

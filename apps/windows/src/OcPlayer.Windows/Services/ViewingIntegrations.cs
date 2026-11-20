@@ -20,6 +20,9 @@ internal sealed partial class ViewingIntegrations
 {
     private readonly Func<string, string, CancellationToken, Task<OcpResponse>> _call;
     private readonly string _resource;
+    internal static readonly TimeSpan CollectionFreshness = TimeSpan.FromMinutes(10);
+    internal static readonly TimeSpan CalendarFreshness = TimeSpan.FromMinutes(10);
+    internal static readonly TimeSpan EpisodeFreshness = TimeSpan.FromMinutes(30);
     public IntegrationAccount? Bangumi { get; private set; }
     public IntegrationAccount? MoviePilot { get; private set; }
     public event Action? Changed;
@@ -112,6 +115,18 @@ internal sealed partial class ViewingIntegrations
         Save("moviepilot", new(address, accessToken, username.Trim(), Json.First(Json.Get(data, "user"), "name", "username"), IsEnabled("moviepilot"), RememberPassword: rememberPassword, Password: rememberPassword ? password : null));
     }
     public Task<JsonElement> Bgm(string method, object? args, CancellationToken token) => BangumiRequest(method, args, token);
+    /// 放送日历带 TTL：同一天内重复进入页面不再重复请求。
+    public Task<JsonElement> Calendar(CancellationToken token, TimeSpan? maxAge = null)
+    {
+        if (SnapshotWithin("calendar", maxAge ?? CalendarFreshness) is { } cached) return Task.FromResult(cached);
+        return Fetch();
+        async Task<JsonElement> Fetch()
+        {
+            var value = await Bgm("calendar", null, token);
+            await Task.Run(() => SaveSnapshot("calendar", value), token);
+            return value;
+        }
+    }
     public Task<JsonElement> Mp(string method, object? args, CancellationToken token) => MoviePilotRequest(method, args, token);
     private static IntegrationAccount RequireAccount(IntegrationAccount? account, string name) =>
         account is { Enabled: true, AccessToken.Length: > 0 } ? account : throw new InvalidOperationException("请在设置中连接并启用 " + name + "。");
@@ -142,25 +157,78 @@ internal sealed partial class ViewingIntegrations
         if (code is >= 400 and < 600) throw new InvalidOperationException($"Bangumi 请求失败（{code}）。");
         return payload;
     }
-    public Task<JsonElement[]> Collections(int type, CancellationToken token, int subjectType = 2)
+    /// <summary>收藏列表快照键。列表只在整份取完后写入，v2 前缀用于忽略旧版本留下的半页快照。</summary>
+    internal static string CollectionsKey(int subjectType, int type) => $"collections:v2:{subjectType}:{type}";
+    public Task<JsonElement[]> Collections(int type, CancellationToken token, int subjectType = 2, TimeSpan? maxAge = null)
+    {
+        var key = CollectionsKey(subjectType, type);
+        if (SnapshotWithin(key, maxAge ?? CollectionFreshness) is { } cached) return Task.FromResult(Json.Items(cached));
+        return Fetch();
+        async Task<JsonElement[]> Fetch()
+        {
+            var revision = BangumiRevision;
+            var rows = await Pages(offset => BangumiRequest("collections", new { collectionType = type, subjectType, limit = 100, offset }, token, revision), token);
+            await Task.Run(() => SaveSnapshot(key, JsonSerializer.SerializeToElement(rows)), token);
+            return rows;
+        }
+    }
+    /// 仅读取收藏总数，用于只显示数字的入口；不再为计数拉取全部分页。
+    public async Task<double> CollectionTotal(int type, int subjectType, CancellationToken token)
     {
         var revision = BangumiRevision;
-        return Pages(offset => BangumiRequest("collections", new { collectionType = type, subjectType, limit = 100, offset }, token, revision), token);
+        var page = await BangumiRequest("collections", new { collectionType = type, subjectType, limit = 1, offset = 0 }, token, revision);
+        return Json.Number(page, "total", Json.OptionalItems(Json.Get(page, "data")).Length);
     }
-    public Task<JsonElement[]> Episodes(long id, CancellationToken token)
+    public Task<JsonElement[]> Episodes(long id, CancellationToken token, TimeSpan? maxAge = null)
     {
-        var revision = BangumiRevision;
-        return Pages(offset => BangumiRequest("episodes", new { subjectId = id, limit = 100, offset }, token, revision), token);
+        var key = $"episodes:{id}";
+        if (SnapshotWithin(key, maxAge ?? EpisodeFreshness) is { } cached) return Task.FromResult(Json.Items(cached));
+        return Fetch();
+        async Task<JsonElement[]> Fetch()
+        {
+            var revision = BangumiRevision;
+            var rows = await Pages(offset => BangumiRequest("episodes", new { subjectId = id, limit = 100, offset }, token, revision), token);
+            await Task.Run(() => SaveSnapshot(key, JsonSerializer.SerializeToElement(rows)), token);
+            return rows;
+        }
     }
+    internal const int PageConcurrency = 4;
     internal static async Task<JsonElement[]> Pages(Func<int, Task<JsonElement>> fetch, CancellationToken token)
     {
-        var items = new List<JsonElement>();
-        for (var offset = 0; offset <= int.MaxValue - 100;)
+        var first = await fetch(0); token.ThrowIfCancellationRequested();
+        var items = new List<JsonElement>(); var head = Json.Items(first); items.AddRange(head);
+        var total = Json.Number(first, "total", -1);
+        if (head.Length == 0) return items.ToArray();
+        if (total >= 0)
+        {
+            if (items.Count >= total) return items.ToArray();
+            var pageSize = head.Length; var offsets = new List<int>();
+            for (var offset = items.Count; offset < total && offsets.Count < 512; offset += pageSize) offsets.Add(offset);
+            if (offsets.Count > 0)
+            {
+                // 首页拿到 total 后并发补齐剩余页；页数按首页条数推算，超出 512 页时保留已取部分。
+                var gate = new SemaphoreSlim(PageConcurrency);
+                var pages = await Task.WhenAll(offsets.Select(async offset =>
+                {
+                    await gate.WaitAsync(token);
+                    try
+                    {
+                        var page = await fetch(offset); token.ThrowIfCancellationRequested();
+                        return (Offset: offset, Items: Json.Items(page));
+                    }
+                    finally { gate.Release(); }
+                }));
+                foreach (var page in pages.OrderBy(x => x.Offset)) items.AddRange(page.Items);
+            }
+            return items.ToArray();
+        }
+        // total 缺失时退回串行探测，行为与旧实现一致。
+        for (var offset = items.Count; offset <= int.MaxValue - 100;)
         {
             var page = await fetch(offset); token.ThrowIfCancellationRequested();
             var batch = Json.Items(page); items.AddRange(batch); offset += batch.Length;
-            var total = Json.Number(page, "total", -1);
-            if (batch.Length == 0 || total >= 0 && offset >= total || total < 0 && batch.Length < 100) return items.ToArray();
+            var declared = Json.Number(page, "total", -1);
+            if (batch.Length == 0 || declared >= 0 && offset >= declared || declared < 0 && batch.Length < 100) return items.ToArray();
         }
         throw new InvalidOperationException("分页偏移超过服务允许的范围，本次未完成读取。");
     }

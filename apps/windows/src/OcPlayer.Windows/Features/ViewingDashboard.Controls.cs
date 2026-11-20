@@ -99,10 +99,11 @@ internal sealed partial class IntegrationPages
         var button = DashboardRow(DashboardRowContent(new FontIcon { Glyph = glyph, FontSize = 16, Opacity = .6 }, text, number), () => navigate(route), title + " " + (count?.ToString() ?? "尚未加载"));
         button.Style = DashboardStyle("DashboardCountButtonStyle"); button.Padding = new Thickness(16, 12, 16, 12); return button;
     }
-    private Button DashboardCollection(string title, int kind, JsonElement[]? items)
+    private Button DashboardCollection(string title, int kind, JsonElement[]? items, double? total = null)
     {
+        var count = total is { } known ? known.ToString("0") : items?.Length.ToString();
         var grid = new Grid { MinHeight = 110 };
-        var labels = Stack(2); labels.Children.Add(Text(items?.Length.ToString() ?? "—", 34, true)); labels.Children.Add(Text(title, 12, true)); labels.Children.Add(DashboardMuted("Bangumi", 10)); grid.Children.Add(labels);
+        var labels = Stack(2); labels.Children.Add(Text(count ?? "—", 34, true)); labels.Children.Add(Text(title, 12, true)); labels.Children.Add(DashboardMuted("Bangumi", 10)); grid.Children.Add(labels);
         var arrow = new FontIcon { Glyph = "\uE76C", FontSize = 10, Opacity = .45, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 2, 0, 0) }; grid.Children.Add(arrow);
         var collage = new Grid { Width = 92, Height = 70, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom, IsHitTestVisible = false };
         var covers = (items ?? []).Select(x => Cover(Json.Subject(x))).Where(x => x.Length > 0).Take(3).ToArray();
@@ -111,7 +112,7 @@ internal sealed partial class IntegrationPages
             var poster = DashboardArtwork(covers[i], 42, 62, 4); poster.HorizontalAlignment = HorizontalAlignment.Left;
             poster.Margin = new Thickness(i * 22 + 2, 0, 0, 0); poster.RenderTransformOrigin = new(.5, .5); poster.RenderTransform = new RotateTransform { Angle = (i - 1) * 9 }; collage.Children.Add(poster);
         }
-        grid.Children.Add(collage); var button = DashboardRow(grid, () => navigate("viewing:bangumi:" + kind), title + " " + (items?.Length.ToString() ?? "尚未加载"));
+        grid.Children.Add(collage); var button = DashboardRow(grid, () => navigate("viewing:bangumi:" + kind), title + " " + (count ?? "尚未加载"));
         button.Style = DashboardStyle("DashboardCountButtonStyle"); return button;
     }
     private UIElement DashboardBroadcast(JsonElement subject, DateTimeOffset? time)

@@ -5,16 +5,23 @@ namespace OcPlayer.Windows.Services;
 /// Disk policies apply only to disposable files; mappings and preferences are excluded.
 internal static class CacheFiles
 {
-    internal sealed class State { public readonly object Gate = new(); public long Generation; }
+    internal sealed class State { public readonly object Gate = new(); public long Generation; public DateTimeOffset LastPruneUtc = DateTimeOffset.MinValue; }
     private static readonly ConcurrentDictionary<string, State> States = new(StringComparer.OrdinalIgnoreCase);
     public static State For(string directory) => States.GetOrAdd(Path.GetFullPath(directory), _ => new());
     public static long UsedBytes(string directory, Func<FileInfo, bool> include) => Enumerate(directory).Where(include).Sum(x => Size(x));
     private static long Size(FileInfo file) { try { return file.Length; } catch (IOException) { return 0; } }
 
-    public static void Prune(string directory, long capacity, Func<FileInfo, bool> include, TimeSpan? age = null, string? protect = null)
+    public static void Prune(string directory, long capacity, Func<FileInfo, bool> include, TimeSpan? age = null, string? protect = null, bool force = false)
     {
-        try { lock (For(directory).Gate) PruneCore(directory, capacity, include, age, protect); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { System.Diagnostics.Debug.WriteLine("Cache maintenance: " + ex.Message); }
+        var state = For(directory);
+        lock (state.Gate)
+        {
+            // 写入路径会频繁触发维护，同一目录 60 秒内只做一次全量枚举；显式维护用 force 绕过。
+            if (!force && DateTimeOffset.UtcNow - state.LastPruneUtc < TimeSpan.FromSeconds(60)) return;
+            state.LastPruneUtc = DateTimeOffset.UtcNow;
+            try { PruneCore(directory, capacity, include, age, protect); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { System.Diagnostics.Debug.WriteLine("Cache maintenance: " + ex.Message); }
+        }
     }
 
     private static void PruneCore(string directory, long capacity, Func<FileInfo, bool> include, TimeSpan? age, string? protect)
