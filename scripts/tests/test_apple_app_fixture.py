@@ -276,7 +276,7 @@ class AppleAppWorkflowTests(unittest.TestCase):
         self.assertNotIn("OcpCoreEnabled", script)
         parity = (ROOT / "apps/apple/AppTests/CoreRuntimePreferenceParityTests.swift").read_text(encoding="utf-8")
         self.assertIn('"fixture requires the real Rust library"', parity)
-        self.assertIn('29, "every getter must execute Core"', parity)
+        self.assertIn('31, "every getter must execute Core"', parity)
         self.assertNotIn("XCTSkip", parity)
 
 

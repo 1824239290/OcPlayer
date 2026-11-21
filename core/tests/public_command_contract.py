@@ -74,7 +74,7 @@ class PublicCommandContract(unittest.TestCase):
   self.assertIn('time',self.take(self.ffi.ocp_last_error_message()))
   self.assertTrue(self.call('ping',{})['ok'])
  def test_runtime_preference_schema_and_boundaries(self):
-  rows=self.call('preferences.schema',{})['data']['keys'];self.assertEqual(len(rows),29)
+  rows=self.call('preferences.schema',{})['data']['keys'];self.assertEqual(len(rows),31)
   def resolve(key,value,present=True):
    result=self.call('preferences.resolve',dict(key=key,value=value,present=present));self.assertTrue(result['ok'],result);return result['data']['value']
   for row in rows:self.assertEqual(resolve(row['key'],None,False),row['default'])
@@ -88,5 +88,9 @@ class PublicCommandContract(unittest.TestCase):
   self.assertEqual(resolve('playback.subtitleBold',False),False)
   self.assertIsNone(resolve('playback.subtitlePrimaryColor',0))
   self.assertEqual(resolve('playback.subtitlePrimaryColor',2**32-1),2**32-1)
+  self.assertEqual(resolve('danmaku.outlineWidth',-1),0)
+  self.assertEqual(resolve('danmaku.outlineWidth',5),3)
+  self.assertEqual(resolve('danmaku.shadowStyle',0),0)
+  self.assertEqual(resolve('danmaku.shadowStyle',9),3)
   self.assertFalse(self.call('preferences.resolve',dict(key='bad',present=True,value=0))['ok'])
 if __name__=='__main__':unittest.main(verbosity=2)
