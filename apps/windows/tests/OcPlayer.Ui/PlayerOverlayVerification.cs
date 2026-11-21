@@ -15,6 +15,7 @@ public sealed partial class MainWindow
 {
     private void AttachPlayerVerification()
     {
+        AttachPlayerSizingVerification();
         var output = Environment.GetCommandLineArgs().FirstOrDefault(x => x.StartsWith("--demo-verify-player="))?.Split('=', 2)[1];
         if (output is null) return;
         WindowRoot.Loaded += async (_, _) =>
@@ -320,6 +321,88 @@ public sealed partial class MainWindow
             catch (Exception error)
             {
                 File.WriteAllText(output, JsonSerializer.Serialize(new { passed = false, error = error.ToString(), assertions }));
+            }
+            finally { Close(); }
+        };
+    }
+
+    private void AttachPlayerSizingVerification()
+    {
+        var output = Environment.GetCommandLineArgs().FirstOrDefault(x => x.StartsWith("--demo-verify-player-sizing="))?.Split('=', 2)[1];
+        if (output is null) return;
+        WindowRoot.Loaded += async (_, _) =>
+        {
+            var assertions = new List<string>();
+            var measurements = new List<object>();
+            void Check(bool condition, string message)
+            {
+                if (!condition) throw new InvalidOperationException(message);
+                assertions.Add(message);
+            }
+            try
+            {
+                await Task.Delay(300);
+                var originalSize = AppWindow.Size;
+                PresentPlayer(DemoCatalog.Movies[0]);
+                await Task.Delay(250);
+                var player = _player!;
+                const BindingFlags instance = BindingFlags.Instance | BindingFlags.NonPublic;
+                var video = (FrameworkElement)player.FindName("VideoPanel");
+                video.Visibility = Visibility.Visible;
+                player.IsHitTestVisible = false;
+                typeof(PlayerView).GetMethod("SetPlaying", instance)!.Invoke(player, [false]);
+                var hud = (Services.PlayerHudVisibilityController)typeof(PlayerView).GetField("_hudVisibility", instance)!.GetValue(player)!;
+                void ReportDimensions(uint width, uint height) => typeof(PlayerView).GetMethod("OnNativeDimensions", instance)!.Invoke(player, [width, height]);
+                void CheckSurface(uint width, uint height, string state)
+                {
+                    player.UpdateLayout();
+                    var scale = player.XamlRoot.RasterizationScale;
+                    var surfaceWidth = video.ActualWidth * scale;
+                    var surfaceHeight = video.ActualHeight * scale;
+                    var aspect = (double)width / height;
+                    var fittedWidth = Math.Min(surfaceWidth, surfaceHeight * aspect);
+                    var fittedHeight = fittedWidth / aspect;
+                    var barPixels = Math.Max((surfaceWidth - fittedWidth) / 2, (surfaceHeight - fittedHeight) / 2);
+                    measurements.Add(new { width, height, state, scale, surfaceWidth, surfaceHeight, barPixels, client = AppWindow.ClientSize, window = AppWindow.Size });
+                    Check(barPixels <= 1, $"{width}x{height} {state}: video viewport fits without letterboxing (error {barPixels:0.###} px)");
+                }
+                foreach (var (width, height) in new (uint Width, uint Height)[] { (1920, 1080), (1440, 1080), (2520, 1080), (1080, 1920) })
+                {
+                    hud.Show();
+                    await Task.Delay(100);
+                    ReportDimensions(width, height);
+                    await Task.Delay(300);
+                    CheckSurface(width, height, "HUD visible");
+                    hud.Hide();
+                    await Task.Delay(300);
+                    CheckSurface(width, height, "HUD hidden");
+                    hud.Show();
+                    await Task.Delay(300);
+                    CheckSurface(width, height, "HUD restored");
+                }
+                var presenter = (OverlappedPresenter)AppWindow.Presenter;
+                presenter.Maximize();
+                await Task.Delay(250);
+                var maximizedSize = AppWindow.Size;
+                ReportDimensions(1920, 1080);
+                await Task.Delay(250);
+                Check(AppWindow.Size == maximizedSize, "Video metadata does not resize a maximized window");
+                presenter.Restore();
+                await Task.Delay(250);
+                player.ToggleFullscreen();
+                await Task.Delay(250);
+                var fullscreenSize = AppWindow.Size;
+                ReportDimensions(1440, 1080);
+                await Task.Delay(250);
+                Check(AppWindow.Size == fullscreenSize, "Video metadata does not resize a fullscreen window");
+                DismissPlayer();
+                await Task.Delay(250);
+                Check(AppWindow.Presenter == presenter && AppWindow.Size == originalSize, "Leaving playback restores the original window size and presenter");
+                File.WriteAllText(output, JsonSerializer.Serialize(new { passed = true, assertions, measurements }, new JsonSerializerOptions { WriteIndented = true, IncludeFields = true }));
+            }
+            catch (Exception error)
+            {
+                File.WriteAllText(output, JsonSerializer.Serialize(new { passed = false, error = error.ToString(), assertions, measurements }, new JsonSerializerOptions { WriteIndented = true, IncludeFields = true }));
             }
             finally { Close(); }
         };

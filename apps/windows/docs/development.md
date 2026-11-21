@@ -166,6 +166,8 @@ dotnet build src/OcPlayer.Windows/OcPlayer.Windows.csproj -c Debug -p:Platform=x
 
 Debug 构建也支持 `--demo-verify-player=<绝对 JSON 输出路径>`，验证播放器复用主窗口、全屏恢复、关闭释放、原详情页与滚动位置保留、反复进入/退出，以及 HUD 显隐反向动画、真实闲置计时、暂停/菜单保持、音量静音恢复、标题与时间轴初值。测试使用离线演示数据，源码为 `tests/OcPlayer.Ui/PlayerOverlayVerification.cs`，完成后自动关闭；输出目录需预先存在。`--demo-route=player` 同样使用主窗口覆盖层，可用于 HUD 截图。
 
+另可运行 `--demo-verify-player-sizing=<绝对 JSON 输出路径>`，在真实窗口上以 16:9、4:3、超宽和竖屏尺寸验证视频区域贴合，并检查 HUD 显隐、最大化/全屏及退出播放时的窗口状态。结果包含每种比例的视口测量值；测试源码同为 `tests/OcPlayer.Ui/PlayerOverlayVerification.cs`。
+
 Debug 构建支持 `--demo-verify-transitions=<绝对 JSON 输出路径>`，在独立 WinUI 窗口中验证实际透明度插值、路由退场/入场、详情分阶段前景动画、快速导航取消、同路由服务器刷新以及关闭系统动画后的状态恢复。验证完成后自动关闭窗口，结果中的 `passed`、`assertions` 和 `samples` 可用于检查每个阶段；输出目录需要预先存在。测试源码位于 `tests/OcPlayer.Ui/PageTransitionVerification.cs`，仅编入 Debug，不加载 Core 或连接服务器。滚轮事件是否穿过原生滚动控件仍需在详情页面实机检查。
 
 命令行构建覆盖还原、编译和 XAML 生成。真正的播放验证需要带 GPU 和硬件解码器的 Windows 桌面，

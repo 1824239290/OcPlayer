@@ -89,15 +89,23 @@ public sealed partial class MainWindow
     private void Player_VideoDimensionsAvailable(uint width, uint height)
     {
         if (width == 0 || height == 0 || _player is null || AppWindow.Presenter is not OverlappedPresenter { State: OverlappedPresenterState.Restored } presenter) return;
+        _player.UpdateLayout();
+        var scale = _player.XamlRoot?.RasterizationScale ?? 1;
+        var viewportWidth = (int)Math.Round(_player.ActualWidth * scale);
+        var viewportHeight = (int)Math.Round(_player.ActualHeight * scale);
+        if (viewportWidth <= 0 || viewportHeight <= 0) return;
+        var borderWidth = Math.Max(0, AppWindow.Size.Width - viewportWidth);
+        var borderHeight = Math.Max(0, AppWindow.Size.Height - viewportHeight);
         var area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
         var aspect = (double)width / height;
-        var targetWidth = Math.Min(Math.Max(Math.Max(720, 360 * aspect), AppWindow.ClientSize.Width), area.Width * .9);
+        var targetWidth = Math.Min(Math.Max(Math.Max(720, 360 * aspect), viewportWidth), Math.Max(1, area.Width * .9 - borderWidth));
         var targetHeight = targetWidth / aspect;
-        if (targetHeight > area.Height * .9) { targetHeight = area.Height * .9; targetWidth = targetHeight * aspect; }
-        var desiredWidth = Math.Max(1, (int)Math.Round(targetWidth));
-        var desiredHeight = Math.Max(1, (int)Math.Round(targetHeight));
+        var maxHeight = Math.Max(1, area.Height * .9 - borderHeight);
+        if (targetHeight > maxHeight) { targetHeight = maxHeight; targetWidth = targetHeight * aspect; }
+        var desiredWidth = Math.Max(1, (int)Math.Round(targetWidth)) + borderWidth;
+        var desiredHeight = Math.Max(1, (int)Math.Round(targetHeight)) + borderHeight;
         if (presenter.PreferredMinimumHeight > desiredHeight) presenter.PreferredMinimumHeight = desiredHeight;
         if (presenter.PreferredMinimumWidth > desiredWidth) presenter.PreferredMinimumWidth = desiredWidth;
-        AppWindow.ResizeClient(new SizeInt32(desiredWidth, desiredHeight));
+        AppWindow.Resize(new SizeInt32(desiredWidth, desiredHeight));
     }
 }
