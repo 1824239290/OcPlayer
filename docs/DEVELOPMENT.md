@@ -2,7 +2,7 @@
 
 从仓库根运行下列命令。根入口会切换到正确组件目录，支持带空格或中文的检出路径；原组件入口也继续保留。
 
-PowerShell 根入口在切换目录前解析显式传入的本地输入/输出路径，因此 `-OutputDirectory artifacts/verification/windows-msi` 位于调用目录，而不是 Windows 组件目录。Unix Shell 脚本通过根 `.gitattributes` 保持 LF，不对其他历史文件批量改写换行符。
+PowerShell 根入口在切换目录前解析显式传入的本地输入/输出路径，因此 `-OutputDirectory artifacts/verification/windows-installer` 位于调用目录，而不是 Windows 组件目录。Unix Shell 脚本通过根 `.gitattributes` 保持 LF，不对其他历史文件批量改写换行符。
 
 ## 通用校验
 
@@ -43,7 +43,7 @@ dotnet run --project apps/windows/tests/OcPlayer.Integration -c Release -p:Platf
 
 按 [现有集成测试参数](../apps/windows/tests/OcPlayer.Integration/Program.cs) 选择验证场景，并传入隔离数据目录/产物目录。原生 DLL 默认从 `apps/windows/native/OcPlayerCore/x64` 进入构建输出。
 
-MSI 参数仍是纯数值版本，例如 `1.0.0`；不能直接传入 `windows/v1.0.0`。CI 先去掉标签前缀。测试 MSI 不等于授权覆盖本机已安装的正式应用。
+安装包版本参数仍是纯数值版本，例如 `1.0.0`；不能直接传入 `windows/v1.0.0`。CI 先去掉标签前缀。测试安装包不等于授权覆盖本机已安装的正式应用。
 
 ## macOS / iOS
 

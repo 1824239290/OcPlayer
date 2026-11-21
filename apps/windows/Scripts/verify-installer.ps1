@@ -2,9 +2,16 @@
 param(
     [Parameter(Mandatory)][string]$Installer,
     [Parameter(Mandatory)][string]$UpgradeInstaller,
+    [ValidateSet('perUser', 'perMachine')][string]$Scope = 'perUser',
     [string]$OutputDirectory = (Join-Path $PSScriptRoot '..\artifacts\installer-verification')
 )
 $ErrorActionPreference = 'Stop'
+if ($Scope -eq 'perMachine') {
+    $principal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
+    if (!$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        throw 'Per-machine installer lifecycle verification requires an elevated Administrator PowerShell session.'
+    }
+}
 $Installer = (Resolve-Path -LiteralPath $Installer).Path
 $UpgradeInstaller = (Resolve-Path -LiteralPath $UpgradeInstaller).Path
 $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
@@ -12,41 +19,57 @@ $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
 $installedDirectory = Join-Path $OutputDirectory '自定义安装目录\OcPlayer App'
 $dataDirectory = Join-Path $OutputDirectory 'user-data'
 [IO.Directory]::CreateDirectory($dataDirectory) | Out-Null
-$installerApi = New-Object -ComObject WindowsInstaller.Installer
-function Read-MsiProperty([string]$Path, [string]$Name) {
-    $database = $installerApi.OpenDatabase($Path, 0)
-    $view = $database.OpenView("SELECT ``Value`` FROM ``Property`` WHERE ``Property``='$Name'")
-    $view.Execute() | Out-Null
-    try { $record = $view.Fetch(); return $record.StringData(1) }
-    finally { $view.Close() | Out-Null }
+$registryRoot = if ($Scope -eq 'perMachine') { [Microsoft.Win32.Registry]::LocalMachine } else { [Microsoft.Win32.Registry]::CurrentUser }
+$scopeFlag = if ($Scope -eq 'perMachine') { '/ALLUSERS' } else { '/CURRENTUSER' }
+$uninstallSubkey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{1EDBADE9-AD55-442B-A1DB-752A2A40B549}_is1'
+$metaSubkey = 'Software\OcPlayer\Windows\Installer'
+function Normalize-Version([string]$Raw) {
+    $v = [version]($Raw.Trim())
+    $build = if ($v.Build -lt 0) { 0 } else { $v.Build }
+    $rev = if ($v.Revision -lt 0) { 0 } else { $v.Revision }
+    return [version]::new($v.Major, $v.Minor, $build, $rev)
 }
-$originalProduct = Read-MsiProperty $Installer 'ProductCode'
-$upgradeProduct = Read-MsiProperty $UpgradeInstaller 'ProductCode'
-$originalVersion = Read-MsiProperty $Installer 'ProductVersion'
-$upgradeVersion = Read-MsiProperty $UpgradeInstaller 'ProductVersion'
-if ([version]$upgradeVersion -le [version]$originalVersion) { throw 'The upgrade fixture must have a newer version.' }
-if ($installerApi.ProductState($originalProduct) -ne -1 -or $installerApi.ProductState($upgradeProduct) -ne -1) { throw 'These products are already installed. Use fresh verification packages.' }
-$relatedProducts = @($installerApi.RelatedProducts((Read-MsiProperty $Installer 'UpgradeCode'))) | Where-Object { $_ }
-if ($relatedProducts) { throw 'An existing OcPlayer MSI is installed. Run lifecycle verification in an isolated Windows account or VM.' }
+function Read-SetupVersion([string]$Path) {
+    $info = [Diagnostics.FileVersionInfo]::GetVersionInfo($Path)
+    $raw = if ($info.FileVersion) { $info.FileVersion } else { $info.ProductVersion }
+    if (!$raw) { throw "Installer version metadata is missing: $Path" }
+    return Normalize-Version $raw
+}
+$originalVersion = Read-SetupVersion $Installer
+$upgradeVersion = Read-SetupVersion $UpgradeInstaller
+if ($upgradeVersion -le $originalVersion) { throw 'The upgrade fixture must have a newer version.' }
+$existingUninstall = $registryRoot.OpenSubKey($uninstallSubkey)
+if ($existingUninstall) {
+    $existingUninstall.Dispose()
+    throw "An existing OcPlayer installation is present for $Scope. Run lifecycle verification in an isolated Windows account or VM."
+}
 $protocolPaths = @('Software\Classes\ocplayer', 'Software\Classes\ocplayer\shell\open\command')
 $protocolBackup = @{}
 foreach ($path in $protocolPaths) {
-    $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($path)
+    $key = $registryRoot.OpenSubKey($path)
     if ($key) { try { $values = @{}; foreach ($name in $key.GetValueNames()) { $values[$name] = @{ Value = $key.GetValue($name); Kind = $key.GetValueKind($name) } }; $protocolBackup[$path] = $values } finally { $key.Dispose() } }
 }
 $assertions = [Collections.Generic.List[string]]::new()
 function Assert-Installer([bool]$Condition, [string]$Message) { if (!$Condition) { throw $Message }; $assertions.Add($Message); Write-Output "PASS $Message" }
-function Invoke-Msi([string[]]$Arguments) {
+function Invoke-Setup([string]$Executable, [string[]]$Arguments) {
     $quoted = $Arguments | ForEach-Object {
-        if ($_.StartsWith('/')) { $_ }
-        elseif ($_ -match '^([A-Z][A-Z0-9_]*)=(.*)$') { $Matches[1] + '="' + $Matches[2].Replace('"', '\"') + '"' }
-        else { '"' + $_.Replace('"', '\"') + '"' }
+        if ($_ -match '^(/[A-Za-z]+)=(.*)$') { $Matches[1] + '="' + $Matches[2].Replace('"', '\"') + '"' }
+        elseif ($_ -match '\s') { '"' + $_.Replace('"', '\"') + '"' }
+        else { $_ }
     }
-    $process = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\msiexec.exe') -ArgumentList ($quoted -join ' ') -WindowStyle Hidden -PassThru
-    try { if (!$process.WaitForExit(60000)) { $process.Kill(); throw 'Windows Installer did not finish within 60 seconds.' }; if ($process.ExitCode -notin @(0, 3010)) { throw "Windows Installer failed ($($process.ExitCode)). See the MSI log." } }
-    finally { $process.Dispose() }
+    $process = Start-Process -FilePath $Executable -ArgumentList ($quoted -join ' ') -WindowStyle Hidden -PassThru
+    try {
+        if (!$process.WaitForExit(120000)) { $process.Kill(); throw "Installer did not finish within 120 seconds: $Executable" }
+        if ($process.ExitCode -ne 0) { throw "Installer failed ($($process.ExitCode)): $Executable" }
+    } finally { $process.Dispose() }
 }
-function Probe-Runtime([string]$Name, [string]$ExpectedVersion) {
+function Read-RegistryValue([string]$Subkey, [string]$Name) {
+    $key = $registryRoot.OpenSubKey($Subkey)
+    if (!$key) { return $null }
+    try { return $key.GetValue($Name) }
+    finally { $key.Dispose() }
+}
+function Probe-Runtime([string]$Name, [version]$ExpectedVersion) {
     $resultPath = Join-Path $dataDirectory "$Name.json"
     $launch = [Diagnostics.ProcessStartInfo]::new((Join-Path $installedDirectory 'OcPlayer.Windows.exe'))
     $launch.UseShellExecute = $false; $launch.CreateNoWindow = $true; $launch.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
@@ -61,7 +84,7 @@ function Probe-Runtime([string]$Name, [string]$ExpectedVersion) {
     finally { $process.Dispose() }
     $result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
     Assert-Installer $result.passed 'installed Core, Erika and the WinUI main window initialize successfully'
-    Assert-Installer ([version]$result.version -eq [version]$ExpectedVersion) 'the installed binary reports the expected release version'
+    Assert-Installer ((Normalize-Version $result.version) -eq $ExpectedVersion) 'the installed binary reports the expected release version'
     Assert-Installer ($result.dataDirectory -eq $dataDirectory) 'the installed app uses the independent user-data directory'
     foreach ($module in @('coreclr.dll', 'Microsoft.UI.Xaml.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')) {
         Assert-Installer ($result.modules.$module.StartsWith($installedDirectory.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) "$module loads from the installed directory"
@@ -72,43 +95,57 @@ function Probe-Runtime([string]$Name, [string]$ExpectedVersion) {
 $sentinel = Join-Path $dataDirectory 'playback-history-sentinel.txt'
 function Restore-Protocol {
     foreach ($path in $protocolBackup.Keys) {
-        $key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($path, $true)
+        $key = $registryRoot.CreateSubKey($path, $true)
         try { foreach ($name in $protocolBackup[$path].Keys) { $value = $protocolBackup[$path][$name]; $key.SetValue($name, $value.Value, $value.Kind) } }
         finally { $key.Dispose() }
     }
 }
+function Invoke-InstalledUninstaller([string]$LogName) {
+    $uninstallString = Read-RegistryValue $uninstallSubkey 'UninstallString'
+    if (!$uninstallString) { return $false }
+    $uninstallerPath = $uninstallString.Trim().Trim('"')
+    if (!(Test-Path -LiteralPath $uninstallerPath)) { return $false }
+    Invoke-Setup $uninstallerPath @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$(Join-Path $OutputDirectory $LogName)")
+    return $true
+}
 try {
     [IO.File]::WriteAllText($sentinel, 'preserve user playback history')
-    Invoke-Msi @('/i', $Installer, '/qn', '/norestart', "INSTALLFOLDER=$installedDirectory", '/l*v', (Join-Path $OutputDirectory 'install.log'))
-    Assert-Installer ($installerApi.ProductInfo($originalProduct, 'InstallLocation').TrimEnd('\') -eq $installedDirectory.TrimEnd('\')) 'installation records the custom directory containing spaces and Unicode characters'
+    Invoke-Setup $Installer @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', $scopeFlag, "/DIR=$installedDirectory", "/LOG=$(Join-Path $OutputDirectory 'install.log')")
+    $recordedInstall = Read-RegistryValue $uninstallSubkey 'InstallLocation'
+    Assert-Installer ($recordedInstall -and $recordedInstall.TrimEnd('\') -eq $installedDirectory.TrimEnd('\')) 'installation records the custom directory containing spaces and Unicode characters'
+    $metaInstall = Read-RegistryValue $metaSubkey 'InstallLocation'
+    Assert-Installer ($metaInstall -and $metaInstall.TrimEnd('\') -eq $installedDirectory.TrimEnd('\')) 'installation records InstallLocation in OcPlayer installer metadata'
     Probe-Runtime 'first-runtime' $originalVersion
-    Assert-Installer ((Read-MsiProperty $Installer 'ARPPRODUCTICON') -eq 'OcPlayerIcon') 'the installed product uses the OcPlayer icon'
-    $handler = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\Classes\ocplayer\shell\open\command')
+    $displayIcon = Read-RegistryValue $uninstallSubkey 'DisplayIcon'
+    Assert-Installer ($displayIcon -and $displayIcon.EndsWith('OcPlayer.Windows.exe', [StringComparison]::OrdinalIgnoreCase)) 'the installed product uses the OcPlayer icon'
+    $handler = $registryRoot.OpenSubKey('Software\Classes\ocplayer\shell\open\command')
+    if (!$handler) { throw "Protocol registration is missing for $Scope." }
     try {
         Assert-Installer ($handler.GetValue('').Contains('"' + (Join-Path $installedDirectory 'OcPlayer.Windows.exe') + '"')) 'installation registers the quoted apphost protocol command'
     } finally { $handler.Dispose() }
     [IO.File]::WriteAllText((Join-Path $dataDirectory 'runtime-settings.json'), '{"UserAgent":"installer-fixture"}')
     $databasePath = Join-Path $dataDirectory 'Media.sqlite'
     $databaseHash = (Get-FileHash -LiteralPath $databasePath).Hash
-    Invoke-Msi @('/i', $UpgradeInstaller, '/qn', '/norestart', '/l*v', (Join-Path $OutputDirectory 'upgrade.log'))
-    Assert-Installer ($installerApi.ProductState($originalProduct) -eq -1 -and $installerApi.ProductState($upgradeProduct) -eq 5) 'major upgrade removes the earlier product and installs the new version'
-    Assert-Installer ($installerApi.ProductInfo($upgradeProduct, 'InstallLocation').TrimEnd('\') -eq $installedDirectory.TrimEnd('\')) 'upgrade reuses the custom installation directory without an INSTALLFOLDER override'
+    Invoke-Setup $UpgradeInstaller @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$(Join-Path $OutputDirectory 'upgrade.log')")
+    $upgradedDisplayVersion = Read-RegistryValue $uninstallSubkey 'DisplayVersion'
+    Assert-Installer ($upgradedDisplayVersion -and (Normalize-Version $upgradedDisplayVersion) -eq $upgradeVersion) 'upgrade updates the registered product version in place'
+    $upgradedInstall = Read-RegistryValue $uninstallSubkey 'InstallLocation'
+    Assert-Installer ($upgradedInstall -and $upgradedInstall.TrimEnd('\') -eq $installedDirectory.TrimEnd('\')) 'upgrade reuses the custom installation directory and scope without CLI overrides'
     Assert-Installer ((Get-FileHash -LiteralPath $databasePath).Hash -eq $databaseHash) 'upgrade leaves the actual Core database unchanged'
     Probe-Runtime 'upgraded-runtime' $upgradeVersion
     Assert-Installer ([IO.File]::ReadAllText($sentinel) -eq 'preserve user playback history') 'upgrade preserves application data outside the installation directory'
     Assert-Installer ([IO.File]::ReadAllText((Join-Path $dataDirectory 'runtime-settings.json')) -eq '{"UserAgent":"installer-fixture"}') 'upgrade preserves existing runtime preferences'
     $databaseHash = (Get-FileHash -LiteralPath $databasePath).Hash
-    Invoke-Msi @('/x', $upgradeProduct, '/qn', '/norestart', '/l*v', (Join-Path $OutputDirectory 'uninstall.log'))
+    Assert-Installer (Invoke-InstalledUninstaller 'uninstall.log') 'uninstaller runs cleanly'
     Assert-Installer (!(Test-Path -LiteralPath (Join-Path $installedDirectory 'OcPlayer.Windows.exe'))) 'uninstall removes the application binaries'
+    Assert-Installer ($null -eq (Read-RegistryValue $uninstallSubkey 'InstallLocation')) 'uninstall removes the registered product entry'
     Assert-Installer ([IO.File]::ReadAllText($sentinel) -eq 'preserve user playback history') 'uninstall preserves user preferences and playback data'
     Assert-Installer ((Get-FileHash -LiteralPath $databasePath).Hash -eq $databaseHash) 'uninstall retains the actual Core database unchanged'
-    @{ passed = $true; assertions = $assertions.ToArray() } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $OutputDirectory 'results.json') -Encoding utf8
+    @{ passed = $true; scope = $Scope; assertions = $assertions.ToArray() } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $OutputDirectory 'results.json') -Encoding utf8
 } catch {
-    @{ passed = $false; assertions = $assertions.ToArray(); error = $_.Exception.ToString() } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $OutputDirectory 'results.json') -Encoding utf8
+    @{ passed = $false; scope = $Scope; assertions = $assertions.ToArray(); error = $_.Exception.ToString() } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $OutputDirectory 'results.json') -Encoding utf8
     throw
 } finally {
-    foreach ($product in @($upgradeProduct, $originalProduct)) {
-        if ($installerApi.ProductState($product) -eq 5) { Invoke-Msi @('/x', $product, '/qn', '/norestart', '/l*v', (Join-Path $OutputDirectory 'cleanup.log')) }
-    }
+    Invoke-InstalledUninstaller 'cleanup.log' | Out-Null
     Restore-Protocol
 }

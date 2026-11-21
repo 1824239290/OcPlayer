@@ -5,6 +5,7 @@ param(
     [string]$CoreRoot,
     [string]$VcRuntimeDirectory,
     [string]$OutputDirectory,
+    [string]$InnoSetupCompiler,
     [string]$CertificateThumbprint,
     [string]$TimestampUrl = 'http://timestamp.digicert.com',
     [switch]$SkipPublish
@@ -14,7 +15,7 @@ $windowsRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\apps\windows'
 if (!$CoreRoot) { $CoreRoot = Join-Path $PSScriptRoot '..\core' }
 $parameters = @{} + $PSBoundParameters
 $parameters.CoreRoot = $CoreRoot
-foreach ($pathName in @('CoreRoot', 'VcRuntimeDirectory', 'OutputDirectory')) {
+foreach ($pathName in @('CoreRoot', 'VcRuntimeDirectory', 'OutputDirectory', 'InnoSetupCompiler')) {
     if ($parameters[$pathName]) { $parameters[$pathName] = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($parameters[$pathName]) }
 }
 Push-Location $windowsRoot
