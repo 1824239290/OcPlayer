@@ -358,6 +358,8 @@ public sealed partial class MainWindow : Window
         _player.VideoDimensionsAvailable += Player_VideoDimensionsAvailable;
         PlayerHost.Children.Add(_player);
         PlayerHost.Visibility = Visibility.Visible;
+        WindowRoot.Background = new SolidColorBrush(Microsoft.UI.Colors.Black);
+        WindowRoot.RequestedTheme = ElementTheme.Dark;
         // Retain the actual page tree: selection and scroll position survive playback.
         Root.Visibility = Visibility.Collapsed;
         SetTitleBar(_player.DragRegion);
@@ -382,6 +384,8 @@ public sealed partial class MainWindow : Window
         _player = null;
         PlayerHost.Children.Clear();
         PlayerHost.Visibility = Visibility.Collapsed;
+        WindowRoot.Background = null;
+        WindowRoot.RequestedTheme = Root.RequestedTheme;
         Root.Visibility = Visibility.Visible;
         if (!_closing)
         {
@@ -466,10 +470,19 @@ public sealed partial class MainWindow : Window
         Controls.DemoUi.IsDark = _model.DarkTheme;
         Root.Background = new SolidColorBrush(Controls.AmbientBackdropView.PageColor(_model.DarkTheme));
         Ambience.SetStyle(_model.DarkTheme, _model.Route == "detail-info");
+        caption.BackgroundColor = Microsoft.UI.Colors.Transparent;
+        caption.InactiveBackgroundColor = Microsoft.UI.Colors.Transparent;
         caption.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
         caption.ButtonInactiveBackgroundColor = Microsoft.UI.Colors.Transparent;
         caption.ButtonForegroundColor = _player is not null || Root.ActualTheme == ElementTheme.Dark ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black;
         caption.ButtonInactiveForegroundColor = _player is not null ? Microsoft.UI.Colors.LightGray : null;
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        if (hwnd != IntPtr.Zero)
+        {
+            var isDark = (_player is not null || _model.DarkTheme) ? 1 : 0;
+            if (DwmSetWindowAttribute(hwnd, 20, ref isDark, sizeof(int)) != 0)
+                DwmSetWindowAttribute(hwnd, 19, ref isDark, sizeof(int));
+        }
     }
     private void Root_ActualThemeChanged(FrameworkElement sender, object args) => SetCaptionTheme();
     private void UpdateAmbientActivity()
@@ -877,6 +890,9 @@ public sealed partial class MainWindow : Window
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr hwnd);
+
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int pvAttribute, int cbAttribute);
 
     private void RestoreWindowPlacement()
     {

@@ -9,6 +9,8 @@
             </ResourceDictionary.MergedDictionaries>
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="WindowCaptionBackground" Color="Transparent" />
+                    <SolidColorBrush x:Key="WindowCaptionBackgroundDisabled" Color="Transparent" />
                     <SolidColorBrush x:Key="DashboardCardBackgroundBrush" Color="#580E1016" />
                     <SolidColorBrush x:Key="DashboardCardBorderBrush" Color="#26FFFFFF" />
                     <SolidColorBrush x:Key="BangumiWatchedBackgroundBrush" Color="#2EFFFFFF" />
@@ -21,6 +23,8 @@
                     </LinearGradientBrush>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="WindowCaptionBackground" Color="Transparent" />
+                    <SolidColorBrush x:Key="WindowCaptionBackgroundDisabled" Color="Transparent" />
                     <SolidColorBrush x:Key="DashboardCardBackgroundBrush" Color="#AAFFFFFF" />
                     <SolidColorBrush x:Key="DashboardCardBorderBrush" Color="#20000000" />
                     <SolidColorBrush x:Key="BangumiWatchedBackgroundBrush" Color="#10000000" />
@@ -33,6 +37,8 @@
                     </LinearGradientBrush>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="HighContrast">
+                    <SolidColorBrush x:Key="WindowCaptionBackground" Color="Transparent" />
+                    <SolidColorBrush x:Key="WindowCaptionBackgroundDisabled" Color="Transparent" />
                     <SolidColorBrush x:Key="DashboardCardBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
                     <SolidColorBrush x:Key="DashboardCardBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
                     <SolidColorBrush x:Key="BangumiWatchedBackgroundBrush" Color="{ThemeResource SystemColorHighlightColor}" />

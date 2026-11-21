@@ -392,8 +392,20 @@ public sealed partial class PlayerView : UserControl, IDisposable
         MediaTitle.FontSize = narrow ? 18 : 22;
         EpisodeTitle.FontSize = narrow ? 12 : 13;
         RefreshMoreInfo();
-        PlayerTitleBar.Height = fullscreen || _captionHeight <= 0 ? 48 : _captionHeight / scale;
-        ReturnButton.Height = FullscreenButton.Height = VolumeButton.Height = PlayerTitleBar.Height;
+        if (fullscreen)
+        {
+            _window.SetTitleBar(null);
+            PlayerTitleBar.Height = 0;
+            PlayerTitleBar.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            PlayerTitleBar.Visibility = Visibility.Visible;
+            PlayerTitleBar.Height = _captionHeight <= 0 ? 48 : _captionHeight / scale;
+            _window.SetTitleBar(DragRegion);
+        }
+        var captionHeight = fullscreen || _captionHeight <= 0 ? 48 : _captionHeight / scale;
+        ReturnButton.Height = FullscreenButton.Height = VolumeButton.Height = captionHeight;
         ReturnButton.Width = FullscreenButton.Width = VolumeButton.Width = !fullscreen && _captionRightInset > 0 ? _captionRightInset / (3 * scale) : 46;
         TitleActions.Margin = new Thickness(fullscreen ? 0 : _captionLeftInset / scale, 0, 0, 0);
         VolumeButton.Margin = new Thickness(0, 0, fullscreen ? 0 : _captionRightInset / scale, 0);
