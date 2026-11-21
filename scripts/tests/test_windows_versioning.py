@@ -44,8 +44,9 @@ class WindowsVersioningTests(unittest.TestCase):
 
         self.assertIn("default: ''", build)
         self.assertIn("innosetup", build)
-        self.assertIn("*.exe", build)
-        self.assertIn("find artifacts -name '*.exe'", release)
+        self.assertIn("*-Setup.exe", build)
+        self.assertIn("release.json", build)
+        self.assertIn("find artifacts -name '*-Setup.exe'", release)
         self.assertNotIn("*.msi", build)
         self.assertNotIn("-name '*.msi'", release)
 
