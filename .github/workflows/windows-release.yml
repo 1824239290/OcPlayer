@@ -55,7 +55,7 @@ jobs:
         with:
           name: windows-release
           path: artifacts
-      - name: Publish verified Windows MSI
+      - name: Publish verified Windows installer
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -64,8 +64,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t installers < <(find artifacts -name '*.msi' -type f)
-          [[ "${#installers[@]}" == 1 ]] || { echo 'Expected one verified MSI' >&2; exit 1; }
+          mapfile -t installers < <(find artifacts -name '*.exe' -type f)
+          [[ "${#installers[@]}" == 1 ]] || { echo 'Expected one verified Windows installer' >&2; exit 1; }
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release edit "$RELEASE_TAG" --latest=false
             gh release upload "$RELEASE_TAG" "${installers[0]}" --clobber

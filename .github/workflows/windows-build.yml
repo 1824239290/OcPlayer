@@ -8,7 +8,7 @@ on:
         required: true
       version:
         type: string
-        default: '1.0.0'
+        default: ''
       artifact-name:
         type: string
         default: windows-verification
@@ -44,7 +44,7 @@ jobs:
           targets: x86_64-pc-windows-msvc
       - name: Prepare native tools
         run: |
-          choco install make nasm --no-progress -y
+          choco install make nasm innosetup --no-progress -y
           if ($LASTEXITCODE -ne 0) { throw 'Native tool installation failed' }
           Import-Module "$env:ChocolateyInstall/helpers/chocolateyProfile.psm1"
           Update-SessionEnvironment
@@ -76,13 +76,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Windows storage integration failed' }
           dotnet run --project apps/windows/tests/OcPlayer.Integration -c Release -p:Platform=x64 -- --server-only artifacts/verification/windows-server
           if ($LASTEXITCODE -ne 0) { throw 'Windows server integration failed' }
-      - name: Verify self-contained MSI packaging
+      - name: Verify self-contained installer packaging
         env:
           RELEASE_VERSION: ${{ inputs.version }}
-        run: ./scripts/package-windows.ps1 -Version $env:RELEASE_VERSION -OutputDirectory artifacts/verification/windows-msi
+        run: |
+          $package = @{ OutputDirectory = 'artifacts/verification/windows-installer' }
+          if ($env:RELEASE_VERSION) { $package.Version = $env:RELEASE_VERSION }
+          ./scripts/package-windows.ps1 @package
       - name: Verify Core ABI and C# SDK
         run: ./scripts/verify-core.ps1 -Configuration release
-      - name: Upload Windows evidence and MSI
+      - name: Upload Windows evidence and installer
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -90,7 +93,8 @@ jobs:
           path: |
             artifacts/verification/**/*.json
             artifacts/verification/**/*.log
-            artifacts/verification/windows-msi/*.msi
+            artifacts/verification/windows-installer/*.exe
+            artifacts/verification/windows-installer/release.json
             apps/windows/native/OcPlayerCore/x64/build-receipt.json
           retention-days: 7
           if-no-files-found: ignore
