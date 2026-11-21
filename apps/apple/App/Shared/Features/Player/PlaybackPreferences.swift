@@ -251,6 +251,16 @@ enum PlaybackPreferences {
         get { storedDouble(forKey: SettingsKeys.danmakuFontSize, range: danmakuFontSizeRange, default: danmakuBaseFontSize) }
         set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.danmakuFontSize) }
     }
+    /// 弹幕描边粗细档位（0 = 无，1 = 细，2 = 标准，3 = 粗；默认 2 = 标准）。
+    static var danmakuOutlineWidth: Double {
+        get { storedDouble(forKey: SettingsKeys.danmakuOutlineWidth, range: 0...3, default: 2.0) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.danmakuOutlineWidth) }
+    }
+    /// 弹幕投影样式（0 = 无，1 = 柔和，2 = 中等，3 = 强烈；默认 3 = 强烈）。
+    static var danmakuShadowStyle: Int {
+        get { storedInt(forKey: SettingsKeys.danmakuShadowStyle, range: 0...3, default: 3) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.danmakuShadowStyle) }
+    }
     /// 弹幕诊断日志开关（默认关闭）。开启后弹幕 overlay 记录时间轴对齐点、
     /// 爆发发射与续播定位日志（写入 diagnostics.jsonl），供排查「续播起播
     /// 爆一大片弹幕」等时间轴问题用；平时关闭以减少日志噪声。

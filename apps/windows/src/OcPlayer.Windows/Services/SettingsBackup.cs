@@ -24,7 +24,7 @@ internal static class SettingsBackup
                 subtitleMarginVertical = p.SubtitleMargin, subtitlePrimaryColor = Color(p.SubtitleColor), subtitleOutlineColor = Color(p.SubtitleOutlineColor), subtitleOutlineWidth = (double)p.SubtitleOutlineWidth, subtitleBold = p.SubtitleBold,
                 httpReadAheadMiB = p.NetworkBufferMiB == 2 ? 0 : p.NetworkBufferMiB, httpBackBufferMiB = p.BackBufferMiB == 16 ? 0 : p.BackBufferMiB },
             danmaku = new { danmakuEnabled = d.Enabled, opacity = d.Opacity, displayArea = d.DisplayArea, blockTop = d.BlockTop, blockBottom = d.BlockBottom, blockScroll = d.BlockScroll,
-                fontSize = d.FontSize, autoLoad = d.AutoLoad, dandanplayGatewayURL = d.GatewayUrl },
+                fontSize = d.FontSize, autoLoad = d.AutoLoad, dandanplayGatewayURL = d.GatewayUrl, outlineWidth = d.OutlineWidth, shadowStyle = d.ShadowStyle },
             general = new { bangumiEnabled = core.Integrations.IsEnabled("bangumi"), moviepilotEnabled = core.Integrations.IsEnabled("moviepilot"),
                 homeSections = EncodeHome(sections, hidden), episodeSortAscending = !episodesDescending },
             mirror = new { bangumiEnabled = core.Integrations.MirrorEnabled, bangumiRootDomain = core.Integrations.MirrorRoot, tmdbEnabled = t.UseMirror, tmdbAPIBaseURL = t.ApiMirror, tmdbImageBaseURL = t.ImageMirror },
@@ -61,6 +61,7 @@ internal static class SettingsBackup
         };
         if (danmaku.ValueKind == JsonValueKind.Object) d = d with { Enabled = Bool(danmaku, "danmakuEnabled", d.Enabled), AutoLoad = Bool(danmaku, "autoLoad", d.AutoLoad),
             FontSize = Number(danmaku, "fontSize", d.FontSize), Opacity = Number(danmaku, "opacity", d.Opacity), DisplayArea = Number(danmaku, "displayArea", d.DisplayArea),
+            OutlineWidth = Number(danmaku, "outlineWidth", d.OutlineWidth), ShadowStyle = (int)Number(danmaku, "shadowStyle", d.ShadowStyle),
             BlockTop = Bool(danmaku, "blockTop", d.BlockTop), BlockBottom = Bool(danmaku, "blockBottom", d.BlockBottom), BlockScroll = Bool(danmaku, "blockScroll", d.BlockScroll), GatewayUrl = Text(danmaku, "dandanplayGatewayURL", d.GatewayUrl) };
         if (tmdb.ValueKind == JsonValueKind.Object) t = t with { ApiKey = Text(tmdb, "apiKey", t.ApiKey), Language = Text(tmdb, "language", t.Language),
             PreferText = Bool(tmdb, "preferText", t.PreferText), ReplaceImages = Bool(tmdb, "replaceImages", t.ReplaceImages), ShowMissingEpisodes = Bool(tmdb, "showPlaceholders", t.ShowMissingEpisodes) };
@@ -86,7 +87,7 @@ internal static class SettingsBackup
         var preview = $"导出时间：{Json.Text(root, "exportedAt")}\n来源设备：{Json.Text(root, "deviceName")}\n版本：{Json.Text(root, "appVersion")}\n\n"
             + $"TMDB：{keyTail} · {t.Language} · 文本优先 {t.PreferText} · 替换图片 {t.ReplaceImages} · 占位 {t.ShowMissingEpisodes}\n"
             + $"网络缓冲：{p.NetworkBufferMiB} / {p.BackBufferMiB} MiB\n跳过片头/尾：{p.SkipIntro}/{p.SkipOutro} · 保留 {p.OutroRetainSeconds}s\n字幕：{p.SubtitleLanguage} · {p.SubtitlePosition} · 边距 {p.SubtitleMargin} · 颜色 {p.SubtitleColor ?? "不设置"} / {p.SubtitleOutlineColor ?? "不设置"} · 描边 {p.SubtitleOutlineWidth} · 加粗 {p.SubtitleBold?.ToString() ?? "不设置"} · 覆盖 {p.OverrideSubtitleStyles}\n画质：{p.QualityEnhancement}\n"
-            + $"弹幕：自动 {d.AutoLoad} · 显示 {d.Enabled} · {d.FontSize}pt · 不透明度 {d.Opacity:P0} · 区域 {d.DisplayArea:P0} · 内核 {d.UseKernelRenderer}\n镜像：{t.ApiBase}\n{t.ImageBase}\n"
+            + $"弹幕：自动 {d.AutoLoad} · 显示 {d.Enabled} · {d.FontSize}pt · 不透明度 {d.Opacity:P0} · 区域 {d.DisplayArea:P0} · 描边 {d.OutlineWidth} · 阴影 {d.ShadowStyle} · 内核 {d.UseKernelRenderer}\n镜像：{t.ApiBase}\n{t.ImageBase}\n"
             + $"首页栏目：{(sections is null ? "保留当前" : string.Join("、", sections))}\n隐藏栏目：{(hidden is null ? "保留当前" : string.Join("、", hidden))}\n外观：{theme ?? "保留当前"}\nBangumi 镜像：{integrations.GetValueOrDefault("bangumi.mirror.root", "官方")}\n集成偏好：{integrations.Count} 项\n不会恢复服务器账号、密码或登录令牌。";
         return new(p, d, t, sections, hidden, theme, preview, JsonSerializer.SerializeToElement(integrations), general.ValueKind == JsonValueKind.Object ? !Bool(general, "episodeSortAscending", true) : null);
     }

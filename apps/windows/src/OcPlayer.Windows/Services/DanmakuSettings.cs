@@ -6,7 +6,8 @@ internal sealed record DanmakuPreferences(
     string GatewayUrl = "", string ApiKey = "", bool AutoLoad = true, bool Enabled = true,
     double FontSize = 22, double Opacity = .85, double DisplayArea = .75,
     bool BlockTop = false, bool BlockBottom = false, bool BlockScroll = false,
-    bool MergeDuplicates = false, bool AllowStacking = false, bool UseKernelRenderer = false, string AnimeSkipClientId = "")
+    bool MergeDuplicates = false, bool AllowStacking = false, bool UseKernelRenderer = false, string AnimeSkipClientId = "",
+    double OutlineWidth = 2.0, int ShadowStyle = 3)
 {
     // Public, app-distributed gateway credentials, shared with OcPlayer's DandanplaySettingsStore.
     public const string DefaultGateway = "https://dandanplay.3841625.xyz";
@@ -17,6 +18,7 @@ internal sealed record DanmakuPreferences(
         : EffectiveUrl == DefaultGateway ? PublicApiKey : "";
     public object Gateway => new { base_url = EffectiveUrl, api_key = EffectiveKey, user_agent = "OcPlay/0.3.0 (Windows)" };
     public object Renderer => new { enabled = Enabled, fontSize = FontSize, opacity = Opacity, displayArea = DisplayArea,
+        outlineWidth = OutlineWidth, shadowStyle = ShadowStyle,
         blockTop = BlockTop, blockBottom = BlockBottom, blockScroll = BlockScroll, mergeDuplicates = MergeDuplicates, allowStacking = AllowStacking };
 
     public DanmakuPreferences Validated()
@@ -28,8 +30,10 @@ internal sealed record DanmakuPreferences(
         if (AnimeSkipClientId.Any(char.IsControl)) throw new ArgumentException("anime-skip Client ID 不能包含控制字符。");
         if (!double.IsFinite(FontSize) || FontSize is < 11 or > 44
             || !double.IsFinite(Opacity) || Opacity is < .25 or > 1
-            || !double.IsFinite(DisplayArea) || DisplayArea is < .25 or > 1)
-            throw new ArgumentException("弹幕字号应为 11–44，不透明度和显示区域应为 25%–100%。");
+            || !double.IsFinite(DisplayArea) || DisplayArea is < .25 or > 1
+            || !double.IsFinite(OutlineWidth) || OutlineWidth is < 0 or > 3
+            || ShadowStyle is < 0 or > 3)
+            throw new ArgumentException("弹幕设置无效，请检查数值范围。");
         return this with { GatewayUrl = GatewayUrl.Trim(), ApiKey = ApiKey.Trim(), AnimeSkipClientId = AnimeSkipClientId.Trim() };
     }
 

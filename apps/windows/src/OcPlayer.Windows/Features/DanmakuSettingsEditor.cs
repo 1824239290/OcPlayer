@@ -8,11 +8,29 @@ namespace OcPlayer.Windows.Features;
 
 internal sealed class DanmakuSettingsEditor
 {
+    private static readonly (string Label, string Value)[] OutlineOptions =
+    [
+        ("无", "0"),
+        ("细", "1"),
+        ("标准", "2"),
+        ("粗", "3")
+    ];
+
+    private static readonly (string Label, string Value)[] ShadowOptions =
+    [
+        ("无", "0"),
+        ("柔和", "1"),
+        ("中等", "2"),
+        ("强烈", "3")
+    ];
+
     private readonly DanmakuPreferences _original;
     private readonly TextBox _gateway, _animeSkip;
     private readonly PasswordBox _key;
     private readonly ToggleSwitch _automatic, _enabled, _top, _bottom, _scroll, _merge, _stack, _kernel;
+    private readonly ComboBox _outline, _shadow;
     private readonly NumberBox _font, _opacity, _area;
+    private readonly FrameworkElement _kernelStylesSection;
     private readonly bool _settingsPage;
     private DanmakuSettings? _settings;
     private Action<string>? _showStatus;
@@ -37,6 +55,8 @@ internal sealed class DanmakuSettingsEditor
         reset.Click += (_, _) => { _gateway.Text = ""; _key.Password = ""; };
         _animeSkip = new TextBox { Text = preferences.AnimeSkipClientId, PlaceholderText = "可选" };
         _kernel = Toggle("用内核渲染弹幕", preferences.UseKernelRenderer);
+        _outline = Choice("描边粗细", OutlineOptions, ((int)Math.Round(preferences.OutlineWidth)).ToString());
+        _shadow = Choice("投影样式", ShadowOptions, preferences.ShadowStyle.ToString());
         _font = Number("字号（11–44 pt）", preferences.FontSize, 11, 44, 2.2);
         _opacity = Number("不透明度（%）", preferences.Opacity * 100, 25, 100, 5);
         _area = Number("显示区域（%）", preferences.DisplayArea * 100, 25, 100, 5);
@@ -66,6 +86,8 @@ internal sealed class DanmakuSettingsEditor
                 Note("填入后启用 anime-skip 片头源；AniSkip 与 TheIntroDB 自动启用。"));
             Group("弹幕渲染", SettingRow("用内核渲染弹幕", _kernel),
                 Note("关闭后使用 App 层渲染。改动从下一次播放开始生效。"));
+            _kernelStylesSection = Group("内核弹幕样式", SettingRow("描边粗细", _outline, field: true), SettingRow("投影样式", _shadow, field: true),
+                Note("仅在使用内核渲染弹幕时生效。包含自动对比度文字描边与底层投影。"));
             var details = Rows(SettingRow("字号（11–44 pt）", _font), SettingRow("不透明度（%）", _opacity),
                 SettingRow("显示区域（%）", _area), SettingRow("屏蔽顶部弹幕", _top), SettingRow("屏蔽底部弹幕", _bottom),
                 SettingRow("屏蔽滚动弹幕", _scroll), SettingRow("合并重复弹幕", _merge), SettingRow("允许弹幕重叠", _stack));
@@ -83,14 +105,19 @@ internal sealed class DanmakuSettingsEditor
             Group("片头来源", SettingRow("anime-skip Client ID（可选）", _animeSkip, field: true));
             Group("弹幕渲染", SettingRow("用内核渲染弹幕", _kernel),
                 Note("关闭后使用 App 层渲染。改动从下一次播放开始生效。"));
+            _kernelStylesSection = Group("内核弹幕样式", SettingRow("描边粗细", _outline, field: true), SettingRow("投影样式", _shadow, field: true),
+                Note("仅在使用内核渲染弹幕时生效。包含自动对比度文字描边与底层投影。"));
             Group("显示样式", SettingRow("字号（11–44 pt）", _font),
                 SettingRow("不透明度（%）", _opacity), SettingRow("显示区域（%）", _area));
             Group("弹幕过滤", SettingRow("屏蔽顶部弹幕", _top), SettingRow("屏蔽底部弹幕", _bottom),
                 SettingRow("屏蔽滚动弹幕", _scroll), SettingRow("合并重复弹幕", _merge), SettingRow("允许弹幕重叠", _stack));
         }
+
+        _kernelStylesSection.Visibility = preferences.UseKernelRenderer ? Visibility.Visible : Visibility.Collapsed;
+        _kernel.Toggled += (_, _) => _kernelStylesSection.Visibility = _kernel.IsOn ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private void Group(string title, params UIElement[] items)
+    private StackPanel Group(string title, params UIElement[] items)
     {
         var section = Stack(8);
         if (title.Length > 0) section.Children.Add(Caption(title, 13));
@@ -98,6 +125,7 @@ internal sealed class DanmakuSettingsEditor
         if (title == "弹幕网关") section.Children.Add(Caption("Bangumi 登录与弹幕共用此网关。留空使用默认网关；自定义网关需填写自己的 API Key。"));
         if (title == "片头来源") section.Children.Add(Caption("填入后启用 anime-skip 片头源；AniSkip 与 TheIntroDB 自动启用。"));
         Content.Children.Add(section);
+        return section;
     }
 
     private static StackPanel Rows(params UIElement[] items)
@@ -195,6 +223,17 @@ internal sealed class DanmakuSettingsEditor
         AutomationProperties.SetName(control, title);
         return control;
     }
+    private static ComboBox Choice(string title, (string Label, string Value)[] options, string selected)
+    {
+        var control = new ComboBox
+        {
+            ItemsSource = options.Select(x => x.Label).ToArray(),
+            SelectedIndex = Math.Max(0, Array.FindIndex(options, x => x.Value == selected)),
+            FontSize = 13
+        };
+        AutomationProperties.SetName(control, title);
+        return control;
+    }
 
     // The standalone settings page saves switches immediately. The player's
     // settings dialog keeps explicit Save/Cancel behavior by not enabling this.
@@ -216,6 +255,22 @@ internal sealed class DanmakuSettingsEditor
             _font.LostFocus += (_, _) => SaveField(p => p with { FontSize = _font.Value }, () => _font.Value = settings.Current.FontSize);
             _opacity.LostFocus += (_, _) => SaveField(p => p with { Opacity = _opacity.Value / 100 }, () => _opacity.Value = settings.Current.Opacity * 100);
             _area.LostFocus += (_, _) => SaveField(p => p with { DisplayArea = _area.Value / 100 }, () => _area.Value = settings.Current.DisplayArea * 100);
+            _outline.SelectionChanged += (_, _) =>
+            {
+                if (_outline.SelectedIndex is var idx && idx >= 0 && idx < OutlineOptions.Length)
+                {
+                    var val = double.Parse(OutlineOptions[idx].Value);
+                    SaveField(p => p with { OutlineWidth = val }, () => _outline.SelectedIndex = Math.Max(0, Array.FindIndex(OutlineOptions, x => x.Value == ((int)Math.Round(settings.Current.OutlineWidth)).ToString())));
+                }
+            };
+            _shadow.SelectionChanged += (_, _) =>
+            {
+                if (_shadow.SelectedIndex is var idx && idx >= 0 && idx < ShadowOptions.Length)
+                {
+                    var val = int.Parse(ShadowOptions[idx].Value);
+                    SaveField(p => p with { ShadowStyle = val }, () => _shadow.SelectedIndex = Math.Max(0, Array.FindIndex(ShadowOptions, x => x.Value == settings.Current.ShadowStyle.ToString())));
+                }
+            };
         }
 
         void SaveField(Func<DanmakuPreferences, DanmakuPreferences> update, Action restore)
@@ -257,6 +312,8 @@ internal sealed class DanmakuSettingsEditor
     {
         GatewayUrl = _gateway.Text, ApiKey = _key.Password, AutoLoad = _automatic.IsOn, Enabled = _enabled.IsOn,
         FontSize = _font.Value, Opacity = _opacity.Value / 100, DisplayArea = _area.Value / 100,
+        OutlineWidth = _outline.SelectedIndex is var oi && oi >= 0 && oi < OutlineOptions.Length ? double.Parse(OutlineOptions[oi].Value) : _original.OutlineWidth,
+        ShadowStyle = _shadow.SelectedIndex is var si && si >= 0 && si < ShadowOptions.Length ? int.Parse(ShadowOptions[si].Value) : _original.ShadowStyle,
         BlockTop = _top.IsOn, BlockBottom = _bottom.IsOn, BlockScroll = _scroll.IsOn, MergeDuplicates = _merge.IsOn, AllowStacking = _stack.IsOn,
         UseKernelRenderer = _kernel.IsOn, AnimeSkipClientId = _animeSkip.Text
     }).Validated();

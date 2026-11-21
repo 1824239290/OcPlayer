@@ -5,7 +5,7 @@ import XCTest
 
 @MainActor
 final class CoreRuntimePreferenceParityTests: XCTestCase {
-    private let keys = [SettingsKeys.httpReadAheadMiB, SettingsKeys.httpBackBufferMiB, SettingsKeys.skipIntro, SettingsKeys.skipOutro, SettingsKeys.outroRetentionSeconds, SettingsKeys.subtitleLanguagePreference, SettingsKeys.lumaUpscaler, SettingsKeys.subtitleAlignment, SettingsKeys.subtitleMarginVertical, SettingsKeys.subtitlePrimaryColor, SettingsKeys.subtitleOutlineColor, SettingsKeys.subtitleOutlineWidth, SettingsKeys.subtitleBold, SettingsKeys.subtitleStyleOverrides, SettingsKeys.danmakuDiagnostics, SettingsKeys.playbackRate, SettingsKeys.playbackVolume, SettingsKeys.playbackMuted, SettingsKeys.playbackSubtitleScale, SettingsKeys.danmakuEnabled, SettingsKeys.danmakuOpacity, SettingsKeys.danmakuDisplayArea, SettingsKeys.danmakuBlockTop, SettingsKeys.danmakuBlockBottom, SettingsKeys.danmakuBlockScroll, SettingsKeys.danmakuUseOverlayRenderer, SettingsKeys.danmakuMergeDuplicates, SettingsKeys.danmakuAllowStacking, SettingsKeys.danmakuFontSize]
+    private let keys = [SettingsKeys.httpReadAheadMiB, SettingsKeys.httpBackBufferMiB, SettingsKeys.skipIntro, SettingsKeys.skipOutro, SettingsKeys.outroRetentionSeconds, SettingsKeys.subtitleLanguagePreference, SettingsKeys.lumaUpscaler, SettingsKeys.subtitleAlignment, SettingsKeys.subtitleMarginVertical, SettingsKeys.subtitlePrimaryColor, SettingsKeys.subtitleOutlineColor, SettingsKeys.subtitleOutlineWidth, SettingsKeys.subtitleBold, SettingsKeys.subtitleStyleOverrides, SettingsKeys.danmakuDiagnostics, SettingsKeys.playbackRate, SettingsKeys.playbackVolume, SettingsKeys.playbackMuted, SettingsKeys.playbackSubtitleScale, SettingsKeys.danmakuEnabled, SettingsKeys.danmakuOpacity, SettingsKeys.danmakuDisplayArea, SettingsKeys.danmakuBlockTop, SettingsKeys.danmakuBlockBottom, SettingsKeys.danmakuBlockScroll, SettingsKeys.danmakuUseOverlayRenderer, SettingsKeys.danmakuMergeDuplicates, SettingsKeys.danmakuAllowStacking, SettingsKeys.danmakuFontSize, SettingsKeys.danmakuOutlineWidth, SettingsKeys.danmakuShadowStyle]
     private func projection() -> [String: String] {
         [
             "rate": String(describing: PlaybackPreferences.rate),
@@ -31,6 +31,8 @@ final class CoreRuntimePreferenceParityTests: XCTestCase {
             "danmakuMergeDuplicates": String(describing: PlaybackPreferences.danmakuMergeDuplicates),
             "danmakuAllowStacking": String(describing: PlaybackPreferences.danmakuAllowStacking),
             "danmakuFontSize": String(describing: PlaybackPreferences.danmakuFontSize),
+            "danmakuOutlineWidth": String(describing: PlaybackPreferences.danmakuOutlineWidth),
+            "danmakuShadowStyle": String(describing: PlaybackPreferences.danmakuShadowStyle),
             "danmakuDiagnosticsEnabled": String(describing: PlaybackPreferences.danmakuDiagnosticsEnabled),
             "httpReadAheadMiB": String(describing: PlaybackPreferences.httpReadAheadMiB),
             "httpBackBufferMiB": String(describing: PlaybackPreferences.httpBackBufferMiB),
@@ -64,7 +66,7 @@ final class CoreRuntimePreferenceParityTests: XCTestCase {
             PlaybackPreferences.coreEnabledOverride = true
             let count = PlaybackPreferences.coreResolutionCount
             XCTAssertEqual(projection(), reference, "native facts: \(String(describing: sample))")
-            XCTAssertEqual(PlaybackPreferences.coreResolutionCount - count, 29, "every getter must execute Core")
+            XCTAssertEqual(PlaybackPreferences.coreResolutionCount - count, 31, "every getter must execute Core")
         }
     }
 }

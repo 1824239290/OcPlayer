@@ -233,6 +233,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
     var danmakuMergeDuplicates = PlaybackPreferences.danmakuMergeDuplicates
     var danmakuAllowStacking = PlaybackPreferences.danmakuAllowStacking
     var danmakuFontSize = PlaybackPreferences.danmakuFontSize
+    var danmakuOutlineWidth = PlaybackPreferences.danmakuOutlineWidth
+    var danmakuShadowStyle = PlaybackPreferences.danmakuShadowStyle
     var danmakuGlobalOffsetSeconds = 0.0
 
     /// 弹幕渲染路线：true = App 层 DanmakuRenderKit overlay（内核弹幕不装载），
@@ -1187,6 +1189,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
         /// 字号比例（1.0 = 基准 22pt）。内核字号是逻辑 px（基准 30），单位不同，
         /// 按比例映射到内核默认值上——见 `kernelFontSize(forScale:)`。
         var fontScale: Double
+        var outlineWidth: Double
+        var shadowStyle: Int
     }
 
     /// 主线程采集当前偏好为快照。
@@ -1201,7 +1205,9 @@ final class PlaybackController: DanmakuPlaybackHosting {
             mergeDuplicates: danmakuMergeDuplicates,
             allowStacking: danmakuAllowStacking,
             globalOffsetSeconds: danmakuGlobalOffsetSeconds,
-            fontScale: danmakuFontSize / PlaybackPreferences.danmakuBaseFontSize)
+            fontScale: danmakuFontSize / PlaybackPreferences.danmakuBaseFontSize,
+            outlineWidth: danmakuOutlineWidth,
+            shadowStyle: danmakuShadowStyle)
     }
 
     /// 内核弹幕字号基准（逻辑 px）：liberika v0.3.0 `danmaku/typography.rs`
@@ -1228,6 +1234,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
         config.mergeDuplicates = prefs.mergeDuplicates
         config.allowStacking = prefs.allowStacking
         config.fontSize = Self.kernelFontSize(forScale: prefs.fontScale)
+        config.outlineWidth = Float(prefs.outlineWidth)
+        config.shadowStyle = Int32(prefs.shadowStyle)
         try engine.setDanmakuConfig(config)
         try engine.setDanmakuGlobalOffset(.seconds(prefs.globalOffsetSeconds))
     }

@@ -90,9 +90,10 @@ internal static partial class Program
             var json = SettingsBackup.Export(runtime, ["媒体库", "继续观看", "接下来看", "最近添加"], ["继续观看"], "light", true);
             var prepared = SettingsBackup.Prepare(runtime, json);
             Assert(prepared.Playback.SubtitleColor == "#AABBCC80" && prepared.Playback.SubtitleBold == false && prepared.Danmaku.FontSize == 44 && !prepared.Danmaku.UseKernelRenderer
+                && prepared.Danmaku.OutlineWidth == 2.0 && prepared.Danmaku.ShadowStyle == 3
                 && prepared.Tmdb.ApiKey == "fixture-tmdb-secret" && prepared.HiddenSections!.SequenceEqual(new[] { "继续观看" }) && prepared.EpisodesDescending == true,
                 "portable backup validates and round-trips playback, tri-state/alpha style, renderer, TMDB credential, home layout and episode ordering");
-            Assert(!prepared.Preview.Contains("fixture-tmdb-secret") && prepared.Preview.Contains("cret") && prepared.Preview.Contains("bangumi.example"), "restore preview shows credential tail and mirror details without exposing full key");
+            Assert(!prepared.Preview.Contains("fixture-tmdb-secret") && prepared.Preview.Contains("cret") && prepared.Preview.Contains("bangumi.example") && prepared.Preview.Contains("描边 2") && prepared.Preview.Contains("阴影 3"), "restore preview shows credential tail and mirror details without exposing full key");
             RuntimeSettings.Save(new RuntimePreferences());
             SettingsBackup.Restore(runtime, prepared);
             Assert(RuntimeSettings.Current.BackBufferMiB == 128 && runtime.Integrations.MirrorRoot == "bangumi.example" && runtime.Danmaku.Settings.Current.AnimeSkipClientId == "fixture-client",
