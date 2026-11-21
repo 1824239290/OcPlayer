@@ -44,8 +44,12 @@ jobs:
           targets: x86_64-pc-windows-msvc
       - name: Prepare native tools
         run: |
-          choco install make nasm innosetup --no-progress -y
+          choco install make nasm --no-progress -y
           if ($LASTEXITCODE -ne 0) { throw 'Native tool installation failed' }
+          if (!(Get-Command 'ISCC.exe' -ErrorAction SilentlyContinue) -and !(Test-Path -LiteralPath "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe") -and !(Test-Path -LiteralPath "$env:ProgramFiles\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --no-progress -y
+            if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed' }
+          }
           Import-Module "$env:ChocolateyInstall/helpers/chocolateyProfile.psm1"
           Update-SessionEnvironment
           $clang = 'C:\Program Files\LLVM\bin'
@@ -93,7 +97,7 @@ jobs:
           path: |
             artifacts/verification/**/*.json
             artifacts/verification/**/*.log
-            artifacts/verification/windows-installer/*.exe
+            artifacts/verification/windows-installer/*-Setup.exe
             artifacts/verification/windows-installer/release.json
             apps/windows/native/OcPlayerCore/x64/build-receipt.json
           retention-days: 7

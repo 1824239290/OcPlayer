@@ -30,7 +30,7 @@ dotnet build OcPlayer.sln -c Debug -p:Platform=x64
 Core 仓库默认位于同级 `../OcPlayer-Core`；可用 `-CoreRoot` 或 MSBuild 的 `OcpCoreRoot` 指定。
 已有原生 DLL 时，脚本加 `-SkipNative` 可只构建前端。运行 exe 的命令见 [组合说明](core-integration.md)。
 
-ARM64 构建把 `-p:Platform=x64` 换成 `-p:Platform=ARM64`，并准备对应 Rust 目标、C++ 工具链和 Erika ARM64 原生依赖；尚未完成 ARM64 实机验证。MSI 安装包由 `Scripts/package-windows.ps1` 生成，包含所需运行库，命令与验收见 [发行说明](release-windows.md)。
+ARM64 构建把 `-p:Platform=x64` 换成 `-p:Platform=ARM64`，并准备对应 Rust 目标、C++ 工具链和 Erika ARM64 原生依赖；尚未完成 ARM64 实机验证。Windows 安装包（Inno Setup）由 `Scripts/package-windows.ps1` 生成，包含所需运行库，命令与验收见 [发行说明](release-windows.md)。
 
 ### 未打包（unpackaged）运行的前置条件
 

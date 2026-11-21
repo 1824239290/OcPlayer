@@ -9,7 +9,6 @@
 TestResults/
 *.nupkg
 .nuget/
-.wix/
 artifacts/
 
 # WinUI 3 / Windows App SDK generated files

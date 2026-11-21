@@ -64,7 +64,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t installers < <(find artifacts -name '*.exe' -type f)
+          mapfile -t installers < <(find artifacts -name '*-Setup.exe' -type f)
           [[ "${#installers[@]}" == 1 ]] || { echo 'Expected one verified Windows installer' >&2; exit 1; }
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release edit "$RELEASE_TAG" --latest=false

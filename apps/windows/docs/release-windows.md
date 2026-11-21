@@ -2,16 +2,17 @@
 
 ## 生成安装包
 
-Windows 使用 Inno Setup 安装程序，默认按当前用户安装到
-`%LOCALAPPDATA%\Programs\OcPlayer`。安装向导提供“目标文件夹”页，可以直接
-输入路径或通过“更改…”浏览当前用户有写入权限的目录，例如 `D:\Apps\OcPlayer`。
-若用户在自定义路径时选择了盘符根目录（例如 `D:\`）或其他目录（例如 `D:\Apps`），
-向导会自动在末尾补齐 `OcPlayer` 子目录（如 `D:\OcPlayer\` 或 `D:\Apps\OcPlayer\`），
-避免应用散落在根目录中；若路径已包含 `OcPlayer` 目录则不会重复追加。
-同时，对于已安装的用户进行更新升级，会默认沿用原有记录的安装目录，不影响已安装用户的升级。
-安装后创建开始菜单快捷方式并注册 `ocplayer://` 的 Bangumi 回调。
-安装、升级和卸载均不要求管理员权限；选择的目标目录也需要当前用户可写。
-安装程序内置 .NET、Windows App SDK 和 Visual C++ release CRT，目标电脑无需
+Windows 使用 **Inno Setup 6** 生成双模式自包含 `.exe` 安装程序（`OcPlayer-<Version>-<Platform>(<Build>)-Setup.exe`），不依赖 Windows Installer 的 `Config.Msi` 回滚机制。
+首次安装时向导会弹出安装模式选择：
+- **仅为我安装**：默认安装到 `%LOCALAPPDATA%\Programs\OcPlayer`，无需管理员权限（不弹 UAC），快捷方式与协议写入当前用户（`HKCU`）。
+- **为所有用户安装**：默认安装到 `C:\Program Files\OcPlayer`，通过 UAC 请求管理员权限，快捷方式与协议写入全用户（`HKLM`）。
+
+安装程序启动时会自动检测本机是否已有安装（兼容 Inno Setup 与旧版 MSI 写入的
+`Software\OcPlayer\Windows\Installer\InstallLocation`），自动复用之前的安装范围，
+并在“选择目标位置”页默认填入并提示原安装路径；首次使用浏览对话框选择目录或直接输入盘符根目录（例如 `D:\`）时会自动补齐 `OcPlayer` 子目录，避免文件散落。
+若检测到旧版 OcPlayer MSI，安装阶段会自动尝试静默卸载旧 MSI 注册项，避免“应用和功能”出现重复条目。
+安装后创建开始菜单快捷方式（可选创建桌面快捷方式）并注册 `ocplayer://` 的 Bangumi 回调。
+安装包内置 .NET、Windows App SDK 和 Visual C++ release CRT，目标电脑无需
 预先安装这些运行库，也不需要 SDK 或 Core 源码仓库。
 
 ```powershell
@@ -27,8 +28,9 @@ Build 号按 macOS 的优先级解析：`BUILD_NUMBER`、`GITHUB_RUN_NUMBER`、G
 提交数。它只标识构建，不改变市场版本；同一提交重复打包会复用相同 Build 号。
 Build 号记录在应用 informational version、安装包文件名和 `release.json`。
 
-构建机需要 .NET SDK 10.0.4xx、Inno Setup 6、同级 Core SDK，以及
+构建机需要 .NET SDK 10.0.4xx、Inno Setup 6（`ISCC.exe`，可通过 `choco install innosetup -y` 安装或 `-InnoSetupCompiler` 指定路径）、同级 Core SDK，以及
 `native/OcPlayerCore/x64` 内匹配的 Release DLL 和 build receipt。
+脚本自动优先使用 Inno Setup 内置的 `Languages\ChineseSimplified.isl`，缺失时回退到仓库内 `apps/windows/installer/ChineseSimplified.isl`。
 Visual C++ CRT 默认取自本机 Visual Studio 的 release redist；没有 Visual
 Studio 时，用 `-VcRuntimeDirectory` 指向官方 `Microsoft.VC143.CRT` 目录。
 脚本检查 DLL hash、运行时完整性和 native Release 配置，先完整 publish，
@@ -39,7 +41,7 @@ Studio 时，用 `-VcRuntimeDirectory` 指向官方 `Microsoft.VC143.CRT` 目录
 程序、窗口/任务栏、开始菜单和安装界面使用 macOS 项目现有的 OcPlayer
 猫咪播放图标。Windows ICO 直接封装原来的多尺寸 PNG，macOS 资源不变。
 
-产物位于 `artifacts/release/<Version>/<Platform>/`，包含 EXE 安装程序、自包含的
+产物位于 `artifacts/release/<Version>/<Platform>/`，包含 Inno Setup `.exe` 安装包、自包含的
 `app` 目录和记录 hash、Core/kernel 提交、运行库版本与签名状态的
 `release.json`（含 `version` 和 `buildNumber`）。安装程序名为
 `OcPlayer-<Version>-<Platform>(<BuildNumber>)-Setup.exe`。
@@ -52,7 +54,7 @@ Studio 时，用 `-VcRuntimeDirectory` 指向官方 `Microsoft.VC143.CRT` 目录
 ./Scripts/package-windows.ps1 -CertificateThumbprint '<证书 SHA1 thumbprint>'
 ```
 
-脚本会对 apphost 和安装程序进行 SHA256 签名与时间戳。未提供证书时生成
+脚本会对 apphost 和 `.exe` 安装包进行 SHA256 签名与时间戳。未提供证书时生成
 可测试的未签名安装包，并在 `release.json` 中明确写入 `signed: false`。
 
 ## 数据与升级
@@ -60,8 +62,9 @@ Studio 时，用 `-VcRuntimeDirectory` 指向官方 `Microsoft.VC143.CRT` 目录
 所有 Windows 服务通过 `AppPaths` 解析同一个默认目录：
 `%LOCALAPPDATA%\OcPlayer\Windows`。安装文件和用户数据分离；安装程序不拥有
 数据目录内的文件，升级与卸载保留设置、数据库、播放记录与系统凭据。
-安装程序记录选定的安装目录，后续升级默认沿用该目录。静默安装时可通过
-`/DIR="D:\Apps\OcPlayer"` 指定路径；显式指定的路径优先于已记录的目录。
+安装程序记录选定的安装目录与安装范围，后续升级默认沿用。静默安装时可通过
+`/VERYSILENT /CURRENTUSER /DIR="D:\Apps\OcPlayer"` 或 `/VERYSILENT /ALLUSERS /DIR="D:\Apps\OcPlayer"`
+指定范围与路径；显式指定的路径优先于已记录的目录。
 账号和私有 API key 继续使用原来的 PasswordVault resource，安装版不改变
 应用身份，也不转存成明文。
 
@@ -109,12 +112,19 @@ dotnet run --project tests/OcPlayer.Integration/OcPlayer.Integration.csproj `
 
 ./Scripts/verify-installer.ps1 -Installer 'D:\release\OcPlayer-0.3.0-x64(100)-Setup.exe' `
   -UpgradeInstaller 'D:\release\OcPlayer-0.3.1-x64(101)-Setup.exe' `
-  -OutputDirectory 'D:\new-installer-verification'
+  -Scope perUser `
+  -OutputDirectory 'D:\new-installer-verification-user'
+
+# 管理员权限 PowerShell 下验证全用户模式：
+./Scripts/verify-installer.ps1 -Installer 'D:\release\OcPlayer-0.3.0-x64(100)-Setup.exe' `
+  -UpgradeInstaller 'D:\release\OcPlayer-0.3.1-x64(101)-Setup.exe' `
+  -Scope perMachine `
+  -OutputDirectory 'D:\new-installer-verification-machine'
 ```
 
-安装验证使用独立安装与数据目录，检查实际 apphost/Core/Erika 初始化、
-app-local .NET/WinUI/CRT 加载、协议注册、覆盖升级和卸载数据保留，
-并验证包含中文与空格的自定义安装目录以及未指定路径时的升级目录继承，
+安装验证支持 `-Scope perUser`（默认，无需管理员）与 `-Scope perMachine`（需管理员权限 PowerShell），使用独立安装与数据目录，检查实际 apphost/Core/Erika 初始化、
+app-local .NET/WinUI/CRT 加载、协议注册、就地升级和卸载数据保留，
+并验证包含中文与空格的自定义安装目录以及未传 `/DIR` 与范围参数时的升级目录/范围继承，
 最后卸载测试产品并恢复原有协议处理器。它不会替代用户在 Windows 10
 最低版本、ARM64 和干净虚拟机上的验收。
 

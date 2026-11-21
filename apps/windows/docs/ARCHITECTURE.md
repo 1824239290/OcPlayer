@@ -71,7 +71,7 @@ Jellyfin、Emby、Bangumi、MoviePilot 和弹幕网关分别放在独立的服�
 
 ### 发布与诊断
 
-开发保留 unpackaged 构建；Windows 发行使用自包含 MSI，安装文件与用户数据分离，提供按用户升级、卸载和协议注册。构建与验收见 `release-windows.md`。CI 至少执行还原、编译、测试、打包和许可证 / 第三方 notices 检查。
+开发保留 unpackaged 构建；Windows 发行使用 Inno Setup 自包含 `.exe` 安装程序，安装文件与用户数据分离，支持当前用户 / 全用户双模式安装、升级、卸载和协议注册。构建与验收见 `release-windows.md`。CI 至少执行还原、编译、测试、打包和许可证 / 第三方 notices 检查。
 
 ## 第一阶段建议
 

@@ -8,7 +8,7 @@
     <ApplicationIcon>Assets\Branding\OcPlayer.ico</ApplicationIcon>
     <Platforms>x64;ARM64</Platforms>
     <UseWinUI>true</UseWinUI>
-    <!-- MSI releases publish an unpackaged, fully self-contained application. -->
+    <!-- Installer releases publish an unpackaged, fully self-contained application. -->
     <WindowsPackageType>None</WindowsPackageType>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>

@@ -7,5 +7,5 @@ Artwork copied from the macOS project:
 `E56EF98F4249EC54F20CFB6E5842DCCA014B6F0340403EDF9652FBE2D91FC088`).
 `OcPlayer.ico` contains the unchanged macOS PNG exports at 16, 32, 64, 128,
 and 256 pixels, stored as PNG frames in a Windows icon container. It is used
-by the executable, window/taskbar, MSI product entry, and Start menu shortcut.
+by the executable, window/taskbar, installer product entry, and Start menu shortcut.
 The macOS asset files are unchanged.
