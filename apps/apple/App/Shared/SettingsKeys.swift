@@ -65,6 +65,10 @@ enum SettingsKeys {
     static let danmakuMergeDuplicates = "dev.jumusu.ocplayer.danmaku.mergeDuplicates"
     static let danmakuAllowStacking = "dev.jumusu.ocplayer.danmaku.allowStacking"
     static let danmakuFontSize = "dev.jumusu.ocplayer.danmaku.fontSize"
+    /// 弹幕描边粗细（0 = 无，1 = 细，2 = 标准，3 = 粗）。
+    static let danmakuOutlineWidth = "dev.jumusu.ocplayer.danmaku.outlineWidth"
+    /// 弹幕投影样式（0 = 无，1 = 柔和，2 = 中等，3 = 强烈）。
+    static let danmakuShadowStyle = "dev.jumusu.ocplayer.danmaku.shadowStyle"
     /// 弹幕自动装载开关（`DanmakuCoordinator`，此前硬编码在协调器里）。
     static let danmakuAutoLoad = "dev.jumusu.ocplayer.danmaku.autoLoad"
     /// 诊断日志：详细（debug）档开关。关（默认）= 只落 info 及以上（状态迁移 / 失败）；

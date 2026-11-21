@@ -59,6 +59,8 @@ const RULES: &[(&str, Rule)] = &[
     ("danmaku.mergeDuplicates", Rule::Bool(false)),
     ("danmaku.allowStacking", Rule::Bool(false)),
     ("danmaku.fontSize", Rule::Float(11.0, 44.0, 22.0)),
+    ("danmaku.outlineWidth", Rule::Float(0.0, 3.0, 2.0)),
+    ("danmaku.shadowStyle", Rule::Options(&[0, 1, 2, 3], 3)),
     ("danmaku.diagnostics", Rule::Bool(false)),
 ];
 impl Rule {

@@ -14,6 +14,30 @@ struct DanmakuSettingsView: View {
     /// 用 @AppStorage 而不是裸 Binding 读，保证 HUD / 别处改值也能刷新。
     @AppStorage(SettingsKeys.danmakuUseOverlayRenderer)
     private var useOverlayRenderer = false
+    @AppStorage(SettingsKeys.danmakuOutlineWidth)
+    private var danmakuOutlineWidth = 2.0
+    @AppStorage(SettingsKeys.danmakuShadowStyle)
+    private var danmakuShadowStyle = 3
+
+    private var outlineWidthBinding: Binding<Double> {
+        Binding(
+            get: { danmakuOutlineWidth },
+            set: { newValue in
+                danmakuOutlineWidth = newValue
+                app.playback?.setDanmakuOutlineWidth(newValue)
+            }
+        )
+    }
+
+    private var shadowStyleBinding: Binding<Int> {
+        Binding(
+            get: { danmakuShadowStyle },
+            set: { newValue in
+                danmakuShadowStyle = newValue
+                app.playback?.setDanmakuShadowStyle(newValue)
+            }
+        )
+    }
 
     /// 内核自己没有弹幕渲染器时不给这个开关：那种情况下 overlay 是唯一选择，
     /// 摆一个假开关比没有更糟。
@@ -67,6 +91,24 @@ struct DanmakuSettingsView: View {
                     ))
                     .neutralSwitch()
                     SettingsNote("开 = 内核内置渲染器（与画面同一渲染管线）；关 = App 层渲染（DanmakuRenderKit）。两条路线的画面截图都不含弹幕。改动从下一次播放开始生效。")
+
+                    if !useOverlayRenderer {
+                        SettingsGlassDivider()
+                        SettingsPickerRow("描边粗细", selection: outlineWidthBinding) {
+                            Text("无").tag(0.0)
+                            Text("细").tag(1.0)
+                            Text("标准").tag(2.0)
+                            Text("粗").tag(3.0)
+                        }
+                        SettingsGlassDivider()
+                        SettingsPickerRow("投影样式", selection: shadowStyleBinding) {
+                            Text("无").tag(0)
+                            Text("柔和").tag(1)
+                            Text("中等").tag(2)
+                            Text("强烈").tag(3)
+                        }
+                        SettingsNote("仅在使用内核渲染弹幕时生效。包含自动对比度文字描边与底层投影。")
+                    }
                 }
             }
         }

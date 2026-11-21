@@ -170,6 +170,18 @@ extension PlaybackController {
         updateDanmakuConfig { $0.allowStacking = enabled }
     }
 
+    func setDanmakuOutlineWidth(_ width: Double) {
+        danmakuOutlineWidth = width.clamped(0...3)
+        PlaybackPreferences.danmakuOutlineWidth = danmakuOutlineWidth
+        updateDanmakuConfig { $0.outlineWidth = Float(danmakuOutlineWidth) }
+    }
+
+    func setDanmakuShadowStyle(_ style: Int) {
+        danmakuShadowStyle = min(max(style, 0), 3)
+        PlaybackPreferences.danmakuShadowStyle = danmakuShadowStyle
+        updateDanmakuConfig { $0.shadowStyle = Int32(danmakuShadowStyle) }
+    }
+
     /// 弹幕字号 +/-（fraction 为基准字号的比例：+0.1 = 加大 10%，50%…200% 夹紧）。
     func adjustDanmakuFontSize(by fraction: Double) {
         setDanmakuFontSize(danmakuFontSize + fraction * PlaybackPreferences.danmakuBaseFontSize)
