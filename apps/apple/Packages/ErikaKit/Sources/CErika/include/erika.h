@@ -951,6 +951,7 @@ ErikaStatus erika_presenter_attach_windows_hwnd(
     uint32_t height,
     double scale);
 
+#ifdef _WIN32
 /* Windows only. Returns an AddRef'd IUnknown for a DirectComposition swap
  * chain created by an attachment whose direct_composition capability is true.
  * The caller owns the returned COM reference and must Release it. */
@@ -964,6 +965,7 @@ ErikaStatus erika_presenter_windows_composition_swapchain_iunknown(
 ErikaStatus erika_presenter_windows_flutter_texture_iunknown(
     ErikaPresenterHandle *handle,
     void **out_texture);
+#endif
 
 ErikaStatus erika_presenter_resize_surface(
     ErikaPresenterHandle *handle,
@@ -1148,6 +1150,16 @@ ErikaPresenterHandle *erika_presenter_create_for_texture_export(ErikaPresenterCo
 ErikaStatus erika_texture_frame_get_info(
     const ErikaTextureFrame *frame, ErikaExternalTextureInfo *out_info);
 void erika_texture_frame_release(ErikaTextureFrame *frame);
+
+/* Experimental per-open capability. Never shares a presenter across threads.
+ * Release after cancel callers and the synchronous open have finished. */
+typedef struct ErikaColdOpenCancellation ErikaColdOpenCancellation;
+ErikaStatus erika_open_validate(const char *uri, const ErikaOpenOptions *options);
+ErikaColdOpenCancellation *erika_cold_open_cancellation_create(void);
+void erika_cold_open_cancellation_cancel(const ErikaColdOpenCancellation *ticket);
+void erika_cold_open_cancellation_release(ErikaColdOpenCancellation *ticket);
+ErikaStatus erika_presenter_open_with_options_cancellable(ErikaPresenterHandle *presenter,
+    const char *uri, const ErikaOpenOptions *options, const ErikaColdOpenCancellation *ticket);
 
 #ifdef __cplusplus
 }

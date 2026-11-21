@@ -30,7 +30,7 @@ class MigrationGateTests(unittest.TestCase):
         dependencies = workflow.index("run: ./scripts/prepare-kernel.ps1\n")
         self.assertLess(checkout, cache)
         self.assertLess(cache, dependencies)
-        self.assertIn("apps/windows/artifacts/liberika-v0.3.7/third_party", workflow)
+        self.assertIn("apps/windows/artifacts/liberika-v0.3.8/third_party", workflow)
         script = (ROOT / "apps/windows/Scripts/prepare-kernel.ps1").read_text(encoding="utf-8")
         self.assertIn('if (Test-Path -LiteralPath $source) { throw "Choose a new kernel source directory: $source" }', script)
         self.assertIn('if ((& git -C $source rev-parse HEAD).Trim() -ne $pin.commit)', script)

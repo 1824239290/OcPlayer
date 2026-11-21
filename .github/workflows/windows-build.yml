@@ -64,7 +64,7 @@ jobs:
             core/target
             apps/windows/artifacts/core-target
             apps/windows/artifacts/kernel-target
-            apps/windows/artifacts/liberika-v0.3.7/third_party
+            apps/windows/artifacts/liberika-v0.3.8/third_party
           key: monorepo-windows-native-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.rust.outputs.cachekey }}-${{ hashFiles('core/Cargo.lock', 'apps/windows/Config/Kernel.version.json', 'apps/windows/Scripts/patches/*.patch') }}
       - name: Build pinned liberika dependencies
         run: ./scripts/prepare-kernel.ps1

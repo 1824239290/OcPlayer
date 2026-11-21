@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$KernelRoot = (Join-Path $PSScriptRoot '..\artifacts\liberika-v0.3.7'),
+    [string]$KernelRoot = (Join-Path $PSScriptRoot '..\artifacts\liberika-v0.3.8'),
     [ValidateSet('x64','ARM64')][string]$Platform = 'x64',
     [string]$NativeArchiveCache,
     [string]$KernelCargoHome = $env:CARGO_HOME,
@@ -26,7 +26,7 @@ if (!(Test-Path -LiteralPath (Join-Path $source '.git'))) {
     Invoke-Checked git @('-C',$source,'checkout','--detach',$pin.tag)
 }
 if ((& git -C $source rev-parse HEAD).Trim() -ne $pin.commit) { throw "Expected liberika $($pin.tag) commit $($pin.commit)." }
-$patch = Join-Path $PSScriptRoot 'patches\liberika-v0.3.7-windows.patch'
+$patch = Join-Path $PSScriptRoot 'patches\liberika-v0.3.8-windows.patch'
 $savedErrorActionPreference = $ErrorActionPreference
 try {
     $ErrorActionPreference = 'Continue'

@@ -74,7 +74,7 @@ class WindowsWrapperTests(unittest.TestCase):
         parameters = self.invoke("build-windows.ps1", "-SkipNative -SkipManaged")
         self.assertEqual(Path(parameters["CoreRoot"]), self.root / "core")
         if not os.environ.get("OCP_ERIKA_ROOT"):
-            self.assertEqual(Path(parameters["KernelRoot"]), self.root / "apps/windows/artifacts/liberika-v0.3.7")
+            self.assertEqual(Path(parameters["KernelRoot"]), self.root / "apps/windows/artifacts/liberika-v0.3.8")
 
     def test_prepare_paths_preserve_caller_location(self):
         names = ["KernelRoot", "NativeArchiveCache", "KernelCargoHome"]

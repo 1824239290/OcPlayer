@@ -71,7 +71,7 @@ internal sealed class DemoSettings(DemoViewModel model, PageLayout pageLayout, A
                 Group("字幕",Select("默认字幕语言",["中文优先（简体）","中文优先（繁体）","English","片源默认"],"中文优先（简体）"),Note("打开新片源时按这里的偏好挑字幕轨。在播放器里自己选过之后，本片不再自动改动。"));
                 var appearance = SettingsUi.Section(page, "字幕外观", collapsed: true);
                 foreach (var row in new[] { Select("位置",["不设置","底部","顶部"],"不设置"),Select("字体大小",["不设置","100%","125%","150%"],"不设置"),Select("字幕颜色",["不设置","白色","黄色"],"不设置"),Select("描边颜色",["不设置","黑色"],"不设置"),Toggle("加粗",false),Toggle("覆盖字幕自带样式",false),Note("关闭时以上设置只用于填补字幕没指定的部分，片源自带的排版与特效字体原样保留。") }) SettingsUi.Add(appearance, row);
-                Group("播放内核",SettingsLine("内核",Text("liberika v0.3.6")),Select("画质增强",["关闭","2×"],"关闭"));
+                Group("播放内核",SettingsLine("内核",Text("liberika v0.3.8")),Select("画质增强",["关闭","2×"],"关闭"));
                 Group("外观",Toggle("深色外观",model.DarkTheme,v=>{model.DarkTheme=v;themeChanged(v);})); break;
             case "弹幕":
                 Group("",Toggle("自动加载弹幕",true),SettingsLine("网关",Button("配置",()=>navigate("settings:弹幕网关"))),Edit("anime-skip Client ID（可选）",""),Note("填入后启用 anime-skip 跳过片头源。TheIntroDB 免密钥自动启用。"));
