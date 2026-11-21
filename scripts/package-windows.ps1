@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [ValidateSet('x64', 'ARM64')][string]$Platform = 'x64',
-    [ValidatePattern('^\d+\.\d+\.\d+(\.\d+)?$')][string]$Version = '1.0.0',
+    [string]$Version,
     [string]$CoreRoot,
     [string]$VcRuntimeDirectory,
     [string]$OutputDirectory,

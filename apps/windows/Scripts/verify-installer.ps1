@@ -126,11 +126,11 @@ try {
     [IO.File]::WriteAllText((Join-Path $dataDirectory 'runtime-settings.json'), '{"UserAgent":"installer-fixture"}')
     $databasePath = Join-Path $dataDirectory 'Media.sqlite'
     $databaseHash = (Get-FileHash -LiteralPath $databasePath).Hash
-    Invoke-Setup $UpgradeInstaller @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/LOG=$(Join-Path $OutputDirectory 'upgrade.log')")
+    Invoke-Setup $UpgradeInstaller @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', $scopeFlag, "/LOG=$(Join-Path $OutputDirectory 'upgrade.log')")
     $upgradedDisplayVersion = Read-RegistryValue $uninstallSubkey 'DisplayVersion'
     Assert-Installer ($upgradedDisplayVersion -and (Normalize-Version $upgradedDisplayVersion) -eq $upgradeVersion) 'upgrade updates the registered product version in place'
     $upgradedInstall = Read-RegistryValue $uninstallSubkey 'InstallLocation'
-    Assert-Installer ($upgradedInstall -and $upgradedInstall.TrimEnd('\') -eq $installedDirectory.TrimEnd('\')) 'upgrade reuses the custom installation directory and scope without CLI overrides'
+    Assert-Installer ($upgradedInstall -and $upgradedInstall.TrimEnd('\') -eq $installedDirectory.TrimEnd('\')) 'upgrade reuses the custom installation directory without a directory override'
     Assert-Installer ((Get-FileHash -LiteralPath $databasePath).Hash -eq $databaseHash) 'upgrade leaves the actual Core database unchanged'
     Probe-Runtime 'upgraded-runtime' $upgradeVersion
     Assert-Installer ([IO.File]::ReadAllText($sentinel) -eq 'preserve user playback history') 'upgrade preserves application data outside the installation directory'

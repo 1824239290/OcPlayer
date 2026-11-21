@@ -1,5 +1,5 @@
 ﻿#ifndef MyAppVersion
-  #define MyAppVersion "1.0.0"
+  #error "MyAppVersion must be defined"
 #endif
 #ifndef MyPlatform
   #define MyPlatform "x64"
@@ -38,7 +38,7 @@ DisableWelcomePage=no
 AppendDefaultDirName=yes
 DirExistsWarning=no
 PrivilegesRequired=lowest
-PrivilegesRequiredOverridesAllowed=dialog
+PrivilegesRequiredOverridesAllowed=dialog commandline
 MinVersion=10.0.17763
 #if MyPlatform == "ARM64"
 ArchitecturesAllowed=arm64

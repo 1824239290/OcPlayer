@@ -34,7 +34,7 @@ class WindowsWrapperTests(unittest.TestCase):
             """param(
     [string]$CoreRoot, [string]$KernelRoot, [string]$NativeArchiveCache,
     [string]$KernelCargoHome, [string]$LibClangPath, [string]$OutputDirectory,
-    [string]$VcRuntimeDirectory, [string]$BuildDirectory, [string]$DataDirectory,
+    [string]$VcRuntimeDirectory, [string]$InnoSetupCompiler, [string]$BuildDirectory, [string]$DataDirectory,
     [string]$Configuration, [string]$Python, [string]$Version, [string]$Open,
     [switch]$SkipNative, [switch]$SkipManaged, [switch]$PrepareOnly
 )
@@ -86,7 +86,7 @@ class WindowsWrapperTests(unittest.TestCase):
         self.assertTrue(parameters["PrepareOnly"]["IsPresent"])
 
     def test_package_output_and_inputs_preserve_caller_location(self):
-        names = ["CoreRoot", "VcRuntimeDirectory", "OutputDirectory"]
+        names = ["CoreRoot", "VcRuntimeDirectory", "OutputDirectory", "InnoSetupCompiler"]
         parameters = self.invoke("package-windows.ps1", " ".join(f'-{name} "{name}"' for name in names) + " -Version 1.2.3")
         self.assert_caller_paths(parameters, names)
         self.assertEqual(parameters["Version"], "1.2.3")

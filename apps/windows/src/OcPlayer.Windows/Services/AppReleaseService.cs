@@ -14,7 +14,20 @@ internal static class AppReleaseService
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
     public static string Version => typeof(AppReleaseService).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0]
         ?? typeof(AppReleaseService).Assembly.GetName().Version?.ToString() ?? "0.0.0";
-    public static string Build => typeof(AppReleaseService).Assembly.GetName().Version?.ToString() ?? "未知";
+    public static string Build
+    {
+        get
+        {
+            var informationalVersion = typeof(AppReleaseService).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            var buildMetadata = informationalVersion?.Split('+').FirstOrDefault(part => part.StartsWith("build.", StringComparison.OrdinalIgnoreCase));
+            if (buildMetadata is not null)
+            {
+                var buildNumber = buildMetadata["build.".Length..].Split('.')[0];
+                if (int.TryParse(buildNumber, out _)) return buildNumber;
+            }
+            return typeof(AppReleaseService).Assembly.GetName().Version?.ToString() ?? "未知";
+        }
+    }
     public static string DisplayVersion => $"v{Version} · Build {Build}";
     private static string StatePath => Path.Combine(AppPaths.DataDirectory, "ignored-release.txt");
     public static string? IgnoredVersion { get { try { return File.Exists(StatePath) ? File.ReadAllText(StatePath).Trim() : null; } catch (IOException) { return null; } } }

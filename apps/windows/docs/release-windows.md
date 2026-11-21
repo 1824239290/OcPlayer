@@ -16,8 +16,17 @@ Windows 使用 **Inno Setup 6** 生成双模式自包含 `.exe` 安装程序（`
 预先安装这些运行库，也不需要 SDK 或 Core 源码仓库。
 
 ```powershell
-./Scripts/package-windows.ps1 -Version 1.0.0
+./Scripts/package-windows.ps1
 ```
+
+未传 `-Version` 时，Windows 从 `apps/apple/Config/App.xcconfig` 读取
+`MARKETING_VERSION`，与 macOS 共用市场版本源。只有正式发行需要与当前配置
+不同的版本时，才显式传入 `-Version`。普通开发打包不会修改版本文件，也不会
+根据目录里已有的安装包递增版本号。
+
+Build 号按 macOS 的优先级解析：`BUILD_NUMBER`、`GITHUB_RUN_NUMBER`、Git
+提交数。它只标识构建，不改变市场版本；同一提交重复打包会复用相同 Build 号。
+Build 号记录在应用 informational version、安装包文件名和 `release.json`。
 
 构建机需要 .NET SDK 10.0.4xx、Inno Setup 6（`ISCC.exe`，可通过 `choco install innosetup -y` 安装或 `-InnoSetupCompiler` 指定路径）、同级 Core SDK，以及
 `native/OcPlayerCore/x64` 内匹配的 Release DLL 和 build receipt。
@@ -34,13 +43,15 @@ Studio 时，用 `-VcRuntimeDirectory` 指向官方 `Microsoft.VC143.CRT` 目录
 
 产物位于 `artifacts/release/<Version>/<Platform>/`，包含 Inno Setup `.exe` 安装包、自包含的
 `app` 目录和记录 hash、Core/kernel 提交、运行库版本与签名状态的
-`release.json`。`-Platform ARM64` 必须配套 ARM64 native DLL 与 CRT；
+`release.json`（含 `version` 和 `buildNumber`）。安装程序名为
+`OcPlayer-<Version>-<Platform>(<BuildNumber>)-Setup.exe`。
+`-Platform ARM64` 必须配套 ARM64 native DLL 与 CRT；
 当前验收范围是 Windows x64，ARM64 仍需实机验证。
 
 发行签名使用用户已持有的代码签名证书：
 
 ```powershell
-./Scripts/package-windows.ps1 -Version 1.0.0 -CertificateThumbprint '<证书 SHA1 thumbprint>'
+./Scripts/package-windows.ps1 -CertificateThumbprint '<证书 SHA1 thumbprint>'
 ```
 
 脚本会对 apphost 和 `.exe` 安装包进行 SHA256 签名与时间戳。未提供证书时生成
@@ -99,14 +110,14 @@ $env:OCP_DATA_DIRECTORY = "$env:LOCALAPPDATA\OcPlayer\Windows"
 dotnet run --project tests/OcPlayer.Integration/OcPlayer.Integration.csproj `
   -c Release -p:Platform=x64 -- --storage-only 'D:\new-storage-verification'
 
-./Scripts/verify-installer.ps1 -Installer 'D:\release\OcPlayer-1.0.0-x64(1)-Setup.exe' `
-  -UpgradeInstaller 'D:\release\OcPlayer-1.0.1-x64(1)-Setup.exe' `
+./Scripts/verify-installer.ps1 -Installer 'D:\release\OcPlayer-0.3.0-x64(100)-Setup.exe' `
+  -UpgradeInstaller 'D:\release\OcPlayer-0.3.1-x64(101)-Setup.exe' `
   -Scope perUser `
   -OutputDirectory 'D:\new-installer-verification-user'
 
 # 管理员权限 PowerShell 下验证全用户模式：
-./Scripts/verify-installer.ps1 -Installer 'D:\release\OcPlayer-1.0.0-x64(1)-Setup.exe' `
-  -UpgradeInstaller 'D:\release\OcPlayer-1.0.1-x64(1)-Setup.exe' `
+./Scripts/verify-installer.ps1 -Installer 'D:\release\OcPlayer-0.3.0-x64(100)-Setup.exe' `
+  -UpgradeInstaller 'D:\release\OcPlayer-0.3.1-x64(101)-Setup.exe' `
   -Scope perMachine `
   -OutputDirectory 'D:\new-installer-verification-machine'
 ```
@@ -117,7 +128,7 @@ app-local .NET/WinUI/CRT 加载、协议注册、就地升级和卸载数据保�
 最后卸载测试产品并恢复原有协议处理器。它不会替代用户在 Windows 10
 最低版本、ARM64 和干净虚拟机上的验收。
 
-2026-11-17 的 x64 验收结果：Release 自包含发布与 Debug 构建成功，
+2026-11-17 的 MSI 版本历史验收结果：Release 自包含发布与 Debug 构建成功，
 独立发布目录的首页和图片资源已实际检查，存储/设置/浏览/字幕集成
 验证通过 120 项断言。MSI 1.0.0 安装、1.0.1 升级与卸载验证通过
 29 项断言，包括应用窗口创建、运行库加载位置、图标和协议、版本替换，
@@ -126,7 +137,7 @@ app-local .NET/WinUI/CRT 加载、协议注册、就地升级和卸载数据保�
 `artifacts/installer-verification-final/results.json`。测试产品已卸载；
 用户的默认数据目录未用于本次安装验收。当前生成的 MSI 未签名。
 
-2026-11-19 的安装目录验收：实际打开 x64 MSI，确认中文“目标文件夹”页、
+2026-11-19 的 MSI 版本历史安装目录验收：实际打开 x64 MSI，确认中文“目标文件夹”页、
 默认路径和“更改目标文件夹”浏览对话框。重新构建的 1.0.0 / 1.0.1 MSI
 通过 31 项安装、升级与卸载断言，包含中文与空格目录安装、未传
 `INSTALLFOLDER` 的升级目录继承、运行库加载位置和用户数据保留。

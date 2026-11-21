@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [ValidateSet('x64', 'ARM64')][string]$Platform = 'x64',
-    [ValidatePattern('^\d+\.\d+\.\d+(\.\d+)?$')][string]$Version = '0.3.0',
+    [string]$Version,
     [int]$BuildNumber = 0,
     [string]$CoreRoot = (Join-Path $PSScriptRoot '..\..\..\core'),
     [string]$VcRuntimeDirectory,
@@ -13,6 +13,26 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $workspace = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$repoRoot = Split-Path -Parent (Split-Path -Parent $workspace)
+if (!$Version) {
+    $versionConfig = Join-Path $workspace '..\apple\Config\App.xcconfig'
+    $versionSetting = Select-String -LiteralPath $versionConfig -Pattern '^\s*MARKETING_VERSION\s*=\s*(\d+\.\d+\.\d+(?:\.\d+)?)\s*(?://.*)?$' |
+        Select-Object -First 1
+    if (!$versionSetting) { throw "MARKETING_VERSION is missing from $versionConfig." }
+    $Version = $versionSetting.Matches[0].Groups[1].Value
+}
+if ($Version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') { throw "Invalid application version: $Version" }
+if ($BuildNumber -le 0) {
+    $buildValue = if ($env:BUILD_NUMBER) { $env:BUILD_NUMBER } else { $env:GITHUB_RUN_NUMBER }
+    if ($buildValue) {
+        if ($buildValue -notmatch '^\d+$') { throw "Invalid build number: $buildValue" }
+        $BuildNumber = [int]$buildValue
+    } else {
+        $gitCount = & git -C $repoRoot rev-list --count HEAD 2>$null
+        if ($LASTEXITCODE -eq 0 -and "$gitCount" -match '^\d+$') { $BuildNumber = [int]$gitCount }
+        else { $BuildNumber = 1 }
+    }
+}
 if (!$OutputDirectory) { $OutputDirectory = Join-Path $workspace "artifacts\release\$Version\$Platform" }
 $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
 if ($OutputDirectory.TrimEnd('\') -eq [IO.Path]::GetPathRoot($OutputDirectory).TrimEnd('\')) { throw 'A drive root cannot be used as release output.' }
@@ -62,7 +82,7 @@ if (!$SkipPublish) {
     $staging = Join-Path $OutputDirectory ('publish-' + [Guid]::NewGuid().ToString('N'))
     $rid = if ($Platform -eq 'ARM64') { 'win-arm64' } else { 'win-x64' }
     Invoke-Checked dotnet @('publish', "$workspace\src\OcPlayer.Windows\OcPlayer.Windows.csproj", '-c', 'Release', '-r', $rid,
-        "-p:Platform=$Platform", "-p:Version=$Version", "-p:OcpCoreRoot=$([IO.Path]::GetFullPath($CoreRoot))\",
+        "-p:Platform=$Platform", "-p:Version=$Version", "-p:InformationalVersion=$Version+build.$BuildNumber", "-p:OcpCoreRoot=$([IO.Path]::GetFullPath($CoreRoot))\",
         '-p:SelfContained=true', '-p:WindowsAppSDKSelfContained=true', '-p:WindowsAppSdkDeploymentManagerInitialize=false',
         '-p:PublishSingleFile=false', '-p:PublishTrimmed=false', '-p:DebugType=None', '-p:DebugSymbols=false', '-o', $staging)
     if (Test-Path -LiteralPath $publishDirectory) {
@@ -122,17 +142,6 @@ if ($CertificateThumbprint) {
     if (!$signTool) { throw 'Windows SDK signtool.exe is required for signing.' }
     Invoke-Checked $signTool @('sign', '/sha1', $CertificateThumbprint, '/fd', 'SHA256', '/tr', $TimestampUrl, '/td', 'SHA256', (Join-Path $publishDirectory 'OcPlayer.Windows.exe'))
 }
-if ($BuildNumber -le 0) {
-    $existing = Get-ChildItem -LiteralPath $OutputDirectory -Filter "OcPlayer-$Version-$Platform*.exe" -File -ErrorAction SilentlyContinue
-    $maxBuild = 0
-    foreach ($file in $existing) {
-        if ($file.Name -match ('^OcPlayer-' + [regex]::Escape($Version) + '-' + [regex]::Escape($Platform) + '(?:\((\d+)\))?(?:-Setup)?\.exe$')) {
-            $num = if ($Matches[1]) { [int]$Matches[1] } else { 1 }
-            if ($num -gt $maxBuild) { $maxBuild = $num }
-        }
-    }
-    $BuildNumber = if ($maxBuild -gt 0) { $maxBuild + 1 } else { 1 }
-}
 $installerBaseName = "OcPlayer-$Version-$Platform($BuildNumber)-Setup"
 $installer = Join-Path $OutputDirectory "$installerBaseName.exe"
 $builtinChineseIsl = Join-Path (Split-Path -Parent $iscc) 'Languages\ChineseSimplified.isl'
@@ -148,7 +157,7 @@ Invoke-Checked $iscc @(
     "$workspace\installer\OcPlayer.iss"
 )
 if ($CertificateThumbprint) { Invoke-Checked $signTool @('sign', '/sha1', $CertificateThumbprint, '/fd', 'SHA256', '/tr', $TimestampUrl, '/td', 'SHA256', $installer) }
-[ordered]@{ version = $Version; platform = $Platform; installer = [IO.Path]::GetFileName($installer); installerFormat = 'InnoSetup'; sha256 = (Get-FileHash -LiteralPath $installer).Hash;
+[ordered]@{ version = $Version; buildNumber = $BuildNumber; platform = $Platform; installer = [IO.Path]::GetFileName($installer); installerFormat = 'InnoSetup'; sha256 = (Get-FileHash -LiteralPath $installer).Hash;
     selfContained = $true; signed = [bool]$CertificateThumbprint; coreCommit = $receipt.coreCommit; kernelCommit = $receipt.kernelCommit;
     visualCppRuntime = (Get-Item -LiteralPath (Join-Path $publishDirectory 'vcruntime140.dll')).VersionInfo.FileVersion } |
     ConvertTo-Json | Set-Content -LiteralPath (Join-Path $OutputDirectory 'release.json') -Encoding utf8

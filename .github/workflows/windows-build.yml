@@ -8,7 +8,7 @@ on:
         required: true
       version:
         type: string
-        default: '1.0.0'
+        default: ''
       artifact-name:
         type: string
         default: windows-verification
@@ -83,7 +83,10 @@ jobs:
       - name: Verify self-contained installer packaging
         env:
           RELEASE_VERSION: ${{ inputs.version }}
-        run: ./scripts/package-windows.ps1 -Version $env:RELEASE_VERSION -OutputDirectory artifacts/verification/windows-installer
+        run: |
+          $package = @{ OutputDirectory = 'artifacts/verification/windows-installer' }
+          if ($env:RELEASE_VERSION) { $package.Version = $env:RELEASE_VERSION }
+          ./scripts/package-windows.ps1 @package
       - name: Verify Core ABI and C# SDK
         run: ./scripts/verify-core.ps1 -Configuration release
       - name: Upload Windows evidence and installer
@@ -95,6 +98,7 @@ jobs:
             artifacts/verification/**/*.json
             artifacts/verification/**/*.log
             artifacts/verification/windows-installer/*-Setup.exe
+            artifacts/verification/windows-installer/release.json
             apps/windows/native/OcPlayerCore/x64/build-receipt.json
           retention-days: 7
           if-no-files-found: ignore
