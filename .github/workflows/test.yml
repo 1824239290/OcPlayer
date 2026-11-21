@@ -538,7 +538,7 @@ jobs:
           if-no-files-found: ignore
 
   windows:
-    name: Windows Core, app and MSI
+    name: Windows Core, app and installer
     needs: changes
     if: needs.changes.outputs.windows == 'true'
     uses: ./.github/workflows/windows-build.yml

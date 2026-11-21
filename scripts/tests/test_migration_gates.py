@@ -18,7 +18,7 @@ class MigrationGateTests(unittest.TestCase):
 
     def test_windows_core_failure_remains_a_required_step(self):
         workflow = (ROOT / ".github/workflows/windows-build.yml").read_text(encoding="utf-8")
-        self.assertLess(workflow.index("Verify self-contained MSI packaging"),
+        self.assertLess(workflow.index("Verify self-contained installer packaging"),
                         workflow.index("Verify Core ABI and C# SDK"))
         self.assertEqual(workflow.count("./scripts/verify-core.ps1 -Configuration release"), 1)
         self.assertNotIn("continue-on-error", workflow)
