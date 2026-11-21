@@ -62,10 +62,22 @@ if (!$SkipNative) {
     $env:ERIKA_NATIVE_PROFILE = 'lgpl'
     $kernelTarget = Join-Path $workspace 'artifacts\kernel-target'
     $savedCargoHome = $env:CARGO_HOME
+    $savedBindgenArgs = $env:BINDGEN_EXTRA_CLANG_ARGS
     try {
         if ($KernelCargoHome) { $env:CARGO_HOME = (Resolve-Path -LiteralPath $KernelCargoHome).Path }
+        # MSVC STL headers can require a newer Clang than the libclang installed on CI or dev machines;
+        # bindgen only parses headers while MSVC cl.exe still compiles the C/C++ sources.
+        $stlMismatchArg = '-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH'
+        if ([string]::IsNullOrWhiteSpace($env:BINDGEN_EXTRA_CLANG_ARGS)) {
+            $env:BINDGEN_EXTRA_CLANG_ARGS = $stlMismatchArg
+        } elseif ($env:BINDGEN_EXTRA_CLANG_ARGS -notmatch '(^|\s)-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH(=|\s|$)') {
+            $env:BINDGEN_EXTRA_CLANG_ARGS = "$($env:BINDGEN_EXTRA_CLANG_ARGS) $stlMismatchArg"
+        }
         Invoke-Checked cargo (@('build', '--manifest-path', "$kernelSource\Cargo.toml", '--target-dir', $kernelTarget, '-p', 'erika_capi', '--no-default-features', '--features', 'libass,embedded-fallback-font,artcnn-r8f64') + $cargoOptions)
-    } finally { $env:CARGO_HOME = $savedCargoHome }
+    } finally {
+        $env:CARGO_HOME = $savedCargoHome
+        $env:BINDGEN_EXTRA_CLANG_ARGS = $savedBindgenArgs
+    }
     New-Item -ItemType Directory -Force -Path $nativeOutput | Out-Null
     Copy-Item -LiteralPath "$coreTarget\$target\$profile\ocp_ffi.dll" -Destination $nativeOutput
     Copy-Item -LiteralPath "$kernelTarget\$target\$profile\erika_capi.dll" -Destination $nativeOutput
