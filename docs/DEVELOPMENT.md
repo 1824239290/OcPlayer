@@ -33,7 +33,7 @@ git config core.longpaths true
 .\scripts\package-windows.ps1 -Version 1.0.0
 ```
 
-默认内核位于 `apps/windows/artifacts/liberika-v0.3.7`；`-KernelRoot`、`-NativeArchiveCache`、`-KernelCargoHome`、`-CoreRoot` 和 MSBuild `-p:OcpCoreRoot=` 仍可显式覆盖。默认 Core 必须来自本仓库 `core`，不能用旧工作区 DLL 代替本次构建验证。
+默认内核位于 `apps/windows/artifacts/liberika-v0.3.8`；`-KernelRoot`、`-NativeArchiveCache`、`-KernelCargoHome`、`-CoreRoot` 和 MSBuild `-p:OcpCoreRoot=` 仍可显式覆盖。默认 Core 必须来自本仓库 `core`，不能用旧工作区 DLL 代替本次构建验证。
 
 Windows 集成测试入口：
 

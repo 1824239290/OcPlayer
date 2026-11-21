@@ -64,7 +64,7 @@ CI（`.github/workflows/test.yml`）在 push / PR 上跑测试门禁——macOS 
 
 ## liberika 内核（原 Erika）
 
-内核取自上游 [AimesSoft/liberika](https://github.com/AimesSoft/liberika)（2026-10-25 起 0.3.0 更名 liberika，C ABI 仍为 `erika_*`）官方 release（钉点唯一事实源是 `Config/Erika.version`）。当前钉 **[v0.3.4](https://github.com/AimesSoft/liberika/releases/tag/v0.3.4)**。本次升级包含已在 v0.3.3 发布的 [glyph atlas 二维布局修复](https://github.com/AimesSoft/liberika/commit/c99c2481dbca2e0eaf59acc6c23523cacefcfc15)：密集 CJK 字幕不再横向铺成超过 Metal 上限的单张纹理。官方 macOS/iOS 资产 SHA-256 固定在 `Scripts/erika-v0.3.4.sha256`，C 头与生成的 Swift 版本同步更新。
+内核取自上游 [AimesSoft/liberika](https://github.com/AimesSoft/liberika)（2026-10-25 起 0.3.0 更名 liberika，C ABI 仍为 `erika_*`）官方 release（钉点唯一事实源是 `Config/Erika.version`）。当前钉 **[v0.3.8](https://github.com/AimesSoft/liberika/releases/tag/v0.3.8)**。官方 macOS/iOS 资产 SHA-256 固定在 `Scripts/erika-v0.3.8.sha256`，C 头与生成的 Swift 版本同步更新。
 
 `ErikaOpenOptions.start_position_micros` 占用旧保留槽位，结构仍为 48 字节；当前 App 显式传 0，继续通过现有 ready 后 seek 流程续播。上采样现在可异步构建管线，渲染回归使用持续有效的片源并等待 `building` 完成，然后验证实际上采样帧数。密集字幕与双端验收见 `Docs/reviews/2026-11-06-kernel-upgrade/UPGRADE_REPORT.md`。
 

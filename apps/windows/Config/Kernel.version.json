@@ -1,7 +1,7 @@
 {
   "repository": "https://github.com/AimesSoft/liberika.git",
-  "tag": "v0.3.7",
-  "version": "0.3.7",
-  "commit": "a4f829999fe8df0c35561fe1bdf0f5ad0df0c3a5",
-  "windowsX64ReleaseSha256": "95dda20238320fb76e2fcb972b119cc1b921b42881c53c5256972d27c957e75e"
+  "tag": "v0.3.8",
+  "version": "0.3.8",
+  "commit": "b9881a72dc6cb822865c74858c45ce2d4c8d4960",
+  "windowsX64ReleaseSha256": "541aef337b78c54230fd84ed709e58b253a13b91686fe8c8272df470e5d8f05c"
 }

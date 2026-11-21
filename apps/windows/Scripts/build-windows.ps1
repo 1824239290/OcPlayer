@@ -19,12 +19,12 @@ function Invoke-Checked([string]$Executable, [string[]]$Arguments) {
     if ($LASTEXITCODE -ne 0) { throw "$Executable failed ($LASTEXITCODE)." }
 }
 if (!$SkipNative) {
-    if (!$KernelRoot) { throw 'Pass -KernelRoot for liberika v0.3.7 prepared with Scripts/prepare-kernel.ps1 (see docs/core-integration.md).' }
+    if (!$KernelRoot) { throw 'Pass -KernelRoot for liberika v0.3.8 prepared with Scripts/prepare-kernel.ps1 (see docs/core-integration.md).' }
     $kernelSource = (Resolve-Path -LiteralPath $KernelRoot).Path
     $pin = Get-Content -LiteralPath (Join-Path $workspace 'Config\Kernel.version.json') -Raw | ConvertFrom-Json
     $kernelCommit = (& git -C $kernelSource rev-parse HEAD).Trim()
     if ($kernelCommit -ne $pin.commit) { throw "Expected liberika $($pin.tag) at $($pin.commit). Run Scripts/prepare-kernel.ps1." }
-    $kernelPatch = Join-Path $PSScriptRoot 'patches\liberika-v0.3.7-windows.patch'
+    $kernelPatch = Join-Path $PSScriptRoot 'patches\liberika-v0.3.8-windows.patch'
     $savedErrorActionPreference = $ErrorActionPreference
     try {
         $ErrorActionPreference = 'Continue'
@@ -62,10 +62,22 @@ if (!$SkipNative) {
     $env:ERIKA_NATIVE_PROFILE = 'lgpl'
     $kernelTarget = Join-Path $workspace 'artifacts\kernel-target'
     $savedCargoHome = $env:CARGO_HOME
+    $savedBindgenArgs = $env:BINDGEN_EXTRA_CLANG_ARGS
     try {
         if ($KernelCargoHome) { $env:CARGO_HOME = (Resolve-Path -LiteralPath $KernelCargoHome).Path }
+        # MSVC STL headers can require a newer Clang than the libclang installed on CI or dev machines;
+        # bindgen only parses headers while MSVC cl.exe still compiles the C/C++ sources.
+        $stlMismatchArg = '-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH'
+        if ([string]::IsNullOrWhiteSpace($env:BINDGEN_EXTRA_CLANG_ARGS)) {
+            $env:BINDGEN_EXTRA_CLANG_ARGS = $stlMismatchArg
+        } elseif ($env:BINDGEN_EXTRA_CLANG_ARGS -notmatch '(^|\s)-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH(=|\s|$)') {
+            $env:BINDGEN_EXTRA_CLANG_ARGS = "$($env:BINDGEN_EXTRA_CLANG_ARGS) $stlMismatchArg"
+        }
         Invoke-Checked cargo (@('build', '--manifest-path', "$kernelSource\Cargo.toml", '--target-dir', $kernelTarget, '-p', 'erika_capi', '--no-default-features', '--features', 'libass,embedded-fallback-font,artcnn-r8f64') + $cargoOptions)
-    } finally { $env:CARGO_HOME = $savedCargoHome }
+    } finally {
+        $env:CARGO_HOME = $savedCargoHome
+        $env:BINDGEN_EXTRA_CLANG_ARGS = $savedBindgenArgs
+    }
     New-Item -ItemType Directory -Force -Path $nativeOutput | Out-Null
     Copy-Item -LiteralPath "$coreTarget\$target\$profile\ocp_ffi.dll" -Destination $nativeOutput
     Copy-Item -LiteralPath "$kernelTarget\$target\$profile\erika_capi.dll" -Destination $nativeOutput
@@ -82,7 +94,7 @@ if (!$SkipNative) {
         coreSha256 = (Get-FileHash -LiteralPath "$nativeOutput\ocp_ffi.dll").Hash
         erikaSha256 = (Get-FileHash -LiteralPath "$nativeOutput\erika_capi.dll").Hash
         kernelPatches = @([ordered]@{
-            path = 'Scripts/patches/liberika-v0.3.7-windows.patch'
+            path = 'Scripts/patches/liberika-v0.3.8-windows.patch'
             sha256 = (Get-FileHash -LiteralPath $kernelPatch).Hash
         })
     } | ConvertTo-Json | Set-Content -LiteralPath "$nativeOutput\build-receipt.json" -Encoding utf8

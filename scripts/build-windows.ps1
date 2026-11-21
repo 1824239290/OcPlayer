@@ -14,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 $windowsRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\apps\windows'))
 $parameters = @{} + $PSBoundParameters
 $parameters.CoreRoot = $CoreRoot
-$parameters.KernelRoot = if ($KernelRoot) { $KernelRoot } else { Join-Path $windowsRoot 'artifacts\liberika-v0.3.7' }
+$parameters.KernelRoot = if ($KernelRoot) { $KernelRoot } else { Join-Path $windowsRoot 'artifacts\liberika-v0.3.8' }
 foreach ($pathName in @('CoreRoot', 'KernelRoot', 'LibClangPath', 'KernelCargoHome')) {
     if ($parameters[$pathName]) { $parameters[$pathName] = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($parameters[$pathName]) }
 }
