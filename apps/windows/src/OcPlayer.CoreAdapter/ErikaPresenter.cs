@@ -53,7 +53,8 @@ public sealed class ErikaPresenter : IDisposable
         if (presentationTimestamp is { } target && Native.TimedTick.Value is { } tick)
         {
             var now = (double)System.Diagnostics.Stopwatch.GetTimestamp() / System.Diagnostics.Stopwatch.Frequency;
-            var delay = Math.Clamp(target - now, -.25, .25);
+            // A future target advances danmaku past the playback clock that pause freezes at now.
+            var delay = Math.Clamp(target - now, -.25, 0);
             Check(tick(_handle, seconds, in delay, IntPtr.Zero));
             return Invoke("getPresenterStats");
         }
